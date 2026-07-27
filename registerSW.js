@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/IMAGE-CARE/sw.js', { scope: '/IMAGE-CARE/' })})}
