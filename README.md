@@ -60,12 +60,28 @@ Builds the app and pushes `dist/` to the `gh-pages` branch directly (requires Pa
 
 The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-CARE/'` in `vite.config.ts`). If your repo has a different name, change that value to match — case matters.
 
+## Modules implemented
+
+- **IMP-001 — Dashboard**: KPIs, recent sales, low stock, quick actions, branch/currency selectors.
+- **IMP-002 — Settings**: full administration centre — Business Profile, People & Access (staff + roles + permission matrix), Branch Management, Tax, Receipts, Inventory Settings, Sales Settings, Notifications, Backup & Restore, Synchronization, Appearance, About.
+
 ## Architecture notes
 
 - **Offline-first (IMC-000 §7, IMC-002 §8):** every read goes through `withOfflineFallback` in `dashboardService.ts` — online results are cached to IndexedDB; when offline, the last cached result is served instead of an error. The Sync Status indicator in the top bar reflects real online/offline state.
 - **No duplicate data entry / single source of truth (IMC-002 §5, §9):** the Dashboard is read-only by design (IMP-001 §7 — "No manual editing from dashboard cards"). It only aggregates data other modules will own.
 - **Branch awareness (IMP-001 §7):** `useAuth` currently returns a fixed user with `allowedBranchIds`; the Dashboard filters the branch selector and all queries against this list. Swap the internals of `useAuth` when the real auth/Settings module lands — the `AuthedUser` type is the contract, so Dashboard code won't need to change.
 - **Scope discipline (IMC-000 §4, IMP-001 §3):** only the Dashboard module is implemented. The sidebar lists all 20 approved modules from IMC-000; everything except Dashboard is visibly disabled ("Soon") rather than hidden, so the approved scope stays visible without implying unbuilt functionality exists. Quick actions that point at unbuilt modules (Sales, Purchase Orders, Expenses, Monthly Summary) show a toast rather than failing silently or navigating nowhere.
+
+### Settings module (IMP-002)
+
+- **Audit fields & UUIDs (IMC-005 §3–4):** every entity (`StaffMember`, `BranchRecord`, `TaxRate`, config singletons) carries `id` (UUID), `created_at`, `updated_at`, `created_by`, `updated_by`, `branch_id`, `is_active`, `sync_status`, `last_synced_at` — stamped consistently via `src/lib/audit.ts`.
+- **Offline-first writes (IMC-002 §8, IMC-005 §6):** every mutation is written to IndexedDB immediately and queued (`src/lib/localStore.ts`) rather than requiring a live connection. The Synchronization settings page shows the queue and lets you manually "sync" (simulated — see below).
+- **Business rules enforced in code, not just UI:** unique branch codes (`DuplicateBranchCodeError`), unique usernames (`DuplicateUsernameError`), and "can't disable the last active Owner" (`LastActiveOwnerError`) all throw from the service layer, so they hold even if a UI check is bypassed.
+- **Soft delete only:** disabling a staff member sets `is_active: false`; nothing is ever hard-deleted, per IMP-002's business rules.
+- **Owner permissions are locked:** the Permission Matrix's Owner column is always fully granted and its checkboxes are disabled in the UI *and* rejected server-side (`OwnerPermissionsLockedError`) if called directly.
+- **Backup & Restore is genuinely functional today**, no backend required: "Download backup" serializes all Settings data to a JSON file via the browser; "Restore" reads a chosen file back in. This isn't a stub.
+- **Synchronization is simulated** until Supabase is connected: "Sync now" clears the local pending-changes queue and stamps a last-synced time, so the flow is fully testable, but it isn't pushing anywhere yet. Swap `runSync()` in `src/services/backupSyncService.ts` for a real push loop once Supabase is configured.
+- **Lazy loading (IMC-004 §6):** every route is code-split (`React.lazy`), so the Dashboard's initial load doesn't pull in Settings code, and vice versa.
 
 ## Folder structure
 
@@ -88,33 +104,39 @@ src/
 
 ## Testing summary
 
+**Dashboard (IMP-001):**
 - `npm run build` (`tsc -b && vite build`) completes with zero type errors.
-- Verified visually via rendered screenshots at desktop (1440px) and mobile (390px) widths — card-based layout, brand colors, professional icons (no emojis), responsive grid collapse confirmed.
-- Manual QA against IMP-001 §13:
-  - Dashboard loads without errors — verified (build + preview)
-  - KPIs match underlying records — verified (KPI cards read directly from `dashboardService`, no separately maintained totals)
-  - Quick actions navigate correctly — verified within scope (unbuilt modules show a clear "coming soon" toast instead of a dead link)
-  - Responsive layout — verified at desktop and mobile widths
-  - Offline mode — verified: `dashboardService` serves cached IndexedDB data when `navigator.onLine` is false; Sync Status indicator reflects offline state
+- Verified visually at desktop (1440px) and mobile (390px) widths after the IMP-002 layout refactor — still renders correctly.
+- Manual QA against IMP-001 §13: dashboard loads without errors, KPIs read from a single source, quick actions give clear feedback, responsive layout confirmed, offline mode serves cached data.
 
-Not yet covered (needs a real device/browser session, out of scope for this static check): PWA install prompt behavior, actual service worker offline reload after a real network drop, Lighthouse PWA audit.
+**Settings (IMP-002)** — verified with scripted browser tests (Playwright) that interact with the real rendered UI, not just visual inspection:
+- ✅ Duplicate branch code is rejected; a branch with a unique code is created successfully
+- ✅ Duplicate username is rejected; a new staff member is created successfully
+- ✅ The last active Owner cannot be disabled (button click is silently blocked with an error toast)
+- ✅ Owner's row in the Permission Matrix is locked (checkboxes disabled)
+- ✅ A permission change for a non-Owner role persists after a full page reload
+- ✅ "Download backup" triggers a real file download
+- ✅ Editing Business Profile adds an entry to the sync queue; that entry is visible on the Synchronization page
+- ✅ "Sync now" clears the pending queue and shows "Everything is synced"
 
-## Modified / created files (this pack)
+Not yet covered (needs a real device/browser session or a connected Supabase project): full backup→restore round-trip verification, PWA install prompt behavior, Lighthouse PWA audit, RLS policies (no live database yet to apply them to).
 
-All files under `imagecare/` are new — this is the first implementation pack. Notable ones:
+## Modified / created files
 
-- `vite.config.ts` — Tailwind + PWA plugin wiring, manifest, runtime caching
-- `src/index.css` — brand design tokens
-- `src/types/domain.ts` — shared domain types
-- `src/lib/supabaseClient.ts`, `src/lib/offlineDb.ts`, `src/lib/queryClient.ts`, `src/lib/format.ts`
-- `src/services/dashboardService.ts` — data abstraction layer
-- `src/data/mockData.ts` — standalone mock data source
-- `src/hooks/useAuth.ts`, `src/hooks/useOnlineStatus.ts`
-- `src/features/dashboard/hooks/useDashboardData.ts`
-- `src/components/ui/*` — Card, Badge, Skeleton, EmptyState, ErrorState, Toast
-- `src/components/dashboard/*` — WelcomeHeader, BranchSelector, SyncStatusIndicator, KpiCard, KpiGrid, QuickActions, LowStockAlert, RecentSalesList
-- `src/components/layout/*` — AppShell, Sidebar, Topbar
-- `src/pages/DashboardPage.tsx`
-- `src/app/router.tsx`, `src/App.tsx`, `src/main.tsx`
-- `public/icons/*`, `public/favicon.svg` — PWA icon set
-- `.env.example`
+**IMP-001 (Dashboard)** — see prior notes; all files under `src/` except `src/pages/settings/*`, `src/components/settings/*`, `src/services/{businessProfile,branch,staff,permissions,tax,configSettings,backupSync}Service.ts`, `src/types/settings.ts`, `src/lib/{audit,localStore}.ts`, `src/features/settings/*`, `src/components/layout/RootLayout.tsx`, `src/components/ui/{Button,Modal}.tsx`.
+
+**IMP-002 (Settings)** — new files:
+- `src/types/settings.ts` — all Settings domain types
+- `src/lib/audit.ts`, `src/lib/localStore.ts` — audit-field stamping and offline persistence
+- `src/data/settingsSeed.ts` — default seed data
+- `src/services/businessProfileService.ts`, `branchService.ts`, `staffService.ts`, `permissionsService.ts`, `taxSettingsService.ts`, `configSettingsService.ts`, `backupSyncService.ts`
+- `src/features/settings/hooks/useSettingsData.ts` — all React Query hooks
+- `src/components/settings/*` — SettingsSectionCard, SettingsPageHeader, FormField, ToggleRow, RoleBadge, StaffFormModal, BranchFormModal, TaxRateFormModal, PermissionMatrixTable
+- `src/components/ui/Button.tsx`, `src/components/ui/Modal.tsx` — new reusable primitives
+- `src/pages/settings/*` — all 12 section pages
+- `src/components/layout/RootLayout.tsx` — new layout route wrapping AppShell
+
+**Modified for IMP-002:**
+- `src/app/router.tsx` — restructured to nested, lazy-loaded routes
+- `src/components/layout/Sidebar.tsx` — Dashboard and Settings are now real links with active-state highlighting
+- `src/pages/DashboardPage.tsx` — no longer renders its own `AppShell` (moved to `RootLayout`); Branch/Currency selectors moved from the topbar into the page's own header row

@@ -1,0 +1,161 @@
+import type { AuditFields } from '../lib/audit'
+
+// ---------- People & Access ----------
+
+export type StaffRole = 'owner' | 'manager' | 'cashier' | 'accountant'
+
+export const STAFF_ROLES: StaffRole[] = ['owner', 'manager', 'cashier', 'accountant']
+
+export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+  owner: 'Owner',
+  manager: 'Manager',
+  cashier: 'Cashier',
+  accountant: 'Accountant',
+}
+
+export interface StaffMember extends AuditFields {
+  fullName: string
+  username: string
+  email: string
+  role: StaffRole
+  branchIds: string[]
+}
+
+export type StaffInput = Pick<StaffMember, 'fullName' | 'username' | 'email' | 'role' | 'branchIds'>
+
+// Permission Matrix — Owners are always fully permitted (IMP-002 business
+// rule: "Only Owners have unrestricted access") and that row is not
+// editable. Other roles are configurable.
+export type Permission =
+  | 'view_dashboard'
+  | 'manage_inventory'
+  | 'manage_sales'
+  | 'manage_purchases'
+  | 'manage_expenses'
+  | 'manage_payroll'
+  | 'manage_clients'
+  | 'manage_staff'
+  | 'manage_settings'
+  | 'view_reports'
+
+export const PERMISSIONS: Permission[] = [
+  'view_dashboard',
+  'manage_inventory',
+  'manage_sales',
+  'manage_purchases',
+  'manage_expenses',
+  'manage_payroll',
+  'manage_clients',
+  'manage_staff',
+  'manage_settings',
+  'view_reports',
+]
+
+export const PERMISSION_LABELS: Record<Permission, string> = {
+  view_dashboard: 'View Dashboard',
+  manage_inventory: 'Manage Inventory',
+  manage_sales: 'Manage Sales',
+  manage_purchases: 'Manage Purchases',
+  manage_expenses: 'Manage Expenses',
+  manage_payroll: 'Manage Payroll',
+  manage_clients: 'Manage Clients',
+  manage_staff: 'Manage Staff',
+  manage_settings: 'Manage Settings',
+  view_reports: 'View Reports',
+}
+
+export type PermissionMatrix = Record<StaffRole, Record<Permission, boolean>>
+
+// ---------- Business Profile ----------
+
+export interface BusinessProfile extends AuditFields {
+  businessName: string
+  contactEmail: string
+  contactPhone: string
+  address: string
+  defaultCurrency: string
+}
+
+export type BusinessProfileInput = Pick<
+  BusinessProfile,
+  'businessName' | 'contactEmail' | 'contactPhone' | 'address' | 'defaultCurrency'
+>
+
+// ---------- Branch Management ----------
+
+export interface BranchRecord extends AuditFields {
+  name: string
+  code: string
+  address: string
+  phone: string
+}
+
+export type BranchInput = Pick<BranchRecord, 'name' | 'code' | 'address' | 'phone'>
+
+// ---------- Tax Settings ----------
+
+export interface TaxRate extends AuditFields {
+  name: string
+  ratePercent: number
+  isInclusive: boolean
+  isDefault: boolean
+}
+
+export type TaxRateInput = Pick<TaxRate, 'name' | 'ratePercent' | 'isInclusive' | 'isDefault'>
+
+// ---------- Receipt Settings (singleton) ----------
+
+export interface ReceiptSettings extends AuditFields {
+  footerMessage: string
+  showLogo: boolean
+  showTaxBreakdown: boolean
+  showCashierName: boolean
+}
+
+// ---------- Inventory Settings (singleton) ----------
+
+export interface InventorySettingsConfig extends AuditFields {
+  defaultReorderLevel: number
+  skuPrefix: string
+  trackExpiryDates: boolean
+}
+
+// ---------- Sales Settings (singleton) ----------
+
+export interface SalesSettingsConfig extends AuditFields {
+  allowDiscounts: boolean
+  maxDiscountPercent: number
+  requireCustomerForCredit: boolean
+}
+
+// ---------- Notification Settings (singleton) ----------
+
+export interface NotificationSettings extends AuditFields {
+  lowStockAlerts: boolean
+  dailySummaryEmail: boolean
+  notificationEmail: string
+}
+
+// ---------- Appearance Settings (singleton) ----------
+
+export interface AppearanceSettings extends AuditFields {
+  density: 'comfortable' | 'compact'
+  dateFormat: 'DD/MM/YYYY' | 'MM/DD/YYYY'
+}
+
+// ---------- Backup & Synchronization ----------
+
+export interface BackupRecord {
+  id: string
+  createdAt: string
+  createdBy: string
+  sizeBytes: number
+}
+
+export interface SyncQueueItem {
+  id: string
+  entityType: string
+  entityId: string
+  operation: 'create' | 'update' | 'disable'
+  createdAt: string
+}
