@@ -8,6 +8,7 @@ import {
   mockGetSyncStatus,
 } from '../data/mockData'
 import type { DashboardSummary, LowStockItem, RecentSale, SyncStatus } from '../types/domain'
+import type { SupportedCurrency } from '../lib/currency'
 
 // -----------------------------------------------------------------------
 // Dashboard summary service (IMC-002 rule #5: reports come from live
@@ -44,14 +45,17 @@ async function withOfflineFallback<T>(cacheKey: string, fetcher: () => Promise<T
   return fresh
 }
 
-export async function getDashboardSummary(branchId: string): Promise<DashboardSummary> {
-  return withOfflineFallback(`dashboard-summary:${branchId}`, async () => {
+export async function getDashboardSummary(branchId: string, reportingCurrency: SupportedCurrency): Promise<DashboardSummary> {
+  return withOfflineFallback(`dashboard-summary:${branchId}:${reportingCurrency}`, async () => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.rpc('dashboard_summary', { branch_id: branchId })
+      const { data, error } = await supabase.rpc('dashboard_summary', {
+        branch_id: branchId,
+        reporting_currency: reportingCurrency,
+      })
       if (error) throw error
       return data as DashboardSummary
     }
-    return branchId === 'all' ? mockGetSummaryAllBranches() : mockGetSummary(branchId)
+    return branchId === 'all' ? mockGetSummaryAllBranches(reportingCurrency) : mockGetSummary(branchId, reportingCurrency)
   })
 }
 

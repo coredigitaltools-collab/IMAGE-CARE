@@ -5,7 +5,7 @@ interface WelcomeHeaderProps {
 
 export function WelcomeHeader({ userName, businessName }: WelcomeHeaderProps) {
   const firstName = userName.split(' ')[0]
-  const today = new Date().toLocaleDateString('en-KE', { weekday: 'long', day: 'numeric', month: 'long' })
+  const today = new Date().toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
     <div>

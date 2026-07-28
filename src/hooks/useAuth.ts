@@ -9,7 +9,7 @@ import type { AuthedUser } from '../types/domain'
 // produced, so that swap won't touch Dashboard code.
 const CURRENT_USER: AuthedUser = {
   id: 'user-owner-1',
-  name: 'Amara Okonkwo',
+  name: 'Owner',
   role: 'owner',
   businessName: 'ImageCare',
   allowedBranchIds: ['branch-main', 'branch-westlands', 'branch-industrial'],

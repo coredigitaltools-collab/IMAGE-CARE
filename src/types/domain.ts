@@ -23,6 +23,7 @@ export interface DashboardSummary {
   todaysSales: number
   todaysExpenses: number
   cashAvailable: number
+  /** The currency these figures are expressed in (display/reporting currency — user-selectable). */
   currency: string
   asOf: string // ISO timestamp
 }

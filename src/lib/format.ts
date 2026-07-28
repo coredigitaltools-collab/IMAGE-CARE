@@ -1,5 +1,5 @@
 export function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-KE', {
+  return new Intl.NumberFormat('en-UG', {
     style: 'currency',
     currency,
     maximumFractionDigits: 0,
@@ -19,5 +19,5 @@ export function formatRelativeTime(iso: string | null): string {
 }
 
 export function formatClockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit' })
 }

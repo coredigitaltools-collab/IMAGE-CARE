@@ -5,8 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 // GitHub Pages serves a project repo at https://USERNAME.github.io/REPO-NAME/,
-// not from the domain root — set base to match your repo name before deploying.
-// If you rename the repo, update this to match.
+// not from the domain root — base must match your repo name exactly,
+// including capitalization. This is set for the "IMAGE-CARE" repo.
 export default defineConfig({
   base: '/IMAGE-CARE/',
   plugins: [

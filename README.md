@@ -45,26 +45,20 @@ npm run preview
 
 ## Deploying to GitHub Pages
 
-The project is pre-configured for GitHub Pages under a repo named `imagecare` (see `base: '/imagecare/'` in `vite.config.ts`). If your repo has a different name, change that value to match — e.g. `base: '/my-repo-name/'`.
+Two ways to deploy — pick one:
 
-1. Create a GitHub repo and push this project to it:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial dashboard implementation"
-   git branch -M main
-   git remote add origin https://github.com/YOUR-USERNAME/imagecare.git
-   git push -u origin main
-   ```
-2. Deploy:
-   ```bash
-   npm run deploy
-   ```
-   This builds the app and pushes the `dist/` folder to a `gh-pages` branch (via the `gh-pages` package, already in `devDependencies`).
-3. On GitHub: **Settings → Pages → Source**, select the `gh-pages` branch, root folder. Save.
-4. Your site will be live at `https://YOUR-USERNAME.github.io/imagecare/` within a minute or two.
+### Option A: Automatic (recommended — no terminal needed after initial setup)
 
-If you rename the repo, update `base` in `vite.config.ts` to match before running `npm run deploy` again.
+This repo includes `.github/workflows/deploy.yml`. Once GitHub Pages is set to **Source: GitHub Actions** (Settings → Pages), every push to `main` — including files edited or uploaded directly on github.com — automatically builds and publishes the site. No local `npm` commands required for day-to-day updates.
+
+### Option B: Manual, from your own machine
+
+```bash
+npm run deploy
+```
+Builds the app and pushes `dist/` to the `gh-pages` branch directly (requires Pages **Source: Deploy from a branch** → `gh-pages` → `/(root)`). Only use one of the two source settings at a time — mixing them will cause your live site to flip-flop between old and new builds depending on which method ran last.
+
+The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-CARE/'` in `vite.config.ts`). If your repo has a different name, change that value to match — case matters.
 
 ## Architecture notes
 

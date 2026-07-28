@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { WelcomeHeader } from '../components/dashboard/WelcomeHeader'
 import { BranchSelector } from '../components/dashboard/BranchSelector'
+import { CurrencySelector } from '../components/dashboard/CurrencySelector'
 import { SyncStatusIndicator } from '../components/dashboard/SyncStatusIndicator'
 import { KpiGrid } from '../components/dashboard/KpiGrid'
 import { QuickActions } from '../components/dashboard/QuickActions'
@@ -11,6 +12,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { useToast } from '../components/ui/Toast'
 import { BRANCHES } from '../data/mockData'
+import type { SupportedCurrency } from '../lib/currency'
 import { useDashboardSummary, useLowStockItems, useRecentSales, useSyncStatus } from '../features/dashboard/hooks/useDashboardData'
 
 const MODULE_LABELS: Record<'sale' | 'purchase' | 'expense' | 'reports', string> = {
@@ -32,8 +34,9 @@ export function DashboardPage() {
     [user.allowedBranchIds],
   )
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all')
+  const [reportingCurrency, setReportingCurrency] = useState<SupportedCurrency>('UGX')
 
-  const summaryQuery = useDashboardSummary(selectedBranchId)
+  const summaryQuery = useDashboardSummary(selectedBranchId, reportingCurrency)
   const lowStockQuery = useLowStockItems(selectedBranchId)
   const recentSalesQuery = useRecentSales(selectedBranchId)
   const syncQuery = useSyncStatus()
@@ -51,6 +54,7 @@ export function DashboardPage() {
             selectedBranchId={selectedBranchId}
             onChange={setSelectedBranchId}
           />
+          <CurrencySelector selected={reportingCurrency} onChange={setReportingCurrency} />
           <SyncStatusIndicator status={isOnline ? syncQuery.data : { state: 'offline', lastSyncedAt: syncQuery.data?.lastSyncedAt ?? null, pendingCount: 0 }} />
         </>
       }

@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { getDashboardSummary, getLowStockItems, getRecentSales, getSyncStatus } from '../../../services/dashboardService'
+import type { SupportedCurrency } from '../../../lib/currency'
 
-export function useDashboardSummary(branchId: string) {
+export function useDashboardSummary(branchId: string, reportingCurrency: SupportedCurrency) {
   return useQuery({
-    queryKey: ['dashboard-summary', branchId],
-    queryFn: () => getDashboardSummary(branchId),
+    queryKey: ['dashboard-summary', branchId, reportingCurrency],
+    queryFn: () => getDashboardSummary(branchId, reportingCurrency),
     refetchInterval: 60_000,
   })
 }
