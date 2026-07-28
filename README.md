@@ -64,6 +64,7 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 
 - **IMP-001 — Dashboard**: KPIs, recent sales, low stock, quick actions, branch/currency selectors.
 - **IMP-002 — Settings**: full administration centre — Business Profile, People & Access (staff + roles + permission matrix), Branch Management, Tax, Receipts, Inventory Settings, Sales Settings, Notifications, Backup & Restore, Synchronization, Appearance, About.
+- **IMP-003 — Inventory**: Product Master (with barcode support), Categories (with merge), Brands, Units of Measure, Suppliers, Stock Movements (permanent audit trail), Stock Adjustments (mandatory reason), Barcode Management (generate/search/print), 7 Inventory Reports, and an Inventory Dashboard with KPIs and quick actions.
 
 ## Architecture notes
 
@@ -82,6 +83,18 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 - **Backup & Restore is genuinely functional today**, no backend required: "Download backup" serializes all Settings data to a JSON file via the browser; "Restore" reads a chosen file back in. This isn't a stub.
 - **Synchronization is simulated** until Supabase is connected: "Sync now" clears the local pending-changes queue and stamps a last-synced time, so the flow is fully testable, but it isn't pushing anywhere yet. Swap `runSync()` in `src/services/backupSyncService.ts` for a real push loop once Supabase is configured.
 - **Lazy loading (IMC-004 §6):** every route is code-split (`React.lazy`), so the Dashboard's initial load doesn't pull in Settings code, and vice versa.
+
+### Inventory module (IMP-003)
+
+- **Transaction-based stock (IMP-003 §18):** `currentStock` is never edited directly by the product form — the only path that changes it is `stockService.recordMovement()`, which also writes a permanent `StockMovement` record. Even a brand-new product's opening stock creates a movement.
+- **No negative stock (IMP-003 §17):** every movement (including adjustments) is validated against current stock before being applied; `NegativeStockError` is thrown and shown to the user rather than allowing stock to go below zero.
+- **Unique SKU and barcode (IMP-003 §17):** enforced in `productService.ts` (`DuplicateSkuError`, `DuplicateBarcodeError`), checked on both create and edit.
+- **Archive instead of delete (IMP-003 §18):** products, categories, brands, and units are all soft-deleted (`is_active`/`status` flags). Archived products are hidden from the default product list and blocked from selling via `assertSellable()` — ready for the Sales module to call once it exists.
+- **Category merge (IMP-003 §7):** reassigns every product on the source category to the target, then archives the source — implemented in `categoryService.mergeCategories()`, verified with a scripted test that a product's category actually changes.
+- **Stock Adjustments (IMP-003 §12):** require a mandatory reason (enforced by both Zod and the service layer). There's no multi-step approval workflow yet — the acting user is recorded as both creator and authorizer, which is honest about today's single-session reality while keeping the data shape ready for a real approval flow later.
+- **Barcode rendering:** uses `jsbarcode` (CODE128) — genuinely renders and prints, not a placeholder.
+- **Inventory Reports:** all 7 (Valuation, Stock Levels, Low Stock, Out of Stock, Dead Stock, Fast/Slow Moving, Profitability) compute from real product/movement data. Fast/Slow Moving will show 0 units for everything until the Sales module exists and starts recording `sale`-type movements — that's accurate, not a bug.
+- **Product Detail page** has 9 tabs per IMP-003 §6. Purchase History and Sales History currently show honest empty states, since the Purchase Orders and Sales modules don't exist yet.
 
 ## Folder structure
 
@@ -118,6 +131,17 @@ src/
 - ✅ "Download backup" triggers a real file download
 - ✅ Editing Business Profile adds an entry to the sync queue; that entry is visible on the Synchronization page
 - ✅ "Sync now" clears the pending queue and shows "Everything is synced"
+
+**Inventory (IMP-003)** — verified with scripted browser tests interacting with the real rendered UI:
+- ✅ Duplicate SKU rejected; duplicate barcode rejected; product created successfully once both are unique
+- ✅ Stock adjustment that would take a product below 0 is rejected with a clear error
+- ✅ Valid stock-in adjustment is recorded and appears in the adjustments list
+- ✅ Merging one category into another archives the source and reassigns every affected product — confirmed a specific product's category actually changed
+- ✅ Archiving a product hides it from the default product list; "Show archived" reveals it again
+- ✅ All 7 Inventory Dashboard KPIs render with real computed values
+- ✅ Low Stock report returns real rows computed from actual product data
+
+Also fixed during this pass: several form labels across the Inventory module weren't properly associated with their inputs (`<label>` without `htmlFor`/`id`) — a real accessibility gap, not just a test-script issue. Fixed in `StockAdjustmentModal`, `ProductFormModal`, `SupplierFormModal`, and `ProductDetailPage`.
 
 Not yet covered (needs a real device/browser session or a connected Supabase project): full backup→restore round-trip verification, PWA install prompt behavior, Lighthouse PWA audit, RLS policies (no live database yet to apply them to).
 

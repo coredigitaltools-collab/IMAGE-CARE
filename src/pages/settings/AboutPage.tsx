@@ -2,9 +2,9 @@ import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 
-const IMPLEMENTED = ['Dashboard (IMP-001)', 'Settings (IMP-002)']
+const IMPLEMENTED = ['Dashboard (IMP-001)', 'Settings (IMP-002)', 'Inventory (IMP-003)']
 const PLANNED = [
-  'Inventory', 'Sales', 'Clients', 'Credit', 'Loyalty Programme', 'Invoices',
+  'Sales', 'Clients', 'Credit', 'Loyalty Programme', 'Invoices',
   'Purchase Orders', 'Bills & Payables', 'Payroll', 'Expenses', 'Sales Targets',
   'Stock Summary', 'Cash Flow', 'Monthly Summary', 'Annual Summary',
   'Daily Summary', 'Bank Reconciliation', 'Branch Overview', 'Offline',

@@ -35,7 +35,7 @@ interface NavItem {
 // approved scope stays visible without implying those modules exist yet.
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
-  { label: 'Inventory', icon: Boxes },
+  { label: 'Inventory', icon: Boxes, to: '/inventory' },
   { label: 'Sales', icon: ShoppingCart },
   { label: 'Clients', icon: Users },
   { label: 'Credit', icon: CreditCard },

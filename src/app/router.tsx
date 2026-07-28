@@ -20,6 +20,18 @@ const SynchronizationPage = lazy(() => import('../pages/settings/Synchronization
 const AppearanceSettingsPage = lazy(() => import('../pages/settings/AppearanceSettingsPage').then((m) => ({ default: m.AppearanceSettingsPage })))
 const AboutPage = lazy(() => import('../pages/settings/AboutPage').then((m) => ({ default: m.AboutPage })))
 
+const InventoryDashboardPage = lazy(() => import('../pages/inventory/InventoryDashboardPage').then((m) => ({ default: m.InventoryDashboardPage })))
+const ProductsListPage = lazy(() => import('../pages/inventory/ProductsListPage').then((m) => ({ default: m.ProductsListPage })))
+const ProductDetailPage = lazy(() => import('../pages/inventory/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })))
+const CategoriesPage = lazy(() => import('../pages/inventory/CategoriesPage').then((m) => ({ default: m.CategoriesPage })))
+const BrandsPage = lazy(() => import('../pages/inventory/BrandsPage').then((m) => ({ default: m.BrandsPage })))
+const UnitsPage = lazy(() => import('../pages/inventory/UnitsPage').then((m) => ({ default: m.UnitsPage })))
+const SuppliersPage = lazy(() => import('../pages/inventory/SuppliersPage').then((m) => ({ default: m.SuppliersPage })))
+const StockMovementsPage = lazy(() => import('../pages/inventory/StockMovementsPage').then((m) => ({ default: m.StockMovementsPage })))
+const StockAdjustmentsPage = lazy(() => import('../pages/inventory/StockAdjustmentsPage').then((m) => ({ default: m.StockAdjustmentsPage })))
+const BarcodeManagementPage = lazy(() => import('../pages/inventory/BarcodeManagementPage').then((m) => ({ default: m.BarcodeManagementPage })))
+const InventoryReportsPage = lazy(() => import('../pages/inventory/InventoryReportsPage').then((m) => ({ default: m.InventoryReportsPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -57,6 +69,17 @@ export const router = createBrowserRouter(
         { path: 'settings/sync', element: withSuspense(<SynchronizationPage />) },
         { path: 'settings/appearance', element: withSuspense(<AppearanceSettingsPage />) },
         { path: 'settings/about', element: withSuspense(<AboutPage />) },
+        { path: 'inventory', element: withSuspense(<InventoryDashboardPage />) },
+        { path: 'inventory/products', element: withSuspense(<ProductsListPage />) },
+        { path: 'inventory/products/:id', element: withSuspense(<ProductDetailPage />) },
+        { path: 'inventory/categories', element: withSuspense(<CategoriesPage />) },
+        { path: 'inventory/brands', element: withSuspense(<BrandsPage />) },
+        { path: 'inventory/units', element: withSuspense(<UnitsPage />) },
+        { path: 'inventory/suppliers', element: withSuspense(<SuppliersPage />) },
+        { path: 'inventory/movements', element: withSuspense(<StockMovementsPage />) },
+        { path: 'inventory/adjustments', element: withSuspense(<StockAdjustmentsPage />) },
+        { path: 'inventory/barcode', element: withSuspense(<BarcodeManagementPage />) },
+        { path: 'inventory/reports', element: withSuspense(<InventoryReportsPage />) },
       ],
     },
   ],
