@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react'
-import { Search, User, UserPlus, X } from 'lucide-react'
+import { Award, Phone, Search, User, UserPlus, Wallet, X } from 'lucide-react'
+import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import type { Customer } from '../../types/sales'
 
 interface CustomerSelectorProps {
   customers: Customer[]
   selectedCustomer: Customer | null
+  lastPurchaseAt: string | null
   onSelect: (customer: Customer | null) => void
   onAddNew: () => void
 }
 
-export function CustomerSelector({ customers, selectedCustomer, onSelect, onAddNew }: CustomerSelectorProps) {
+export function CustomerSelector({ customers, selectedCustomer, lastPurchaseAt, onSelect, onAddNew }: CustomerSelectorProps) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
 
@@ -21,21 +23,50 @@ export function CustomerSelector({ customers, selectedCustomer, onSelect, onAddN
 
   if (selectedCustomer) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-md border border-brand-blue-100 bg-brand-blue-50 px-3 py-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <User size={15} className="shrink-0 text-brand-blue-700" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-ink-900">{selectedCustomer.name}</p>
-            {selectedCustomer.phone && <p className="text-xs text-ink-500">{selectedCustomer.phone}</p>}
+      <div className="rounded-md border border-brand-blue-100 bg-brand-blue-50 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-brand-blue-700">
+              <User size={14} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink-900">{selectedCustomer.name}</p>
+              {selectedCustomer.phone && (
+                <p className="flex items-center gap-1 text-xs text-ink-500">
+                  <Phone size={10} /> {selectedCustomer.phone}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => onSelect(null)}
+            aria-label="Remove customer, sell as walk-in"
+            className="shrink-0 rounded-full p-1 text-ink-500 hover:bg-white hover:text-ink-900"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-brand-blue-100 pt-2.5 text-center">
+          <div>
+            <p className="flex items-center justify-center gap-1 text-[10px] text-ink-500">
+              <Award size={10} /> Loyalty
+            </p>
+            <p className="text-xs font-semibold text-ink-900">{selectedCustomer.loyaltyPoints} pts</p>
+          </div>
+          <div>
+            <p className="flex items-center justify-center gap-1 text-[10px] text-ink-500">
+              <Wallet size={10} /> Credit owed
+            </p>
+            <p className={`text-xs font-semibold ${selectedCustomer.creditBalance > 0 ? 'text-brand-red-700' : 'text-ink-900'}`}>
+              {formatCurrency(selectedCustomer.creditBalance, 'UGX')}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-ink-500">Last purchase</p>
+            <p className="text-xs font-semibold text-ink-900">{lastPurchaseAt ? formatRelativeTime(lastPurchaseAt) : 'None yet'}</p>
           </div>
         </div>
-        <button
-          onClick={() => onSelect(null)}
-          aria-label="Remove customer, sell as walk-in"
-          className="shrink-0 rounded-full p-1 text-ink-500 hover:bg-white hover:text-ink-900"
-        >
-          <X size={14} />
-        </button>
       </div>
     )
   }
@@ -65,7 +96,9 @@ export function CustomerSelector({ customers, selectedCustomer, onSelect, onAddN
       {isOpen && (
         <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-ink-100 bg-white shadow-card-hover">
           {matches.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-ink-500">No customers found.</p>
+            <p className="px-3 py-3 text-xs text-ink-500">
+              {customers.length === 0 ? 'No customers yet — they can be added here or during checkout.' : 'No customers found.'}
+            </p>
           ) : (
             <ul>
               {matches.map((c) => (

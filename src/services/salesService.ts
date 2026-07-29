@@ -32,6 +32,18 @@ export class EmptyCartError extends Error {
     this.name = 'EmptyCartError'
   }
 }
+export class InsufficientPaymentError extends Error {
+  constructor(shortfall: number) {
+    super(`Amount received is short by ${shortfall.toLocaleString()} UGX.`)
+    this.name = 'InsufficientPaymentError'
+  }
+}
+export class PaymentReferenceRequiredError extends Error {
+  constructor(label: string) {
+    super(`Enter the ${label} before completing this sale.`)
+    this.name = 'PaymentReferenceRequiredError'
+  }
+}
 
 // Simple placeholder loyalty rule (1 point per 1,000 UGX spent) — a real
 // Loyalty Programme module would make this configurable; documented here
@@ -107,6 +119,21 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
   const existing = await listSales()
   const reference = generateReference(existing)
 
+  // Payment details are only validated when actually completing a sale —
+  // a parked cart doesn't need a finalized payment method or amount yet.
+  let changeDue: number | null = null
+  if (input.status === 'completed') {
+    if (input.paymentMethod === 'cash') {
+      const tendered = input.amountTendered ?? 0
+      if (tendered < totalAmount) throw new InsufficientPaymentError(totalAmount - tendered)
+      changeDue = tendered - totalAmount
+    } else if (input.paymentMethod === 'mobile_money') {
+      if (!input.paymentReference?.trim()) throw new PaymentReferenceRequiredError('mobile money reference number')
+    } else if (input.paymentMethod === 'card') {
+      if (!input.paymentReference?.trim()) throw new PaymentReferenceRequiredError('card transaction ID')
+    }
+  }
+
   const sale: Sale = {
     id: crypto.randomUUID(),
     reference,
@@ -127,6 +154,9 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
     taxAmount,
     totalAmount,
     paymentMethod: input.paymentMethod,
+    amountTendered: input.paymentMethod === 'cash' ? (input.amountTendered ?? null) : null,
+    changeDue,
+    paymentReference: input.paymentMethod === 'mobile_money' || input.paymentMethod === 'card' ? (input.paymentReference?.trim() || null) : null,
     status: input.status,
     createdAt: new Date().toISOString(),
     createdBy: userId,

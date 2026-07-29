@@ -11,6 +11,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { BarcodeDisplay } from '../../components/inventory/BarcodeDisplay'
+import { CategoryQuickSelect } from '../../components/inventory/CategoryQuickSelect'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
@@ -233,20 +234,14 @@ export function ProductDetailPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="pd-category" className="mb-1.5 block text-sm font-medium text-ink-700">Category</label>
-                <select
-                  id="pd-category"
-                  {...generalForm.register('categoryId')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
-                >
-                  {categoriesQuery.data?.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CategoryQuickSelect
+                id="pd-category"
+                categories={categoriesQuery.data ?? []}
+                value={generalForm.watch('categoryId')}
+                onChange={(id) => generalForm.setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
+                userId={user.id}
+                error={generalForm.formState.errors.categoryId?.message}
+              />
               <div>
                 <label htmlFor="pd-brand" className="mb-1.5 block text-sm font-medium text-ink-700">Brand</label>
                 <select

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { ProductSearchGrid } from '../../components/sales/ProductSearchGrid'
+import { ProductSearchGrid, type ProductSearchGridHandle } from '../../components/sales/ProductSearchGrid'
 import { CartPanel } from '../../components/sales/CartPanel'
 import { CustomerSelector } from '../../components/sales/CustomerSelector'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
@@ -8,7 +8,7 @@ import { ParkedSalesButton } from '../../components/sales/ParkedSalesButton'
 import { ReceiptModal } from '../../components/sales/ReceiptModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
-import { useProducts } from '../../features/inventory/hooks/useInventoryData'
+import { useCategories, useProducts } from '../../features/inventory/hooks/useInventoryData'
 import { useTaxRates } from '../../features/settings/hooks/useSettingsData'
 import { useReceiptSettings, useSalesSettings } from '../../features/settings/hooks/useSettingsData'
 import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
@@ -19,13 +19,16 @@ import {
   useDeleteParkedSale,
   useParkedSales,
   useResumeParkedSale,
+  useSales,
 } from '../../features/sales/hooks/useSalesData'
 import {
   CreditRequiresCustomerError,
   DiscountExceedsLimitError,
   DiscountNotAllowedError,
   EmptyCartError,
+  InsufficientPaymentError,
   NegativeStockError,
+  PaymentReferenceRequiredError,
 } from '../../services/salesService'
 import { ArchivedProductError } from '../../services/productService'
 import type { Product } from '../../types/inventory'
@@ -34,10 +37,13 @@ import type { CartItem, Customer, PaymentMethod, Sale } from '../../types/sales'
 export function PointOfSalePage() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const searchRef = useRef<ProductSearchGridHandle>(null)
 
   const productsQuery = useProducts()
+  const categoriesQuery = useCategories()
   const taxRatesQuery = useTaxRates()
   const customersQuery = useCustomers()
+  const salesQuery = useSales()
   const salesSettingsQuery = useSalesSettings()
   const receiptSettingsQuery = useReceiptSettings()
   const businessProfileQuery = useBusinessProfile()
@@ -53,11 +59,19 @@ export function PointOfSalePage() {
   const [discountPercent, setDiscountPercent] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+  const [amountTendered, setAmountTendered] = useState('')
+  const [paymentReference, setPaymentReference] = useState('')
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
 
   const salesSettings = salesSettingsQuery.data
   const defaultTaxRate = taxRatesQuery.data?.find((r) => r.isDefault)
+
+  const lastPurchaseAt = useMemo(() => {
+    if (!selectedCustomer) return null
+    const match = (salesQuery.data ?? []).find((s) => s.customerId === selectedCustomer.id && s.status === 'completed')
+    return match?.createdAt ?? null
+  }, [salesQuery.data, selectedCustomer])
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -104,6 +118,8 @@ export function PointOfSalePage() {
     setDiscountPercent(0)
     setTaxRateId(defaultTaxRate?.id ?? null)
     setPaymentMethod('cash')
+    setAmountTendered('')
+    setPaymentReference('')
   }
 
   const subtotal = cart.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
@@ -120,7 +136,9 @@ export function PointOfSalePage() {
       err instanceof DiscountNotAllowedError ||
       err instanceof DiscountExceedsLimitError ||
       err instanceof CreditRequiresCustomerError ||
-      err instanceof EmptyCartError
+      err instanceof EmptyCartError ||
+      err instanceof InsufficientPaymentError ||
+      err instanceof PaymentReferenceRequiredError
     ) {
       showToast(err.message)
     } else {
@@ -136,6 +154,8 @@ export function PointOfSalePage() {
         discountPercent,
         taxRateId,
         paymentMethod,
+        amountTendered: paymentMethod === 'cash' ? Number(amountTendered) || 0 : null,
+        paymentReference: paymentMethod === 'mobile_money' || paymentMethod === 'card' ? paymentReference : null,
         status: 'completed',
       })
       setReceiptSale(sale)
@@ -152,6 +172,8 @@ export function PointOfSalePage() {
         discountPercent,
         taxRateId,
         paymentMethod,
+        amountTendered: null,
+        paymentReference: null,
         status: 'parked',
       })
       showToast('Sale parked.', 'success')
@@ -183,6 +205,31 @@ export function PointOfSalePage() {
     showToast('Parked sale resumed.', 'success')
   }
 
+  // Keyboard shortcuts for desktop cashiers — F2 search, F9 complete,
+  // F10 park, Esc clears the cart. Ignored while a modal is open or the
+  // shortcut would conflict with normal typing (only F-keys and Escape
+  // are global; nothing here hijacks letter/number keys used in inputs).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (isCustomerModalOpen || receiptSale) return
+      if (e.key === 'F2') {
+        e.preventDefault()
+        searchRef.current?.focusSearch()
+      } else if (e.key === 'F9') {
+        e.preventDefault()
+        if (cart.length > 0 && !checkout.isPending) handleComplete()
+      } else if (e.key === 'F10') {
+        e.preventDefault()
+        if (cart.length > 0 && !checkout.isPending) handlePark()
+      } else if (e.key === 'Escape' && document.activeElement?.tagName !== 'INPUT') {
+        setCart([])
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, isCustomerModalOpen, receiptSale, checkout.isPending, discountPercent, taxRateId, paymentMethod, amountTendered, paymentReference, selectedCustomer])
+
   return (
     <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-6xl flex-col">
       <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Sales' }]} />
@@ -191,22 +238,26 @@ export function PointOfSalePage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Sales / POS</h1>
           <p className="mt-0.5 text-sm text-ink-500">Search products, build the cart, and check out.</p>
         </div>
-        <ParkedSalesButton
-          parkedSales={parkedSalesQuery.data ?? []}
-          onResume={handleResumeParked}
-          onDelete={(id) => deleteParked.mutate(id)}
-        />
+        <div className="flex items-center gap-2">
+          <p className="hidden text-xs text-ink-400 lg:block">F2 search · F9 complete · F10 park · Esc clear</p>
+          <ParkedSalesButton
+            parkedSales={parkedSalesQuery.data ?? []}
+            onResume={handleResumeParked}
+            onDelete={(id) => deleteParked.mutate(id)}
+          />
+        </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
         <div className="min-h-0 rounded-card border border-ink-100 bg-white p-4 shadow-card">
-          <ProductSearchGrid products={productsQuery.data ?? []} onAdd={addToCart} />
+          <ProductSearchGrid ref={searchRef} products={productsQuery.data ?? []} categories={categoriesQuery.data ?? []} onAdd={addToCart} />
         </div>
 
         <div className="flex min-h-0 flex-col gap-3 rounded-card border border-ink-100 bg-white p-4 shadow-card">
           <CustomerSelector
             customers={(customersQuery.data ?? []).filter((c) => c.is_active)}
             selectedCustomer={selectedCustomer}
+            lastPurchaseAt={lastPurchaseAt}
             onSelect={setSelectedCustomer}
             onAddNew={() => setIsCustomerModalOpen(true)}
           />
@@ -225,6 +276,10 @@ export function PointOfSalePage() {
               onTaxRateChange={setTaxRateId}
               paymentMethod={paymentMethod}
               onPaymentMethodChange={setPaymentMethod}
+              amountTendered={amountTendered}
+              onAmountTenderedChange={setAmountTendered}
+              paymentReference={paymentReference}
+              onPaymentReferenceChange={setPaymentReference}
               subtotal={subtotal}
               discountAmount={discountAmount}
               taxAmount={taxAmount}

@@ -186,6 +186,7 @@ export function ProductsListPage() {
           units={unitsQuery.data ?? []}
           suppliers={suppliersQuery.data ?? []}
           generatedSku={generatedSkuQuery.data}
+          userId={user.id}
           onClose={closeAddModal}
           onSubmit={handleCreate}
           submitError={formError}

@@ -19,6 +19,10 @@ interface CartPanelProps {
   onTaxRateChange: (id: string | null) => void
   paymentMethod: PaymentMethod
   onPaymentMethodChange: (method: PaymentMethod) => void
+  amountTendered: string
+  onAmountTenderedChange: (value: string) => void
+  paymentReference: string
+  onPaymentReferenceChange: (value: string) => void
   subtotal: number
   discountAmount: number
   taxAmount: number
@@ -42,6 +46,10 @@ export function CartPanel({
   onTaxRateChange,
   paymentMethod,
   onPaymentMethodChange,
+  amountTendered,
+  onAmountTenderedChange,
+  paymentReference,
+  onPaymentReferenceChange,
   subtotal,
   discountAmount,
   taxAmount,
@@ -50,6 +58,9 @@ export function CartPanel({
   onComplete,
   isSubmitting,
 }: CartPanelProps) {
+  const tenderedNumber = Number(amountTendered) || 0
+  const changeDue = Math.max(0, tenderedNumber - totalAmount)
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto">
@@ -69,19 +80,19 @@ export function CartPanel({
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     onClick={() => onDecrement(item.productId)}
-                    className="flex h-6 w-6 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-ink-50"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-ink-50 active:bg-ink-100"
                     aria-label={`Decrease quantity of ${item.productName}`}
                   >
-                    <Minus size={11} />
+                    <Minus size={13} />
                   </button>
                   <span className="w-6 text-center text-xs font-medium text-ink-900">{item.quantity}</span>
                   <button
                     onClick={() => onIncrement(item.productId)}
                     disabled={item.quantity >= item.availableStock}
-                    className="flex h-6 w-6 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-ink-50 active:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label={`Increase quantity of ${item.productName}`}
                   >
-                    <Plus size={11} />
+                    <Plus size={13} />
                   </button>
                 </div>
                 <p className="w-16 shrink-0 text-right text-xs font-semibold text-ink-900">
@@ -90,9 +101,9 @@ export function CartPanel({
                 <button
                   onClick={() => onRemove(item.productId)}
                   aria-label={`Remove ${item.productName}`}
-                  className="shrink-0 rounded-full p-1 text-ink-400 hover:bg-brand-red-50 hover:text-brand-red-700"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-400 hover:bg-brand-red-50 hover:text-brand-red-700"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={14} />
                 </button>
               </li>
             ))}
@@ -114,7 +125,7 @@ export function CartPanel({
               disabled={!discountsAllowed}
               value={discountPercent}
               onChange={(e) => onDiscountChange(Number(e.target.value))}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-sm text-ink-900 shadow-card disabled:bg-ink-50 disabled:text-ink-300"
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card disabled:bg-ink-50 disabled:text-ink-300"
             />
           </div>
           <div>
@@ -125,7 +136,7 @@ export function CartPanel({
               id="pos-tax"
               value={taxRateId ?? ''}
               onChange={(e) => onTaxRateChange(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-sm text-ink-900 shadow-card"
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card"
             >
               <option value="">No tax</option>
               {taxRates.map((r) => (
@@ -146,8 +157,8 @@ export function CartPanel({
                 onClick={() => onPaymentMethodChange(m)}
                 className={
                   paymentMethod === m
-                    ? 'rounded-md bg-brand-blue-700 px-2 py-1.5 text-[11px] font-medium text-white'
-                    : 'rounded-md border border-ink-100 bg-white px-2 py-1.5 text-[11px] font-medium text-ink-700 hover:bg-ink-50'
+                    ? 'rounded-md bg-brand-blue-700 px-2 py-2 text-[11px] font-medium text-white'
+                    : 'rounded-md border border-ink-100 bg-white px-2 py-2 text-[11px] font-medium text-ink-700 hover:bg-ink-50 active:bg-ink-100'
                 }
               >
                 {PAYMENT_METHOD_LABELS[m]}
@@ -155,6 +166,58 @@ export function CartPanel({
             ))}
           </div>
         </div>
+
+        {/* Payment-method-specific fields */}
+        {paymentMethod === 'cash' && (
+          <div className="rounded-md bg-ink-50 p-2.5">
+            <label htmlFor="pos-tendered" className="mb-1 block text-xs font-medium text-ink-700">
+              Amount received (UGX)
+            </label>
+            <input
+              id="pos-tendered"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={amountTendered}
+              onChange={(e) => onAmountTenderedChange(e.target.value)}
+              placeholder="0"
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            />
+            {tenderedNumber > 0 && (
+              <p className={`mt-1.5 text-xs font-medium ${tenderedNumber >= totalAmount ? 'text-success-700' : 'text-brand-red-700'}`}>
+                {tenderedNumber >= totalAmount ? `Change due: ${formatCurrency(changeDue, 'UGX')}` : `Short by ${formatCurrency(totalAmount - tenderedNumber, 'UGX')}`}
+              </p>
+            )}
+          </div>
+        )}
+        {paymentMethod === 'mobile_money' && (
+          <div className="rounded-md bg-ink-50 p-2.5">
+            <label htmlFor="pos-reference" className="mb-1 block text-xs font-medium text-ink-700">
+              Mobile money reference number
+            </label>
+            <input
+              id="pos-reference"
+              value={paymentReference}
+              onChange={(e) => onPaymentReferenceChange(e.target.value)}
+              placeholder="e.g. transaction confirmation code"
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            />
+          </div>
+        )}
+        {paymentMethod === 'card' && (
+          <div className="rounded-md bg-ink-50 p-2.5">
+            <label htmlFor="pos-reference" className="mb-1 block text-xs font-medium text-ink-700">
+              Card transaction ID
+            </label>
+            <input
+              id="pos-reference"
+              value={paymentReference}
+              onChange={(e) => onPaymentReferenceChange(e.target.value)}
+              placeholder="From the card terminal receipt"
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            />
+          </div>
+        )}
 
         <div className="space-y-1 border-t border-ink-100 pt-2 text-sm">
           <div className="flex justify-between text-ink-500">
@@ -180,11 +243,11 @@ export function CartPanel({
         </div>
 
         <div className="flex gap-2">
-          <Button variant="secondary" className="flex-1" onClick={onPark} disabled={items.length === 0 || isSubmitting}>
-            Park sale
+          <Button variant="secondary" className="flex-1 !py-2.5" onClick={onPark} disabled={items.length === 0 || isSubmitting}>
+            Park sale <span className="hidden text-ink-400 sm:inline">(F10)</span>
           </Button>
-          <Button className="flex-1" onClick={onComplete} disabled={items.length === 0 || isSubmitting}>
-            {isSubmitting ? 'Processing…' : 'Complete sale'}
+          <Button className="flex-1 !py-2.5" onClick={onComplete} disabled={items.length === 0 || isSubmitting}>
+            {isSubmitting ? 'Processing…' : <>Complete sale <span className="hidden opacity-70 sm:inline">(F9)</span></>}
           </Button>
         </div>
       </div>

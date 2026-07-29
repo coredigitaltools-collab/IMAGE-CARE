@@ -125,6 +125,31 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 - **Sticky search + filter toolbar** — pins just below the app header while scrolling (verified: stays within ~76px of the top after scrolling 600px down), independent of the (non-sticky) breadcrumb/header/quick-actions above it.
 - **Friendlier empty state** for zero-product installs, with a clear single call to action.
 
+### Removing hardcoded industry assumptions (post-IMP-004 refinement)
+
+A person using this app pointed out, correctly, that the Inventory seed data (categories like "Photo Paper," brands like "Canon," sample suppliers and products) baked in an assumption that every business using this app sells photography supplies. That's wrong for a template — fixed:
+
+- **`inventorySeed.ts` now returns empty arrays** for categories, brands, suppliers, and products. Only Units of Measure (Piece, Box, Pack, Kilogram, Litre) ship pre-populated, since those aren't industry-specific — virtually any business selling physical goods needs at least one to create its first product.
+- **`salesSeed.ts`'s sample customers were removed** for the same reason — a fresh install now has zero customers, exactly like it has zero products.
+- **New: `CategoryQuickSelect` component** — every place a product's category is picked (the Add Product wizard, and the Product Detail edit page) now includes an always-available "+ Add new category…" option that lets someone type a brand-new category name on the spot and immediately continue — so an empty or unfamiliar category list never blocks product creation. Verified: created a "Denim Jacket" product with a freshly-typed "Outerwear" category from a completely empty category list, with zero pre-existing options to choose from.
+- **The home Dashboard was still showing the original IMP-001 mock data** (fabricated sales, a fake "Grace Nakato" transaction, fake low-stock items) completely disconnected from the real Sales/Inventory modules built since. `dashboardService.ts` now computes Today's Sales, Recent Sales, and Low Stock from real `salesService`/inventory data — Cash Available is documented as a simple placeholder (cumulative non-credit revenue) pending a real Cash Flow module, and Today's Expenses stays honestly at 0 until an Expenses module exists, rather than fabricating a number.
+- **A real staleness bug was caught and fixed while verifying the above:** `dashboardService`'s offline-fallback cache was being treated as a permanent cache whenever Supabase wasn't configured, not just when genuinely offline — so once any Dashboard data was computed once, it would never recompute again even as real sales happened. Invisible before (mock numbers never changed anyway), but a real bug now that the Dashboard reflects live data. Fixed: the cache is now purely an offline safety net; being online always recomputes fresh, whether the data source is Supabase or local Sales/Inventory reads.
+- **A second real bug was caught while testing the above: opening stock was being double-counted.** `createProduct()` set a new product's `currentStock` directly to the entered opening stock *and* separately recorded an "opening" stock movement that added the same amount again — so entering "5" as opening stock silently resulted in 10 in stock. Root cause: the code comment already claimed "the opening movement is the sole source of truth for starting stock," but the code didn't actually do that. Fixed to match what was already documented — new products start at 0, and the opening-stock movement is the only thing that brings it up to the entered count. Verified with a dedicated test confirming a product created with opening stock 5 ends up at exactly 5 (not 10), and that exactly one "opening" movement is recorded, not two.
+
+### POS production polish (checkout experience refinement)
+
+- **Category filter chips** above the product grid — only categories that actually have a sellable product show up as a chip (never a fixed list), so a fresh install shows just "All" until real products with real categories exist.
+- **Product cards** now show SKU and a category badge, plus a genuine out-of-stock overlay (not just a disabled/greyed button) that blocks selection outright.
+- **Customer panel expands on selection** to show phone, loyalty points, credit balance, and last purchase (computed live from real Sales data, not stored redundantly) — "None yet" for a customer with no completed purchases, never a fabricated date.
+- **Payment fields are now genuinely dynamic and validated**, not just decorative: Cash shows an "Amount received" field with live change-due calculation, and blocks completing the sale if the amount is short (`InsufficientPaymentError`). Mobile Money and Card each require a reference/transaction ID before completing (`PaymentReferenceRequiredError`). Verified: attempted a Mobile Money sale with no reference — correctly blocked; a Card sale with a transaction ID — receipt correctly shows it afterward.
+- **The receipt modal is now a clear confirmation dialog** — a checkmark icon, "Sale completed" heading, the receipt number prominently placed, and payment-method-specific details (change due for cash; reference/transaction ID for Mobile Money/Card) rather than a generic "Payment: Cash" line.
+- **Keyboard shortcuts for desktop cashiers:** F2 focuses the product search (verified via `document.activeElement`), F9 completes the sale, F10 parks it, Esc clears the cart — all skipped while a modal is open so they never fight with normal typing.
+- **Touch targets enlarged** (quantity +/- buttons, payment method buttons) for comfortable use on a tablet POS setup, not just desktop with a mouse.
+- **Stayed strictly industry-neutral throughout:** even the category quick-create's placeholder text ("e.g. Menswear, Beverages...") was replaced with generic wording once flagged as still assuming a retail-like business. Verified: a fresh POS shows "No products found. Add your first product to get started." with zero industry-specific wording anywhere on the screen.
+- **No real regressions** — re-ran the full IMP-003/IMP-004 test suite after these changes; the only "failure" was cash checkout now correctly requiring an amount received before completing (a deliberate new validation, not a bug) — the old test was updated to fill that field in, matching how a real cashier would use it.
+
+
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.
@@ -216,6 +241,14 @@ Also fixed during this pass: several form labels across the Inventory module wer
 - ✅ Discount above the Sales Settings limit is rejected with a clear error
 - ✅ Credit sale without a selected customer is blocked; succeeds once a customer is selected
 - ✅ A completed credit sale updates the customer's lifetime purchases, loyalty points, and credit balance, and appears in their purchase history — all verified within one continuous session (re-verified after an initial false read from checking a fresh, unrelated browser session by mistake)
+
+**De-hardcoding + bug fixes (post-IMP-004)** — verified with fresh-session scripted tests:
+- ✅ Fresh install has zero pre-populated categories, brands, suppliers, or products — confirmed no "Photo Paper"/"Canon" text anywhere
+- ✅ Inventory Dashboard shows the welcoming empty state on a genuinely empty catalogue
+- ✅ A product for an entirely unrelated business type (clothing) can be created end-to-end using only the inline "+ Add new category…" flow, starting from zero existing categories
+- ✅ Home Dashboard shows zero/empty state on fresh install (no fake "Grace Nakato" sale), then correctly reflects a real POS sale's total and customer once one happens
+- ✅ Opening stock bug: created a product with opening stock 5, confirmed it shows exactly 5 (previously showed 10) and exactly one "opening" movement is recorded (previously two)
+- ✅ Re-ran the full IMP-003/IMP-004 regression suite (product creation, stock decrement on sale, park/resume, credit sales, customer profile updates) against freshly-created test data to confirm nothing broke
 
 Not yet covered (needs a real device/browser session or a connected Supabase project): full backup→restore round-trip verification, PWA install prompt behavior, Lighthouse PWA audit, RLS policies (no live database yet to apply them to).
 

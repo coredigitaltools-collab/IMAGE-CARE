@@ -1,4 +1,4 @@
-import { Printer, X } from 'lucide-react'
+import { CheckCircle2, Printer, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
 import { PAYMENT_METHOD_LABELS } from '../../types/sales'
@@ -26,11 +26,21 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
         aria-label="Receipt"
         className="relative w-full max-w-sm rounded-card border border-ink-100 bg-white shadow-card-hover print:max-w-none print:border-0 print:shadow-none"
       >
-        <div className="flex items-center justify-between border-b border-ink-100 p-4 print:hidden">
-          <h2 className="text-sm font-semibold text-ink-900">Sale complete</h2>
-          <button onClick={onClose} className="rounded-md p-1 text-ink-500 hover:bg-ink-50" aria-label="Close">
-            <X size={18} />
-          </button>
+        <div className="border-b border-ink-100 p-4 print:hidden">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success-100 text-success-700">
+                <CheckCircle2 size={18} />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-ink-900">Sale completed</h2>
+                <p className="text-xs text-ink-500">Receipt {sale.reference}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="rounded-md p-1 text-ink-500 hover:bg-ink-50" aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 font-mono text-xs text-ink-900">
@@ -82,6 +92,24 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
               <span>Payment</span>
               <span>{PAYMENT_METHOD_LABELS[sale.paymentMethod]}</span>
             </div>
+            {sale.paymentMethod === 'cash' && sale.amountTendered !== null && (
+              <>
+                <div className="flex justify-between text-ink-500">
+                  <span>Amount received</span>
+                  <span>{formatCurrency(sale.amountTendered, 'UGX')}</span>
+                </div>
+                <div className="flex justify-between text-ink-500">
+                  <span>Change</span>
+                  <span>{formatCurrency(sale.changeDue ?? 0, 'UGX')}</span>
+                </div>
+              </>
+            )}
+            {(sale.paymentMethod === 'mobile_money' || sale.paymentMethod === 'card') && sale.paymentReference && (
+              <div className="flex justify-between text-ink-500">
+                <span>{sale.paymentMethod === 'card' ? 'Transaction ID' : 'Reference'}</span>
+                <span className="max-w-[60%] truncate text-right">{sale.paymentReference}</span>
+              </div>
+            )}
           </div>
 
           {receiptSettings?.footerMessage && (

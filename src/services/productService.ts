@@ -95,7 +95,11 @@ export async function createProduct(input: ProductInput, userId: string): Promis
   const product: Product = {
     ...stampNew(userId, input.branch_id),
     ...input,
-    currentStock: input.openingStock,
+    // Starts at 0, not input.openingStock — the "opening" movement below
+    // is the SOLE thing that brings currentStock up to the opening
+    // count. Setting it here too would double it (a real bug this
+    // comment now documents rather than repeats).
+    currentStock: 0,
     status: 'active',
     imageDataUrl: input.imageDataUrl,
   }

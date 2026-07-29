@@ -57,6 +57,9 @@ export interface Sale {
   taxAmount: number
   totalAmount: number
   paymentMethod: PaymentMethod
+  amountTendered: number | null // cash only
+  changeDue: number | null // cash only
+  paymentReference: string | null // mobile money reference / card transaction ID
   status: SaleStatus
   createdAt: string
   createdBy: string
@@ -78,5 +81,7 @@ export interface CheckoutInput {
   discountPercent: number
   taxRateId: string | null
   paymentMethod: PaymentMethod
+  amountTendered: number | null
+  paymentReference: string | null
   status: Extract<SaleStatus, 'completed' | 'parked'>
 }

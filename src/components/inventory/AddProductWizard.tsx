@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Check, Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
+import { CategoryQuickSelect } from './CategoryQuickSelect'
 import { FormField } from '../settings/FormField'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
@@ -40,12 +41,13 @@ interface AddProductWizardProps {
   units: UnitOfMeasure[]
   suppliers: Supplier[]
   generatedSku?: string
+  userId: string
   onClose: () => void
   onSubmit: (input: ProductInput) => Promise<void>
   submitError?: string
 }
 
-export function AddProductWizard({ categories, brands, units, suppliers, generatedSku, onClose, onSubmit, submitError }: AddProductWizardProps) {
+export function AddProductWizard({ categories, brands, units, suppliers, generatedSku, userId, onClose, onSubmit, submitError }: AddProductWizardProps) {
   const [step, setStep] = useState(0)
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
 
@@ -156,13 +158,14 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
               <FormField label="Barcode" {...register('barcode')} error={errors.barcode?.message} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="w-category" className="mb-1.5 block text-sm font-medium text-ink-700">Category</label>
-                <select id="w-category" {...register('categoryId')} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500">
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                {errors.categoryId && <p className="mt-1 text-xs text-brand-red-700">{errors.categoryId.message}</p>}
-              </div>
+              <CategoryQuickSelect
+                id="w-category"
+                categories={categories}
+                value={watch('categoryId')}
+                onChange={(id) => setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
+                userId={userId}
+                error={errors.categoryId?.message}
+              />
               <div>
                 <label htmlFor="w-brand" className="mb-1.5 block text-sm font-medium text-ink-700">Brand</label>
                 <select id="w-brand" {...register('brandId')} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500">
