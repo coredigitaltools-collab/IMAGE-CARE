@@ -167,6 +167,22 @@ A visual-only redesign — no business logic, routing, database schema, or funct
 
 
 
+## CRM (IMP-005) — built on the existing Customer Master, not a parallel system
+
+Every element here was held to one standard: does it answer a real question an owner would actually ask? Nothing decorative was added.
+
+- **`/customers` is now a real CRM Dashboard**, not the directory. Six KPIs, each answering a specific question: Total Customers ("how many"), New (30d) ("is the base growing"), Active (30d) ("who's actually buying recently"), Lifetime Value ("how much revenue have customers generated"), Outstanding Credit ("how much is owed to us"), Loyalty Members ("how many are engaged"). "Active" is deliberately defined as "purchased in the last 30 days," computed from real Sales data, not a vanity number.
+- **Two panels replace a separate "Reports" page**: "Top customers by spend" (who deserves priority service) and "Outstanding credit" (who to follow up with for collections) — both directly actionable, both computed from real data, both linking straight to the customer's profile.
+- **The old customer list moved to `/customers/directory`** and gained real filters: an "Owes credit" toggle and a tag filter built from tags that actually exist (never a preset list) — both answer "which customers do I need to look at right now," not just decoration.
+- **Customer tags** — free-text, business-defined (e.g. "Wholesale," "Priority"), never a preset industry taxonomy. Shown as chips in the Directory and on the profile.
+- **Customer profile restructured into the full tab set IMP-005 specifies**: Overview (contact info + 4 real insight numbers: lifetime value, average purchase value, last purchase, total orders), Purchases, Credit (balance + which sales caused it), Loyalty (points + how they're earned), Quotes and Invoices (honest "module not built yet" empty states, matching the same pattern used elsewhere for unbuilt modules — never fake data), Notes (a real dated, attributed log — separate from the single free-text description field on the quick-add form), and Audit Log.
+- **New: a proper Notes log** (`CustomerNote`, distinct from `Customer.notes`) — answers "what have we discussed with this customer and when," not just a single overwritable text field.
+- **A real, pre-existing documentation/implementation mismatch was caught and fixed**: the README from an earlier pass claimed sample seed customers ("Grace Nakato," "Daniel Okello") had been removed — they hadn't been; `salesSeed.ts` still returned them. Fixed to actually match what was already documented.
+- **A systemic bug was found and fixed at its root, not just patched**: four separate places in the app used the `FormField` component in "controlled" mode (`value`/`onChange`) without passing an `id` or `name`, silently breaking the `<label>`-to-`<input>` association each time (caught because a Playwright test using `getByLabel('Tags')` couldn't find the field). Rather than fix only the Tags field that surfaced it, audited and fixed all four existing occurrences, then fixed `FormField` itself to always generate a valid id as a fallback — so this bug class can't recur in future code, even code written without knowing this history.
+- **Verified with real interaction tests**, not visual inspection: added a tagged customer, confirmed the KPI and tag filter both reflect it; ran a full credit sale through the POS and confirmed the Overview, Purchases, Credit, and Loyalty tabs all show the correct real numbers computed from that one sale; added and displayed a dated note; confirmed Quotes shows an honest empty state rather than fabricated data.
+
+
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

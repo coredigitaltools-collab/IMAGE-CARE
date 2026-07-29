@@ -16,6 +16,7 @@ const schema = z.object({
   address: z.string().trim(),
   notes: z.string().trim(),
 })
+type FormValues = z.infer<typeof schema>
 
 interface CustomerFormModalProps {
   initial?: Customer
@@ -25,20 +26,27 @@ interface CustomerFormModalProps {
   onSubmit: (input: CustomerInput) => Promise<void>
 }
 
+function parseTags(text: string): string[] {
+  return [...new Set(text.split(',').map((t) => t.trim()).filter(Boolean))]
+}
+
 export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubmit }: CustomerFormModalProps) {
   const findDuplicates = useFindDuplicateCustomers()
   const [duplicates, setDuplicates] = useState<Customer[]>([])
   const [confirmedDespiteDuplicates, setConfirmedDespiteDuplicates] = useState(false)
+  const [tagsText, setTagsText] = useState(initial?.tags.join(', ') ?? '')
 
   const {
     register,
     handleSubmit,
     getValues,
     formState: { errors, isSubmitting },
-  } = useForm<CustomerInput>({
+  } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: initial ?? { name: '', phone: '', email: '', address: '', notes: '' },
   })
+
+  const buildInput = (values: FormValues): CustomerInput => ({ ...values, tags: parseTags(tagsText) })
 
   const submit = handleSubmit(async (values) => {
     if (!initial && !confirmedDespiteDuplicates) {
@@ -48,7 +56,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
         return
       }
     }
-    await onSubmit(values)
+    await onSubmit(buildInput(values))
   })
 
   return (
@@ -58,6 +66,14 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
         <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
         <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
         <FormField label="Address" {...register('address')} error={errors.address?.message} />
+        <FormField
+          id="cf-tags"
+          label="Tags"
+          value={tagsText}
+          onChange={(e) => setTagsText(e.target.value)}
+          placeholder="Comma-separated, e.g. Wholesale, Priority"
+          hint="Your own labels for grouping customers — nothing preset."
+        />
         <div>
           <label htmlFor="cf-notes" className="mb-1.5 block text-sm font-medium text-ink-700">
             Notes
@@ -91,7 +107,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                   onClick={() => {
                     setConfirmedDespiteDuplicates(true)
                     setDuplicates([])
-                    onSubmit(getValues())
+                    onSubmit(buildInput(getValues()))
                   }}
                   className="mt-2 text-xs font-medium text-brand-blue-700 hover:underline"
                 >

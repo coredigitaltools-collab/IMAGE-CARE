@@ -33,7 +33,8 @@ const BarcodeManagementPage = lazy(() => import('../pages/inventory/BarcodeManag
 const InventoryReportsPage = lazy(() => import('../pages/inventory/InventoryReportsPage').then((m) => ({ default: m.InventoryReportsPage })))
 
 const PointOfSalePage = lazy(() => import('../pages/sales/PointOfSalePage').then((m) => ({ default: m.PointOfSalePage })))
-const CustomersListPage = lazy(() => import('../pages/sales/CustomersListPage').then((m) => ({ default: m.CustomersListPage })))
+const CrmDashboardPage = lazy(() => import('../pages/sales/CrmDashboardPage').then((m) => ({ default: m.CrmDashboardPage })))
+const CustomerDirectoryPage = lazy(() => import('../pages/sales/CustomerDirectoryPage').then((m) => ({ default: m.CustomerDirectoryPage })))
 const CustomerDetailPage = lazy(() => import('../pages/sales/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })))
 
 function PageFallback() {
@@ -85,7 +86,8 @@ export const router = createBrowserRouter(
         { path: 'inventory/barcode', element: withSuspense(<BarcodeManagementPage />) },
         { path: 'inventory/reports', element: withSuspense(<InventoryReportsPage />) },
         { path: 'sales', element: withSuspense(<PointOfSalePage />) },
-        { path: 'customers', element: withSuspense(<CustomersListPage />) },
+        { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
+        { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
         { path: 'customers/:id', element: withSuspense(<CustomerDetailPage />) },
       ],
     },

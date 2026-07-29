@@ -8,7 +8,11 @@ interface FormFieldProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function FormField({ label, error, hint, suffix, className = '', id, ...rest }: FormFieldProps) {
-  const fieldId = id ?? rest.name
+  // Guarantees the label is ALWAYS properly associated with its input,
+  // even for controlled fields that pass neither `id` nor `name` (a bug
+  // pattern found in several places — this fixes the root cause instead
+  // of patching each call site).
+  const fieldId = id ?? rest.name ?? `field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
   return (
     <div>
       <label htmlFor={fieldId} className="mb-1.5 block text-sm font-medium text-ink-700">

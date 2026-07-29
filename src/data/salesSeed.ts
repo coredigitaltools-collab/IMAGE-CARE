@@ -1,31 +1,10 @@
-import { stampNew } from '../lib/audit'
 import type { Customer } from '../types/sales'
 
-const SEED_USER = 'system-seed'
-
+// No sample customers are pre-populated — a fresh install starts with
+// zero, exactly like Inventory starts with zero products/categories.
+// (This file previously seeded two fictional customers; that was a real
+// inconsistency with the "no hardcoded placeholder data" standard the
+// rest of the app follows, caught and fixed here.)
 export function seedCustomers(): Customer[] {
-  return [
-    {
-      ...stampNew(SEED_USER),
-      name: 'Grace Nakato',
-      phone: '+256 700 111222',
-      email: 'grace.nakato@example.com',
-      address: 'Ntinda, Kampala',
-      notes: '',
-      loyaltyPoints: 0,
-      lifetimePurchases: 0,
-      creditBalance: 0,
-    },
-    {
-      ...stampNew(SEED_USER),
-      name: 'Daniel Okello',
-      phone: '+256 700 333444',
-      email: '',
-      address: '',
-      notes: 'Prefers mobile money.',
-      loyaltyPoints: 0,
-      lifetimePurchases: 0,
-      creditBalance: 0,
-    },
-  ]
+  return []
 }

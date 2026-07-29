@@ -13,12 +13,25 @@ export interface Customer extends AuditFields {
   email: string
   address: string
   notes: string
+  tags: string[] // free-text, business-defined segments (e.g. "Wholesale", "VIP") — never a preset industry list
   loyaltyPoints: number
   lifetimePurchases: number // total amount spent, in UGX
   creditBalance: number // amount currently owed on credit, in UGX
 }
 
-export type CustomerInput = Pick<Customer, 'name' | 'phone' | 'email' | 'address' | 'notes'>
+// A dated, attributed log entry — separate from Customer.notes (a single
+// free-text field shown on the quick-add form). This is what the Notes
+// tab on a customer's profile actually shows: a real history of
+// interactions over time, each one accountable to whoever logged it.
+export interface CustomerNote {
+  id: string
+  customerId: string
+  text: string
+  createdAt: string
+  createdBy: string
+}
+
+export type CustomerInput = Pick<Customer, 'name' | 'phone' | 'email' | 'address' | 'notes' | 'tags'>
 
 // ---------- Sales & POS ----------
 

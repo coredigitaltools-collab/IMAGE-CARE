@@ -57,6 +57,7 @@ export function NotificationsSettingsPage() {
             </div>
             <div className="pt-4">
               <FormField
+                id="notif-email"
                 label="Notification email"
                 type="email"
                 value={notificationEmail}

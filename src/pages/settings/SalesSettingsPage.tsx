@@ -45,6 +45,7 @@ export function SalesSettingsPage() {
             {allowDiscounts && (
               <div className="py-4">
                 <FormField
+                  id="sales-max-discount"
                   label="Maximum discount (%)"
                   type="number"
                   min={0}

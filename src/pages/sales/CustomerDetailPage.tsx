@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, Award, CreditCard, Receipt as ReceiptIcon, Wallet } from 'lucide-react'
+import { Archive, ArchiveRestore, Award, CreditCard, FileText, Quote, Receipt as ReceiptIcon, Wallet } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -10,23 +11,41 @@ import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
-import { useArchiveCustomer, useCustomer, useReactivateCustomer, useSales, useUpdateCustomer } from '../../features/sales/hooks/useSalesData'
+import {
+  useAddCustomerNote,
+  useArchiveCustomer,
+  useCustomer,
+  useCustomerNotes,
+  useReactivateCustomer,
+  useSales,
+  useUpdateCustomer,
+} from '../../features/sales/hooks/useSalesData'
+
+const TABS = ['Overview', 'Purchases', 'Credit', 'Loyalty', 'Quotes', 'Invoices', 'Notes', 'Audit Log'] as const
+type Tab = (typeof TABS)[number]
 
 export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const { showToast } = useToast()
+  const [tab, setTab] = useState<Tab>('Overview')
+  const [noteText, setNoteText] = useState('')
 
   const customerQuery = useCustomer(id)
   const salesQuery = useSales()
+  const notesQuery = useCustomerNotes(id)
   const updateCustomer = useUpdateCustomer(user.id)
   const archiveCustomer = useArchiveCustomer(user.id)
   const reactivateCustomer = useReactivateCustomer(user.id)
+  const addNote = useAddCustomerNote(user.id)
 
   const [isEditOpen, setIsEditOpen] = useState(false)
 
   const customer = customerQuery.data
-  const purchaseHistory = (salesQuery.data ?? []).filter((s) => s.customerId === id && s.status === 'completed')
+  const purchases = (salesQuery.data ?? []).filter((s) => s.customerId === id && s.status === 'completed')
+  const creditSales = purchases.filter((s) => s.paymentMethod === 'credit')
+  const lastPurchase = purchases[0] // useSales() already sorts newest-first
+  const averagePurchaseValue = purchases.length > 0 ? Math.round(purchases.reduce((sum, s) => sum + s.totalAmount, 0) / purchases.length) : 0
 
   if (customerQuery.isLoading) {
     return (
@@ -79,53 +98,212 @@ export function CustomerDetailPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <Wallet size={15} className="text-success-700" />
-            <p className="text-xs text-ink-500">Lifetime purchases</p>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-ink-900">{formatCurrency(customer.lifetimePurchases, 'UGX')}</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <Award size={15} className="text-warning-700" />
-            <p className="text-xs text-ink-500">Loyalty points</p>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-ink-900">{customer.loyaltyPoints}</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <CreditCard size={15} className="text-brand-red-700" />
-            <p className="text-xs text-ink-500">Credit balance</p>
-          </div>
-          <p className="mt-1 text-lg font-semibold text-ink-900">{formatCurrency(customer.creditBalance, 'UGX')}</p>
-        </Card>
+      {customer.tags.length > 0 && (
+        <div className="mb-4 -mt-2 flex flex-wrap gap-1.5">
+          {customer.tags.map((t) => (
+            <Badge key={t} tone="info">
+              {t}
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap gap-1 border-b border-ink-100">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={
+              tab === t
+                ? 'border-b-2 border-brand-blue-700 px-3 py-2 text-sm font-medium text-brand-blue-700'
+                : 'border-b-2 border-transparent px-3 py-2 text-sm text-ink-500 hover:text-ink-900'
+            }
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
-      <Card className="mt-6 p-5">
-        <h2 className="mb-4 text-sm font-semibold text-ink-900">Purchase history</h2>
-        {purchaseHistory.length === 0 ? (
-          <EmptyState icon={ReceiptIcon} title="No purchases yet" description="Sales for this customer will appear here." />
-        ) : (
-          <ul className="divide-y divide-ink-100">
-            {purchaseHistory.map((sale) => (
-              <li key={sale.id} className="flex items-center justify-between py-2.5 text-sm">
-                <div>
-                  <p className="font-medium text-ink-900">{sale.reference}</p>
-                  <p className="text-xs text-ink-500">{formatRelativeTime(sale.createdAt)}</p>
-                </div>
-                <p className="font-medium text-ink-900">{formatCurrency(sale.totalAmount, 'UGX')}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      {tab === 'Overview' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-2">
+                <Wallet size={14} className="text-success-700" />
+                <p className="text-xs text-ink-500">Lifetime value</p>
+              </div>
+              <p className="mt-1 text-base font-semibold text-ink-900">{formatCurrency(customer.lifetimePurchases, 'UGX')}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-ink-500">Avg. purchase</p>
+              <p className="mt-1 text-base font-semibold text-ink-900">
+                {purchases.length > 0 ? formatCurrency(averagePurchaseValue, 'UGX') : '—'}
+              </p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-ink-500">Last purchase</p>
+              <p className="mt-1 text-base font-semibold text-ink-900">{lastPurchase ? formatRelativeTime(lastPurchase.createdAt) : 'None yet'}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-ink-500">Total orders</p>
+              <p className="mt-1 text-base font-semibold text-ink-900">{purchases.length}</p>
+            </Card>
+          </div>
+          <Card className="p-5">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">Contact</h2>
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
+              <div>
+                <dt className="text-xs text-ink-500">Phone</dt>
+                <dd className="text-ink-900">{customer.phone || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-500">Email</dt>
+                <dd className="text-ink-900">{customer.email || '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-ink-500">Address</dt>
+                <dd className="text-ink-900">{customer.address || '—'}</dd>
+              </div>
+            </dl>
+            {customer.notes && (
+              <div className="mt-3 border-t border-ink-100 pt-3">
+                <dt className="text-xs text-ink-500">Description</dt>
+                <dd className="mt-1 text-sm text-ink-700">{customer.notes}</dd>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
 
-      {customer.notes && (
-        <Card className="mt-6 p-5">
-          <h2 className="mb-2 text-sm font-semibold text-ink-900">Notes</h2>
-          <p className="text-sm text-ink-700">{customer.notes}</p>
+      {tab === 'Purchases' && (
+        <Card className="p-5">
+          {purchases.length === 0 ? (
+            <EmptyState icon={ReceiptIcon} title="No purchases yet" description="Sales for this customer will appear here." />
+          ) : (
+            <ul className="divide-y divide-ink-100">
+              {purchases.map((sale) => (
+                <li key={sale.id} className="flex items-center justify-between py-2.5 text-sm">
+                  <div>
+                    <p className="font-medium text-ink-900">{sale.reference}</p>
+                    <p className="text-xs text-ink-500">{formatRelativeTime(sale.createdAt)}</p>
+                  </div>
+                  <p className="font-medium text-ink-900">{formatCurrency(sale.totalAmount, 'UGX')}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
+      {tab === 'Credit' && (
+        <div className="space-y-4">
+          <Card className="p-5">
+            <p className="text-xs text-ink-500">Current balance owed</p>
+            <p className={`mt-1 text-2xl font-semibold ${customer.creditBalance > 0 ? 'text-brand-red-700' : 'text-ink-900'}`}>
+              {formatCurrency(customer.creditBalance, 'UGX')}
+            </p>
+          </Card>
+          <Card className="p-5">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">Credit sales</h2>
+            {creditSales.length === 0 ? (
+              <EmptyState icon={CreditCard} title="No credit sales" description="Sales made on credit will be listed here." />
+            ) : (
+              <ul className="divide-y divide-ink-100">
+                {creditSales.map((sale) => (
+                  <li key={sale.id} className="flex items-center justify-between py-2.5 text-sm">
+                    <div>
+                      <p className="font-medium text-ink-900">{sale.reference}</p>
+                      <p className="text-xs text-ink-500">{formatRelativeTime(sale.createdAt)}</p>
+                    </div>
+                    <p className="font-medium text-brand-red-700">{formatCurrency(sale.totalAmount, 'UGX')}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {tab === 'Loyalty' && (
+        <Card className="p-5">
+          <p className="text-xs text-ink-500">Loyalty points balance</p>
+          <p className="mt-1 text-2xl font-semibold text-ink-900">{customer.loyaltyPoints} pts</p>
+          <p className="mt-3 border-t border-ink-100 pt-3 text-xs text-ink-500">
+            Earned automatically on completed purchases (1 point per 1,000 UGX spent).
+          </p>
+        </Card>
+      )}
+
+      {tab === 'Quotes' && (
+        <Card className="p-5">
+          <EmptyState icon={Quote} title="No quotes yet" description="This will populate once the Quotes module is implemented." />
+        </Card>
+      )}
+
+      {tab === 'Invoices' && (
+        <Card className="p-5">
+          <EmptyState icon={FileText} title="No invoices yet" description="This will populate once the Invoices module is implemented." />
+        </Card>
+      )}
+
+      {tab === 'Notes' && (
+        <Card className="p-5">
+          <div className="mb-4 flex gap-2">
+            <input
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Log a note about this customer..."
+              className="flex-1 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            />
+            <Button
+              disabled={!noteText.trim() || addNote.isPending}
+              onClick={async () => {
+                await addNote.mutateAsync({ customerId: customer.id, text: noteText })
+                setNoteText('')
+              }}
+            >
+              Add
+            </Button>
+          </div>
+          {notesQuery.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (notesQuery.data ?? []).length === 0 ? (
+            <EmptyState icon={FileText} title="No notes yet" description="Notes logged about this customer will appear here." />
+          ) : (
+            <ul className="space-y-3">
+              {(notesQuery.data ?? []).map((note) => (
+                <li key={note.id} className="rounded-md bg-ink-50 p-3">
+                  <p className="text-sm text-ink-900">{note.text}</p>
+                  <p className="mt-1 text-xs text-ink-500">{formatRelativeTime(note.createdAt)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
+      {tab === 'Audit Log' && (
+        <Card className="p-5 text-sm">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3">
+            <div>
+              <dt className="text-xs text-ink-500">Created</dt>
+              <dd className="text-ink-900">{formatRelativeTime(customer.created_at)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-ink-500">Last updated</dt>
+              <dd className="text-ink-900">{formatRelativeTime(customer.updated_at)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-ink-500">Sync status</dt>
+              <dd>
+                <Badge tone={customer.sync_status === 'synced' ? 'success' : 'warning'}>{customer.sync_status}</Badge>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-ink-500">Customer ID</dt>
+              <dd className="break-all font-mono text-xs text-ink-500">{customer.id}</dd>
+            </div>
+          </dl>
         </Card>
       )}
 

@@ -55,6 +55,42 @@ export function useFindDuplicateCustomers() {
   })
 }
 
+export function useCustomerNotes(customerId: string | undefined) {
+  return useQuery({
+    queryKey: ['sales', 'customer-notes', customerId],
+    queryFn: () => customerService.listCustomerNotes(customerId as string),
+    enabled: Boolean(customerId),
+  })
+}
+
+export function useAddCustomerNote(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ customerId, text }: { customerId: string; text: string }) => customerService.addCustomerNote(customerId, text, userId),
+    onSuccess: (_data, variables) => qc.invalidateQueries({ queryKey: ['sales', 'customer-notes', variables.customerId] }),
+  })
+}
+
+/** Active = purchased in the last 30 days — computed here (not in the
+ *  service layer) because it needs both Customers and Sales, and
+ *  customerService can't import salesService without a circular
+ *  dependency (salesService already imports customerService). */
+export function useCrmKpis() {
+  const salesQuery = useSales()
+  return useQuery({
+    queryKey: ['sales', 'crm-kpis', salesQuery.data?.length ?? 0],
+    queryFn: () => {
+      const recentIds = new Set(
+        (salesQuery.data ?? [])
+          .filter((s) => s.status === 'completed' && s.customerId && Date.now() - new Date(s.createdAt).getTime() <= 30 * 24 * 60 * 60 * 1000)
+          .map((s) => s.customerId as string),
+      )
+      return customerService.getCrmKpis(recentIds)
+    },
+    enabled: !salesQuery.isLoading,
+  })
+}
+
 // ---------- Sales / POS ----------
 
 export function useSales() {

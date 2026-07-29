@@ -40,6 +40,7 @@ export function InventorySettingsPage() {
         ) : (
           <div className="space-y-4">
             <FormField
+              id="inv-reorder-level"
               label="Default reorder level"
               type="number"
               min={0}
@@ -47,7 +48,7 @@ export function InventorySettingsPage() {
               onChange={(e) => setDefaultReorderLevel(Number(e.target.value))}
               hint="New items default to this low-stock threshold."
             />
-            <FormField label="SKU prefix" value={skuPrefix} onChange={(e) => setSkuPrefix(e.target.value)} />
+            <FormField id="inv-sku-prefix" label="SKU prefix" value={skuPrefix} onChange={(e) => setSkuPrefix(e.target.value)} />
             <ToggleRow
               label="Track expiry dates"
               description="Enable expiry tracking on inventory items"

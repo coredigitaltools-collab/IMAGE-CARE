@@ -1,7 +1,7 @@
 import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
 import { stampNew, stampUpdated } from '../lib/audit'
 import { seedCustomers } from '../data/salesSeed'
-import type { Customer, CustomerInput } from '../types/sales'
+import type { Customer, CustomerInput, CustomerNote } from '../types/sales'
 
 const KEY = 'sales:customers'
 
@@ -107,4 +107,63 @@ export async function recordCustomerPurchase(
   })
   await setCollection(KEY, next)
   await enqueueSync({ entityType: 'customer', entityId: customerId, operation: 'update' })
+}
+
+// ---------- Notes log (Customer Profile "Notes" tab) ----------
+// Separate from Customer.notes (a single free-text field on the quick
+// form) — this is a real, dated, attributed history: "what have we
+// discussed with this customer, and when." Answers a concrete question
+// a staff member would actually ask before calling a customer back.
+
+const NOTES_KEY = 'sales:customer-notes'
+
+export async function listCustomerNotes(customerId: string): Promise<CustomerNote[]> {
+  const notes = await getCollection<CustomerNote>(NOTES_KEY, () => [])
+  return notes
+    .filter((n) => n.customerId === customerId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}
+
+export async function addCustomerNote(customerId: string, text: string, userId: string): Promise<CustomerNote> {
+  const notes = await getCollection<CustomerNote>(NOTES_KEY, () => [])
+  const note: CustomerNote = {
+    id: crypto.randomUUID(),
+    customerId,
+    text: text.trim(),
+    createdAt: new Date().toISOString(),
+    createdBy: userId,
+  }
+  await setCollection(NOTES_KEY, [...notes, note])
+  await enqueueSync({ entityType: 'customer_note', entityId: note.id, operation: 'create' })
+  return note
+}
+
+// ---------- CRM Dashboard KPIs ----------
+// Each number here answers one specific question an owner would ask —
+// nothing decorative. "Active" is defined as "purchased in the last 30
+// days" since that's the window that actually distinguishes an engaged
+// customer from a one-time visitor for a small business.
+
+export interface CrmKpis {
+  totalCustomers: number
+  newCustomers30d: number
+  activeCustomers30d: number
+  lifetimeValueUgx: number
+  outstandingCreditUgx: number
+  loyaltyMembers: number
+}
+
+export async function getCrmKpis(recentCustomerIds30d: Set<string>): Promise<CrmKpis> {
+  const customers = (await listCustomers()).filter((c) => c.is_active)
+  const now = Date.now()
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000
+
+  return {
+    totalCustomers: customers.length,
+    newCustomers30d: customers.filter((c) => new Date(c.created_at).getTime() >= thirtyDaysAgo).length,
+    activeCustomers30d: customers.filter((c) => recentCustomerIds30d.has(c.id)).length,
+    lifetimeValueUgx: customers.reduce((sum, c) => sum + c.lifetimePurchases, 0),
+    outstandingCreditUgx: customers.reduce((sum, c) => sum + c.creditBalance, 0),
+    loyaltyMembers: customers.filter((c) => c.loyaltyPoints > 0).length,
+  }
 }
