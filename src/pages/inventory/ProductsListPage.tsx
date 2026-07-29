@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Copy, Package, Plus, Search } from 'lucide-react'
 import { InventoryTabs } from '../../components/inventory/InventoryTabs'
-import { ProductFormModal } from '../../components/inventory/ProductFormModal'
+import { AddProductWizard } from '../../components/inventory/AddProductWizard'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -180,7 +180,7 @@ export function ProductsListPage() {
       </Card>
 
       {isAddOpen && (
-        <ProductFormModal
+        <AddProductWizard
           categories={categoriesQuery.data ?? []}
           brands={brandsQuery.data ?? []}
           units={unitsQuery.data ?? []}

@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Barcode,
   Boxes,
+  Sparkles,
 } from 'lucide-react'
 import { InventoryTabs } from '../../components/inventory/InventoryTabs'
 import { InventorySearchBar } from '../../components/inventory/InventorySearchBar'
@@ -26,13 +27,10 @@ import { LowStockPreviewPanel } from '../../components/inventory/LowStockPreview
 import { KpiCard } from '../../components/dashboard/KpiCard'
 import { BranchSelector } from '../../components/dashboard/BranchSelector'
 import { CurrencySelector } from '../../components/dashboard/CurrencySelector'
-import { SyncStatusIndicator } from '../../components/dashboard/SyncStatusIndicator'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { EmptyState } from '../../components/ui/EmptyState'
+import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
-import { useSyncStatus } from '../../features/dashboard/hooks/useDashboardData'
-import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { BRANCHES } from '../../data/mockData'
 import { formatCurrency } from '../../lib/format'
 import type { SupportedCurrency } from '../../lib/currency'
@@ -53,7 +51,6 @@ export function InventoryDashboardPage() {
   const { showToast } = useToast()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const isOnline = useOnlineStatus()
 
   const [currency, setCurrency] = useState<SupportedCurrency>('UGX')
   const [selectedBranchId, setSelectedBranchId] = useState('all')
@@ -70,7 +67,6 @@ export function InventoryDashboardPage() {
   const lowStockQuery = useLowStockReport()
   const statsQuery = useProductStatistics()
   const trendQuery = useInventoryValueTrend(trendRange, currency)
-  const syncQuery = useSyncStatus()
 
   const visibleBranches = useMemo(
     () => BRANCHES.filter((b) => user.allowedBranchIds.includes(b.id)),
@@ -133,8 +129,7 @@ export function InventoryDashboardPage() {
     showToast('Products exported.', 'success')
   }
 
-  const quickActions = [
-    { label: 'Add product', icon: Plus, onClick: () => navigate('/inventory/products?new=1') },
+  const secondaryActions = [
     { label: 'Import', icon: Upload, onClick: () => showToast('CSV import is coming in a future update.') },
     { label: 'Export', icon: Download, onClick: exportCsv },
     { label: 'Print', icon: Printer, onClick: () => window.print() },
@@ -155,43 +150,56 @@ export function InventoryDashboardPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Inventory</h1>
           <p className="mt-0.5 text-sm text-ink-500">Product master, stock levels, and inventory reports.</p>
         </div>
+        {/* Only branch + currency controls live here — sync status is
+            shown once, globally, in the app header (RootLayout). */}
         <div className="flex flex-wrap items-center gap-2">
           <BranchSelector branches={visibleBranches} selectedBranchId={selectedBranchId} onChange={setSelectedBranchId} />
           <CurrencySelector selected={currency} onChange={setCurrency} />
-          <SyncStatusIndicator
-            status={isOnline ? syncQuery.data : { state: 'offline', lastSyncedAt: syncQuery.data?.lastSyncedAt ?? null, pendingCount: 0 }}
-          />
         </div>
       </div>
 
       {!isEmptyInstall && (
-        <div className="mb-6 flex flex-col gap-3">
-          <InventorySearchBar
-            products={productsQuery.data ?? []}
-            categories={categoriesQuery.data ?? []}
-            value={searchQuery}
-            onChange={setSearchQuery}
-          />
-          <InventoryFilterBar
-            categories={categoriesQuery.data ?? []}
-            suppliers={suppliersQuery.data ?? []}
-            brands={brandsQuery.data ?? []}
-            branches={visibleBranches}
-            filters={filters}
-            onChange={setFilters}
-          />
+        <div className="sticky top-16 z-10 -mx-4 mb-6 border-b border-ink-100 bg-ink-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="mx-auto flex max-w-6xl flex-col gap-3">
+            <InventorySearchBar
+              products={productsQuery.data ?? []}
+              categories={categoriesQuery.data ?? []}
+              value={searchQuery}
+              onChange={setSearchQuery}
+            />
+            <InventoryFilterBar
+              categories={categoriesQuery.data ?? []}
+              suppliers={suppliersQuery.data ?? []}
+              brands={brandsQuery.data ?? []}
+              branches={visibleBranches}
+              filters={filters}
+              onChange={setFilters}
+            />
+          </div>
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-        {quickActions.map(({ label, icon: Icon, onClick }) => (
+      {/* Quick actions — Add Product is the primary path into this page;
+          everything else is a secondary, lower-emphasis action. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <button
+          onClick={() => navigate('/inventory/products?new=1')}
+          className="group col-span-2 flex flex-row items-center justify-center gap-2.5 rounded-card bg-brand-blue-700 px-3 py-3 text-center shadow-card outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-brand-blue-900 hover:shadow-card-hover focus-visible:-translate-y-0.5 focus-visible:shadow-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue-500 focus-visible:outline-offset-2 active:translate-y-0 active:scale-[0.98] sm:col-span-1"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition-transform duration-200 ease-out group-hover:scale-110">
+            <Plus size={16} strokeWidth={2} aria-hidden="true" />
+          </span>
+          <span className="text-xs font-semibold text-white">Add product</span>
+        </button>
+
+        {secondaryActions.map(({ label, icon: Icon, onClick }) => (
           <button
             key={label}
             onClick={onClick}
-            className="group flex flex-col items-center gap-2 rounded-card border border-ink-100 bg-white px-3 py-4 text-center shadow-card outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover focus-visible:-translate-y-0.5 focus-visible:border-brand-blue-500 focus-visible:shadow-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue-500 focus-visible:outline-offset-2 active:translate-y-0 active:scale-[0.97] active:shadow-card"
+            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover focus-visible:-translate-y-0.5 focus-visible:border-brand-blue-500 focus-visible:shadow-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue-500 focus-visible:outline-offset-2 active:translate-y-0 active:scale-[0.97] active:shadow-card"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 ease-out group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white group-active:scale-95">
-              <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 ease-out group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white group-active:scale-95">
+              <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>
           </button>
@@ -199,13 +207,21 @@ export function InventoryDashboardPage() {
       </div>
 
       {isEmptyInstall ? (
-        <div className="rounded-card border border-dashed border-ink-100 bg-white py-16">
-          <EmptyState
-            icon={Boxes}
-            title="Let's get your inventory started"
-            description="Add your first product to start tracking stock, valuation, and reorder alerts."
-            action={{ label: 'Add your first product', onClick: () => navigate('/inventory/products?new=1') }}
-          />
+        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
+            <Boxes size={26} strokeWidth={1.75} />
+          </span>
+          <div>
+            <p className="flex items-center justify-center gap-1.5 text-base font-semibold text-ink-900">
+              Let's get your inventory started <Sparkles size={15} className="text-warning-500" />
+            </p>
+            <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-500">
+              Add your first product to start tracking stock levels, valuation, and reorder alerts — it only takes a minute.
+            </p>
+          </div>
+          <Button onClick={() => navigate('/inventory/products?new=1')}>
+            <Plus size={15} /> Add your first product
+          </Button>
         </div>
       ) : (
         <>
@@ -261,26 +277,26 @@ export function InventoryDashboardPage() {
             />
           </div>
 
+          {/* Three-column operational view */}
           <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <div className="xl:col-span-2">
-              <InventoryValueTrendChart
-                data={trendQuery.data}
-                isLoading={trendQuery.isLoading}
-                range={trendRange}
-                onRangeChange={setTrendRange}
-                currency={currency}
-              />
-            </div>
-            <ProductStatisticsWidget stats={statsQuery.data} isLoading={statsQuery.isLoading} currency={currency} />
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <RecentStockActivityPanel
               movements={filteredMovements}
               products={productsQuery.data ?? []}
               isLoading={movementsQuery.isLoading}
             />
             <LowStockPreviewPanel products={filteredLowStock} isLoading={lowStockQuery.isLoading} />
+            <InventoryValueTrendChart
+              data={trendQuery.data}
+              isLoading={trendQuery.isLoading}
+              range={trendRange}
+              onRangeChange={setTrendRange}
+              currency={currency}
+              compact
+            />
+          </div>
+
+          <div className="mt-4">
+            <ProductStatisticsWidget stats={statsQuery.data} isLoading={statsQuery.isLoading} currency={currency} layout="horizontal" />
           </div>
         </>
       )}
