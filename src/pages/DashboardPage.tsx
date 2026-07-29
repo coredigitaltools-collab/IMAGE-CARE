@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { WelcomeHeader } from '../components/dashboard/WelcomeHeader'
 import { BranchSelector } from '../components/dashboard/BranchSelector'
 import { CurrencySelector } from '../components/dashboard/CurrencySelector'
@@ -24,6 +25,7 @@ export function DashboardPage() {
   const { user } = useAuth()
   const businessProfileQuery = useBusinessProfile()
   const { showToast } = useToast()
+  const navigate = useNavigate()
 
   // Business rule (IMP-001 §7): branch users see only branches they're
   // permitted to view. Owners/managers get every branch plus "All branches".
@@ -39,6 +41,10 @@ export function DashboardPage() {
   const recentSalesQuery = useRecentSales(selectedBranchId)
 
   const handleQuickAction = (target: 'sale' | 'purchase' | 'expense' | 'reports') => {
+    if (target === 'sale') {
+      navigate('/sales')
+      return
+    }
     showToast(`${MODULE_LABELS[target]} isn't built yet — coming in a future implementation pack.`)
   }
 

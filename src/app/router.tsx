@@ -32,6 +32,10 @@ const StockAdjustmentsPage = lazy(() => import('../pages/inventory/StockAdjustme
 const BarcodeManagementPage = lazy(() => import('../pages/inventory/BarcodeManagementPage').then((m) => ({ default: m.BarcodeManagementPage })))
 const InventoryReportsPage = lazy(() => import('../pages/inventory/InventoryReportsPage').then((m) => ({ default: m.InventoryReportsPage })))
 
+const PointOfSalePage = lazy(() => import('../pages/sales/PointOfSalePage').then((m) => ({ default: m.PointOfSalePage })))
+const CustomersListPage = lazy(() => import('../pages/sales/CustomersListPage').then((m) => ({ default: m.CustomersListPage })))
+const CustomerDetailPage = lazy(() => import('../pages/sales/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -80,6 +84,9 @@ export const router = createBrowserRouter(
         { path: 'inventory/adjustments', element: withSuspense(<StockAdjustmentsPage />) },
         { path: 'inventory/barcode', element: withSuspense(<BarcodeManagementPage />) },
         { path: 'inventory/reports', element: withSuspense(<InventoryReportsPage />) },
+        { path: 'sales', element: withSuspense(<PointOfSalePage />) },
+        { path: 'customers', element: withSuspense(<CustomersListPage />) },
+        { path: 'customers/:id', element: withSuspense(<CustomerDetailPage />) },
       ],
     },
   ],

@@ -1,0 +1,103 @@
+import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
+import { stampNew, stampUpdated } from '../lib/audit'
+import { seedCustomers } from '../data/salesSeed'
+import type { Customer, CustomerInput } from '../types/sales'
+
+const KEY = 'sales:customers'
+
+export async function listCustomers(): Promise<Customer[]> {
+  return getCollection(KEY, seedCustomers)
+}
+
+export async function getCustomer(id: string): Promise<Customer | null> {
+  const customers = await listCustomers()
+  return customers.find((c) => c.id === id) ?? null
+}
+
+function normalizePhone(phone: string): string {
+  return phone.replace(/[\s-]/g, '')
+}
+
+/** IMP-004 business rule: "Detect duplicates" — this is informational,
+ *  not a hard block (unlike SKU/barcode uniqueness), since two real
+ *  customers can legitimately share incomplete contact info. The
+ *  checkout flow surfaces these as a warning the cashier can act on or
+ *  dismiss. */
+export async function findPossibleDuplicates(input: Pick<CustomerInput, 'name' | 'phone' | 'email'>): Promise<Customer[]> {
+  const customers = await listCustomers()
+  const phone = input.phone ? normalizePhone(input.phone) : null
+  const email = input.email ? input.email.trim().toLowerCase() : null
+  const name = input.name.trim().toLowerCase()
+
+  return customers.filter((c) => {
+    if (phone && c.phone && normalizePhone(c.phone) === phone) return true
+    if (email && c.email && c.email.trim().toLowerCase() === email) return true
+    if (name && c.name.trim().toLowerCase() === name) return true
+    return false
+  })
+}
+
+export async function createCustomer(input: CustomerInput, userId: string): Promise<Customer> {
+  const customers = await listCustomers()
+  const customer: Customer = {
+    ...stampNew(userId),
+    ...input,
+    loyaltyPoints: 0,
+    lifetimePurchases: 0,
+    creditBalance: 0,
+  }
+  await setCollection(KEY, [...customers, customer])
+  await enqueueSync({ entityType: 'customer', entityId: customer.id, operation: 'create' })
+  return customer
+}
+
+export async function updateCustomer(id: string, input: CustomerInput, userId: string): Promise<Customer> {
+  const customers = await listCustomers()
+  let updated: Customer | null = null
+  const next = customers.map((c) => {
+    if (c.id !== id) return c
+    updated = stampUpdated({ ...c, ...input }, userId)
+    return updated
+  })
+  if (!updated) throw new Error('Customer not found')
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'customer', entityId: id, operation: 'update' })
+  return updated
+}
+
+export async function archiveCustomer(id: string, userId: string): Promise<void> {
+  const customers = await listCustomers()
+  const next = customers.map((c) => (c.id === id ? stampUpdated({ ...c, is_active: false }, userId) : c))
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'customer', entityId: id, operation: 'disable' })
+}
+
+/** Called by salesService when a sale completes for a registered
+ *  (non-walk-in) customer — updates lifetime spend, loyalty points, and
+ *  (for credit sales) the outstanding balance. This is the one place
+ *  those fields ever change, so every module reading Customer sees
+ *  consistent numbers (IMP-004: "Reuse one customer profile across all
+ *  modules"). */
+export async function recordCustomerPurchase(
+  customerId: string,
+  amount: number,
+  loyaltyPointsEarned: number,
+  isCredit: boolean,
+  userId: string,
+): Promise<void> {
+  const customers = await listCustomers()
+  const next = customers.map((c) => {
+    if (c.id !== customerId) return c
+    return stampUpdated(
+      {
+        ...c,
+        lifetimePurchases: c.lifetimePurchases + amount,
+        loyaltyPoints: c.loyaltyPoints + loyaltyPointsEarned,
+        creditBalance: isCredit ? c.creditBalance + amount : c.creditBalance,
+      },
+      userId,
+    )
+  })
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'customer', entityId: customerId, operation: 'update' })
+}

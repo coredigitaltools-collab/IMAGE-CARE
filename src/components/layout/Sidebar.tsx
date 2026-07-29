@@ -37,8 +37,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
   { label: 'Inventory', icon: Boxes, to: '/inventory' },
-  { label: 'Sales', icon: ShoppingCart },
-  { label: 'Clients', icon: Users },
+  { label: 'Sales', icon: ShoppingCart, to: '/sales' },
+  { label: 'Clients', icon: Users, to: '/customers' },
   { label: 'Credit', icon: CreditCard },
   { label: 'Loyalty Programme', icon: Award },
   { label: 'Invoices', icon: FileText },

@@ -66,6 +66,7 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 - **IMP-002 — Settings**: full administration centre — Business Profile, People & Access (staff + roles + permission matrix), Branch Management, Tax, Receipts, Inventory Settings, Sales Settings, Notifications, Backup & Restore, Synchronization, Appearance, About.
 - **IMP-003 — Product Master & Inventory Management**: Product catalogue, Categories (with merge), Brands, Units of Measure, Suppliers, Stock Movements (permanent audit trail), Stock Adjustments (mandatory reason), Barcode generation/printing, and 7 Inventory Reports.
 - **IMP-003 — Inventory**: Product Master (with barcode support), Categories (with merge), Brands, Units of Measure, Suppliers, Stock Movements (permanent audit trail), Stock Adjustments (mandatory reason), Barcode Management (generate/search/print), 7 Inventory Reports, and an Inventory Dashboard with KPIs and quick actions.
+- **IMP-004 — Sales & POS + Customer Master**: an offline-first point-of-sale workspace (search/scan products, cart, discounts, tax, payment methods, park/resume sales, printable receipts) plus the Customer Master — the single customer record every future module (Credit, Loyalty, Invoices, Reports) will reuse.
 
 ## Architecture notes
 
@@ -159,6 +160,18 @@ src/
   types/          Domain types (Branch, DashboardSummary, LowStockItem, RecentSale, SyncStatus, AuthedUser)
 ```
 
+### Sales & POS + Customer Master (IMP-004)
+
+- **The cashier never leaves the POS workspace** — customer creation happens inline via a modal ("Save & Continue Sale"), never a page navigation, per IMP-004's explicit workflow requirement. Verified: after adding a customer mid-sale, the page is still `/sales` and the new customer is auto-selected into the current cart.
+- **Heavy reuse of existing infrastructure, not a parallel system:** checkout calls the same `stockService.recordMovement()` the Inventory module uses (so a sale is just another movement type, with the same no-negative-stock and audit-trail guarantees), reads Tax Rates and Receipt Settings from IMP-002 as-is, and enforces `SalesSettingsConfig` (`allowDiscounts`, `maxDiscountPercent`, `requireCustomerForCredit`) that already existed but had nothing enforcing it until now.
+- **Archived products can't be sold:** enforced via `productService.assertSellable()` (already built for Inventory) — and since the POS product grid only lists `status === 'active'` products in the first place, an archived item never even appears to be clickable.
+- **Customer Master duplicate detection is a warning, not a hard block** (IMP-004 business rule: "Detect duplicates") — matching name, phone, or email surfaces existing candidates with a "create anyway" override, since two real customers can legitimately share partial contact info. Verified: creating a customer with a phone number that only differs in formatting from an existing one triggers the warning.
+- **Parking a sale never touches stock.** Only a completed sale calls `recordMovement`; resuming a parked sale reloads its cart and lets the cashier complete (or re-park) it normally. Verified end-to-end: park → resume → item is back in the cart.
+- **Every registered (non-walk-in) customer's profile updates automatically** on a completed sale — lifetime purchases, a simple placeholder loyalty-points rule (documented in `salesService.ts` as a stand-in for a real future Loyalty Programme module), and credit balance for credit-method sales. Verified: a credit sale to an existing customer updated all three fields and appeared in that customer's purchase history.
+- **Known gap, flagged honestly:** the home Dashboard's "Today's Sales" KPI and "Recent Sales" list still read from the original IMP-001 mock data service, not from real POS sales. Wiring the home Dashboard to real `salesService` data is a natural next step but wasn't in this pack's scope — until then, sales completed through the POS won't show up on the main Dashboard, only in Sales/Customer screens themselves.
+
+
+
 ## Testing summary
 
 **Dashboard (IMP-001):**
@@ -195,6 +208,15 @@ Also fixed during this pass: several form labels across the Inventory module wer
 - ✅ Product Statistics, Recent Stock Activity, Low Stock Preview, and the KPI grid all render with zero console/page errors
 - Not separately screenshot-verified in this pass beyond the automated checks above (relied on structural/functional checks rather than pixel inspection this round)
 
+**Sales & POS + Customer Master (IMP-004)** — verified with scripted browser tests exercising the real checkout flow end-to-end:
+- ✅ Adding a product to the cart and completing a sale actually reduces inventory — confirmed a product's stock dropped from 2 to 1 immediately after the sale, with a matching "sale" movement in Stock Movements
+- ✅ Customer creation happens inline mid-sale without navigating away ("Save & Continue Sale") — confirmed still on `/sales` afterward, with the new customer auto-selected
+- ✅ Duplicate customer detection triggers on a phone-number match even with different formatting, with a "create anyway" override
+- ✅ Park → resume round-trip: parking clears the cart, resuming reloads the exact same items
+- ✅ Discount above the Sales Settings limit is rejected with a clear error
+- ✅ Credit sale without a selected customer is blocked; succeeds once a customer is selected
+- ✅ A completed credit sale updates the customer's lifetime purchases, loyalty points, and credit balance, and appears in their purchase history — all verified within one continuous session (re-verified after an initial false read from checking a fresh, unrelated browser session by mistake)
+
 Not yet covered (needs a real device/browser session or a connected Supabase project): full backup→restore round-trip verification, PWA install prompt behavior, Lighthouse PWA audit, RLS policies (no live database yet to apply them to).
 
 ## Modified / created files
@@ -216,3 +238,17 @@ Not yet covered (needs a real device/browser session or a connected Supabase pro
 - `src/app/router.tsx` — restructured to nested, lazy-loaded routes
 - `src/components/layout/Sidebar.tsx` — Dashboard and Settings are now real links with active-state highlighting
 - `src/pages/DashboardPage.tsx` — no longer renders its own `AppShell` (moved to `RootLayout`); Branch/Currency selectors moved from the topbar into the page's own header row
+
+**IMP-004 (Sales & POS + Customer Master)** — new files:
+- `src/types/sales.ts` — Customer, Sale, SaleLineItem, CartItem, CheckoutInput and related types
+- `src/data/salesSeed.ts` — default seed customers
+- `src/services/customerService.ts` — Customer Master CRUD, duplicate detection, purchase/loyalty/credit updates
+- `src/services/salesService.ts` — the checkout engine (validation, stock movements, receipts, park/resume)
+- `src/features/sales/hooks/useSalesData.ts` — all React Query hooks
+- `src/components/sales/*` — CustomerFormModal, CustomerSelector, ProductSearchGrid, CartPanel, ParkedSalesButton, ReceiptModal
+- `src/pages/sales/PointOfSalePage.tsx`, `CustomersListPage.tsx`, `CustomerDetailPage.tsx`
+
+**Modified for IMP-004:**
+- `src/app/router.tsx` — added `/sales`, `/customers`, `/customers/:id` lazy routes
+- `src/components/layout/Sidebar.tsx` — Sales and Clients are now real links
+- `src/pages/DashboardPage.tsx` — the "New sale" quick action now navigates to `/sales` instead of showing a "coming soon" toast
