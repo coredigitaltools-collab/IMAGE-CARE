@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Archive, Award, CreditCard, Receipt as ReceiptIcon, Wallet } from 'lucide-react'
+import { Archive, ArchiveRestore, Award, CreditCard, Receipt as ReceiptIcon, Wallet } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -10,7 +10,7 @@ import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
-import { useArchiveCustomer, useCustomer, useSales, useUpdateCustomer } from '../../features/sales/hooks/useSalesData'
+import { useArchiveCustomer, useCustomer, useReactivateCustomer, useSales, useUpdateCustomer } from '../../features/sales/hooks/useSalesData'
 
 export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -21,6 +21,7 @@ export function CustomerDetailPage() {
   const salesQuery = useSales()
   const updateCustomer = useUpdateCustomer(user.id)
   const archiveCustomer = useArchiveCustomer(user.id)
+  const reactivateCustomer = useReactivateCustomer(user.id)
 
   const [isEditOpen, setIsEditOpen] = useState(false)
 
@@ -54,15 +55,26 @@ export function CustomerDetailPage() {
             <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
               Edit
             </Button>
-            <Button
-              variant="danger"
-              onClick={async () => {
-                await archiveCustomer.mutateAsync(customer.id)
-                showToast('Customer archived.', 'success')
-              }}
-            >
-              <Archive size={14} /> Archive
-            </Button>
+            {customer.is_active ? (
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  await archiveCustomer.mutateAsync(customer.id)
+                  showToast('Customer archived.', 'success')
+                }}
+              >
+                <Archive size={14} /> Archive
+              </Button>
+            ) : (
+              <Button
+                onClick={async () => {
+                  await reactivateCustomer.mutateAsync(customer.id)
+                  showToast('Customer reactivated.', 'success')
+                }}
+              >
+                <ArchiveRestore size={14} /> Reactivate
+              </Button>
+            )}
           </div>
         }
       />

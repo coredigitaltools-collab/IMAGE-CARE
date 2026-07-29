@@ -150,6 +150,23 @@ A person using this app pointed out, correctly, that the Inventory seed data (ca
 
 
 
+## Design System v2.0 (Navy / Electric Blue)
+
+A visual-only redesign — no business logic, routing, database schema, or functionality changed. Every screen was already built from shared components (`Card`, `Button`, `Modal`, `Badge`, `FormField`, `KpiCard`, `EmptyState`, `Skeleton`, etc.), so most of this cascaded automatically from one change rather than needing hundreds of individual edits.
+
+- **Color tokens redefined in `src/index.css`.** `brand-blue-700` (the app's primary color, used in hundreds of places already) is now Navy `#0F172A`. `brand-blue-500` (the one accent color — active states, focus rings, chart lines, selected controls) is now Electric Blue `#3B82F6`. Because every component already referenced these token names rather than hardcoded hex values, the whole app re-themed from this one file. Verified with an automated check reading the actual rendered pixel color, not just the source: sidebar background is exactly `rgb(15, 23, 42)`, the active nav highlight is exactly `rgb(59, 130, 246)`.
+- **Sidebar rebuilt for the navy theme** — navy background, white icons/labels, blue highlight for the active module, dimmed "Soon" entries, clean hover transitions.
+- **Core shared components polished**: `Button` (press feedback, subtle shadow), `Modal` (fade/scale entrance), `FormField` inputs (focus glow), `KpiCard` (hover lift) — all cascade to every screen that uses them, which is effectively the whole app.
+- **New: `RowActionButton`** — a single reusable icon-button component establishing one consistent pattern for Edit/Archive/Reactivate/Duplicate actions on any list row, anywhere in the app, so future modules don't need to invent this again.
+  - **Products list** gained inline View/Edit, Duplicate, and Archive/Reactivate icon actions (previously "View" and "Duplicate" were the only options, styled as plain text links).
+  - **Customers list** gained inline Edit and Archive/Reactivate icon actions (previously editing a customer required navigating to their profile page first).
+  - **A real functional gap was caught and fixed while doing this**: there was no way to *reactivate* an archived customer anywhere in the app — `archiveCustomer` existed but `reactivateCustomer` didn't. Added the missing service function, hook, and UI consistently to both the Customers list and the Customer profile page.
+- **No hardcoded demo data was reintroduced.** This pass only touched visual/component code — the empty-state and empty-seed work from the previous pass is untouched.
+- **Verified with real interaction tests**, not just visual inspection: archiving, reactivating, and editing were tested end-to-end for both Products and Customers, and the full POS regression suite (keyboard shortcuts, checkout, receipt) was re-run afterward to confirm zero functional regressions.
+- **Not yet done, flagged honestly:** a page-by-page confirmation pass of every remaining screen (Inventory Reports tables, POS-specific controls, notification dropdowns) wasn't performed individually — coverage relies on the shared-component cascade plus spot-checks (Settings landing, POS, Customers) rather than an exhaustive screen-by-screen audit. If something looks visually inconsistent on a specific screen, it's worth flagging directly.
+
+
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

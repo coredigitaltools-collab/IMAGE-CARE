@@ -77,22 +77,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 transform flex-col border-r border-ink-100 bg-white transition-transform lg:static lg:z-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 transform flex-col bg-navy-800 shadow-sidebar transition-transform lg:static lg:z-auto lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-ink-100 px-5">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 px-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue-700 text-[10px] font-bold tracking-tight text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue-500 text-[10px] font-bold tracking-tight text-white">
               IMC
             </div>
-            <span className="truncate text-sm font-semibold text-ink-900">
+            <span className="truncate text-sm font-semibold text-white">
               {businessProfileQuery.data?.businessName ?? 'ImageCare'}
             </span>
           </div>
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-ink-500 hover:bg-ink-50 lg:hidden"
+            className="rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white lg:hidden"
             aria-label="Close navigation"
           >
             <X size={18} />
@@ -114,8 +114,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       aria-current={isActive ? 'page' : undefined}
                       className={
                         isActive
-                          ? 'flex w-full items-center gap-3 rounded-md bg-brand-blue-50 px-3 py-2 text-sm font-medium text-brand-blue-700'
-                          : 'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-ink-700 hover:bg-ink-50'
+                          ? 'flex w-full items-center gap-3 rounded-lg bg-brand-blue-500 px-3 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgb(0_0_0_/_0.2)] transition-colors duration-150'
+                          : 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/70 transition-colors duration-150 hover:bg-white/10 hover:text-white'
                       }
                     >
                       <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -130,11 +130,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <button
                     disabled
                     title={`${label} — coming in a future implementation pack`}
-                    className="flex w-full cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-ink-300"
+                    className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/30"
                   >
                     <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
                     <span className="truncate">{label}</span>
-                    <span className="ml-auto shrink-0 rounded-full bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium text-ink-500">
+                    <span className="ml-auto shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-white/50">
                       Soon
                     </span>
                   </button>

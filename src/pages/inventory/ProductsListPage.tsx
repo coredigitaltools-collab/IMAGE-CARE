@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
-import { Copy, Package, Plus, Search } from 'lucide-react'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
+import { Archive, ArchiveRestore, Copy, Eye, Package, Plus, Search } from 'lucide-react'
 import { InventoryTabs } from '../../components/inventory/InventoryTabs'
 import { AddProductWizard } from '../../components/inventory/AddProductWizard'
 import { Card } from '../../components/ui/Card'
@@ -8,16 +8,19 @@ import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { RowActionButton } from '../../components/ui/RowActionButton'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
 import {
+  useArchiveProduct,
   useBrands,
   useCategories,
   useCreateProduct,
   useDuplicateProduct,
   useGeneratedSku,
   useProducts,
+  useReactivateProduct,
   useSuppliers,
   useUnits,
 } from '../../features/inventory/hooks/useInventoryData'
@@ -27,6 +30,7 @@ import type { ProductInput } from '../../types/inventory'
 export function ProductsListPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const productsQuery = useProducts()
@@ -37,6 +41,8 @@ export function ProductsListPage() {
   const generatedSkuQuery = useGeneratedSku()
   const createProduct = useCreateProduct(user.id)
   const duplicateProduct = useDuplicateProduct(user.id)
+  const archiveProduct = useArchiveProduct(user.id)
+  const reactivateProduct = useReactivateProduct(user.id)
 
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [showArchived, setShowArchived] = useState(false)
@@ -159,19 +165,30 @@ export function ProductsListPage() {
                   </p>
                 </div>
                 {product.status === 'archived' && <Badge tone="neutral">Archived</Badge>}
-                <div className="flex shrink-0 items-center gap-1">
-                  <Link
-                    to={`/inventory/products/${product.id}`}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
-                  >
-                    View
-                  </Link>
-                  <button
-                    onClick={() => handleDuplicate(product.id)}
-                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
-                  >
-                    <Copy size={12} /> Duplicate
-                  </button>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <RowActionButton icon={Eye} label="View / Edit" onClick={() => navigate(`/inventory/products/${product.id}`)} />
+                  <RowActionButton icon={Copy} label="Duplicate" onClick={() => handleDuplicate(product.id)} />
+                  {product.status === 'active' ? (
+                    <RowActionButton
+                      icon={Archive}
+                      label="Archive"
+                      tone="danger"
+                      onClick={async () => {
+                        await archiveProduct.mutateAsync(product.id)
+                        showToast('Product archived.', 'success')
+                      }}
+                    />
+                  ) : (
+                    <RowActionButton
+                      icon={ArchiveRestore}
+                      label="Reactivate"
+                      tone="success"
+                      onClick={async () => {
+                        await reactivateProduct.mutateAsync(product.id)
+                        showToast('Product reactivated.', 'success')
+                      }}
+                    />
+                  )}
                 </div>
               </li>
             ))}

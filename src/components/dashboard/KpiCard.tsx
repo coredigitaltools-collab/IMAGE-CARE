@@ -30,7 +30,7 @@ interface KpiCardProps {
 export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', isLoading }: KpiCardProps) {
   return (
     <Card
-      className={`relative overflow-hidden py-4 pl-5 pr-4 before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[''] ${ACCENT_CLASSES[tone]}`}
+      className={`relative overflow-hidden py-4 pl-5 pr-4 transition-shadow duration-200 hover:shadow-card-hover before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[''] ${ACCENT_CLASSES[tone]}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

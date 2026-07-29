@@ -1,32 +1,39 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Users } from 'lucide-react'
+import { Archive, ArchiveRestore, Pencil, Plus, Search, Users } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { RowActionButton } from '../../components/ui/RowActionButton'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
-import { useCreateCustomer, useCustomers } from '../../features/sales/hooks/useSalesData'
+import { useArchiveCustomer, useCreateCustomer, useCustomers, useReactivateCustomer, useUpdateCustomer } from '../../features/sales/hooks/useSalesData'
+import type { Customer } from '../../types/sales'
 
 export function CustomersListPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const customersQuery = useCustomers()
   const createCustomer = useCreateCustomer(user.id)
+  const updateCustomer = useUpdateCustomer(user.id)
+  const archiveCustomer = useArchiveCustomer(user.id)
+  const reactivateCustomer = useReactivateCustomer(user.id)
 
   const [query, setQuery] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
 
   const filtered = useMemo(() => {
-    const customers = (customersQuery.data ?? []).filter((c) => c.is_active)
+    const customers = (customersQuery.data ?? []).filter((c) => (showArchived ? true : c.is_active))
     const q = query.trim().toLowerCase()
     if (!q) return customers
     return customers.filter((c) => c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.email.toLowerCase().includes(q))
-  }, [customersQuery.data, query])
+  }, [customersQuery.data, query, showArchived])
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -42,14 +49,25 @@ export function CustomersListPage() {
         </Button>
       </div>
 
-      <div className="relative mb-4 max-w-sm">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, phone, or email..."
-          className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-        />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, phone, or email..."
+            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-ink-700">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+          />
+          Show archived
+        </label>
       </div>
 
       <Card className="p-5">
@@ -62,7 +80,7 @@ export function CustomersListPage() {
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="No customers found"
+            title="No customers yet"
             description={query ? 'Try a different search term.' : 'Customers are also created automatically during checkout.'}
             action={query ? undefined : { label: 'Add customer', onClick: () => setIsAddOpen(true) }}
           />
@@ -71,16 +89,47 @@ export function CustomersListPage() {
             {filtered.map((customer) => (
               <li key={customer.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <Link to={`/customers/${customer.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
-                    {customer.name}
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link to={`/customers/${customer.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      {customer.name}
+                    </Link>
+                    {!customer.is_active && (
+                      <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-medium text-ink-500">Archived</span>
+                    )}
+                  </div>
                   <p className="text-xs text-ink-500">
                     {customer.phone || 'No phone'} {customer.email ? `· ${customer.email}` : ''}
                   </p>
                 </div>
-                <div className="shrink-0 text-right text-xs text-ink-500">
-                  <p className="font-medium text-ink-900">{formatCurrency(customer.lifetimePurchases, 'UGX')}</p>
-                  <p>{customer.loyaltyPoints} pts</p>
+                <div className="flex shrink-0 items-center gap-3">
+                  <div className="text-right text-xs text-ink-500">
+                    <p className="font-medium text-ink-900">{formatCurrency(customer.lifetimePurchases, 'UGX')}</p>
+                    <p>{customer.loyaltyPoints} pts</p>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <RowActionButton icon={Pencil} label="Edit" onClick={() => setEditingCustomer(customer)} />
+                    {customer.is_active ? (
+                      <RowActionButton
+                        icon={Archive}
+                        label="Archive"
+                        tone="danger"
+                        onClick={async () => {
+                          await archiveCustomer.mutateAsync(customer.id)
+                          showToast('Customer archived.', 'success')
+                        }}
+                      />
+                    ) : (
+                      <RowActionButton
+                        icon={ArchiveRestore}
+                        label="Reactivate"
+                        tone="success"
+                        onClick={async () => {
+                          await reactivateCustomer.mutateAsync(customer.id)
+                          showToast('Customer reactivated.', 'success')
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               </li>
             ))}
@@ -95,6 +144,18 @@ export function CustomersListPage() {
             await createCustomer.mutateAsync(input)
             showToast('Customer added.', 'success')
             setIsAddOpen(false)
+          }}
+        />
+      )}
+
+      {editingCustomer && (
+        <CustomerFormModal
+          initial={editingCustomer}
+          onClose={() => setEditingCustomer(null)}
+          onSubmit={async (input) => {
+            await updateCustomer.mutateAsync({ id: editingCustomer.id, input })
+            showToast('Customer updated.', 'success')
+            setEditingCustomer(null)
           }}
         />
       )}

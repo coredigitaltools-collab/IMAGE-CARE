@@ -72,6 +72,13 @@ export async function archiveCustomer(id: string, userId: string): Promise<void>
   await enqueueSync({ entityType: 'customer', entityId: id, operation: 'disable' })
 }
 
+export async function reactivateCustomer(id: string, userId: string): Promise<void> {
+  const customers = await listCustomers()
+  const next = customers.map((c) => (c.id === id ? stampUpdated({ ...c, is_active: true }, userId) : c))
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'customer', entityId: id, operation: 'update' })
+}
+
 /** Called by salesService when a sale completes for a registered
  *  (non-walk-in) customer — updates lifetime spend, loyalty points, and
  *  (for credit sales) the outstanding balance. This is the one place

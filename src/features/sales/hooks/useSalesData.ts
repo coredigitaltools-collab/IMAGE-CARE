@@ -41,6 +41,14 @@ export function useArchiveCustomer(userId: string) {
   })
 }
 
+export function useReactivateCustomer(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => customerService.reactivateCustomer(id, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', 'customers'] }),
+  })
+}
+
 export function useFindDuplicateCustomers() {
   return useMutation({
     mutationFn: (input: Pick<CustomerInput, 'name' | 'phone' | 'email'>) => customerService.findPossibleDuplicates(input),
