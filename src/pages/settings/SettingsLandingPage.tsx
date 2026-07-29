@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SettingsSectionCard } from '../../components/settings/SettingsSectionCard'
+import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
 
 interface SettingsSection {
   to: string
@@ -131,6 +132,7 @@ const CATEGORIES: SettingsCategory[] = [
 
 export function SettingsLandingPage() {
   const [query, setQuery] = useState('')
+  const businessProfileQuery = useBusinessProfile()
 
   const filteredCategories = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -149,7 +151,9 @@ export function SettingsLandingPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Settings</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Administration centre for ImageCare</p>
+        <p className="mt-0.5 text-sm text-ink-500">
+          Administration centre for {businessProfileQuery.data?.businessName ?? 'your business'}
+        </p>
       </div>
 
       <div className="relative max-w-md">

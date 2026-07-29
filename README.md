@@ -64,6 +64,7 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 
 - **IMP-001 — Dashboard**: KPIs, recent sales, low stock, quick actions, branch/currency selectors.
 - **IMP-002 — Settings**: full administration centre — Business Profile, People & Access (staff + roles + permission matrix), Branch Management, Tax, Receipts, Inventory Settings, Sales Settings, Notifications, Backup & Restore, Synchronization, Appearance, About.
+- **IMP-003 — Product Master & Inventory Management**: Product catalogue, Categories (with merge), Brands, Units of Measure, Suppliers, Stock Movements (permanent audit trail), Stock Adjustments (mandatory reason), Barcode generation/printing, and 7 Inventory Reports.
 - **IMP-003 — Inventory**: Product Master (with barcode support), Categories (with merge), Brands, Units of Measure, Suppliers, Stock Movements (permanent audit trail), Stock Adjustments (mandatory reason), Barcode Management (generate/search/print), 7 Inventory Reports, and an Inventory Dashboard with KPIs and quick actions.
 
 ## Architecture notes
@@ -86,6 +87,17 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 
 ### Inventory module (IMP-003)
 
+- **Transaction-based stock (IMP-003 §18):** `currentStock` is never edited directly by the product form — the *only* path that changes it is `stockService.recordMovement()`, which every create (opening stock), adjustment, and future sale/purchase will go through. This means stock levels are always reconstructable from the movement log.
+- **No negative stock (IMP-003 §17):** `recordMovement` computes the resulting quantity and throws `NegativeStockError` before writing anything if it would go below zero — tested directly (see Testing summary).
+- **Unique SKU/barcode (IMP-003 §17):** enforced in `productService`, case/whitespace-normalized, tested directly.
+- **Archive instead of delete (IMP-003 §18):** products, categories, brands, units are all soft-deleted (`is_active`/`status` flips); nothing is ever hard-deleted.
+- **Category merge (IMP-003 §7):** reassigns every product on the source category to the target, then archives the source — implemented as a single service call (`categoryService.mergeCategories`) so it can't leave products half-migrated.
+- **Barcodes are real**, not placeholders — rendered with `jsbarcode` (CODE128), each with a genuinely unique generated value.
+- **A real concurrency bug was found and fixed during testing:** on a completely fresh install (empty IndexedDB), two hooks that both trigger `listProducts()` on the same page load (`useProducts` and `useGeneratedSku`) could each see "no data yet" and independently seed the product list with *different* random IDs — the second write would silently clobber the first, leaving a product link pointing at an ID that no longer existed ("Product not found" when clicking a product that was clearly right there in the list). Fixed with a single-flight lock (`lib/localStore.ts` → `withSingleFlight`) so concurrent first-load seed calls for the same storage key share one result instead of racing. The same latent bug existed in `staffService.listStaff` (Settings module) and was fixed there too, even though it hadn't been observed failing — it was the identical pattern.
+- **A related cache-invalidation gap was also found and fixed:** archiving/reactivating a product updated the *products list* cache but not the *single-product* cache the detail page reads from, so the Archive/Reactivate button wouldn't visually update after being clicked. Fixed by invalidating both query keys on every product mutation.
+
+### Inventory module (IMP-003)
+
 - **Transaction-based stock (IMP-003 §18):** `currentStock` is never edited directly by the product form — the only path that changes it is `stockService.recordMovement()`, which also writes a permanent `StockMovement` record. Even a brand-new product's opening stock creates a movement.
 - **No negative stock (IMP-003 §17):** every movement (including adjustments) is validated against current stock before being applied; `NegativeStockError` is thrown and shown to the user rather than allowing stock to go below zero.
 - **Unique SKU and barcode (IMP-003 §17):** enforced in `productService.ts` (`DuplicateSkuError`, `DuplicateBarcodeError`), checked on both create and edit.
@@ -95,6 +107,26 @@ The project is pre-configured for a repo named `IMAGE-CARE` (see `base: '/IMAGE-
 - **Barcode rendering:** uses `jsbarcode` (CODE128) — genuinely renders and prints, not a placeholder.
 - **Inventory Reports:** all 7 (Valuation, Stock Levels, Low Stock, Out of Stock, Dead Stock, Fast/Slow Moving, Profitability) compute from real product/movement data. Fast/Slow Moving will show 0 units for everything until the Sales module exists and starts recording `sale`-type movements — that's accurate, not a bug.
 - **Product Detail page** has 9 tabs per IMP-003 §6. Purchase History and Sales History currently show honest empty states, since the Purchase Orders and Sales modules don't exist yet.
+- **Inventory Dashboard refinements:** global search (Name/SKU/Barcode/Category, live autocomplete), filter bar (Category/Supplier/Brand/Status/Branch — narrows the Recent Stock Activity and Low Stock Preview panels), an Inventory Value Trend chart with 7d/30d/12mo ranges (see below), a Product Statistics widget, and a polished empty state for zero-product installs. `react-is` had to be added explicitly as a direct dependency — Recharts needs it but it wasn't resolving through the `--legacy-peer-deps` install chain.
+- **Inventory Value Trend is reconstructed from real movement history, not fabricated.** `getInventoryValueTrend()` in `inventoryReportsService.ts` replays each product's movements up to a given moment to compute what stock (and therefore value) looked like then. On a fresh install this legitimately renders as a flat line that steps up once — that's accurate, not a bug. It recomputes on every call, which is fine at demo data volume; a real deployment should switch to daily valuation snapshots instead of replaying full history.
+- **Bundle size note:** the Inventory Dashboard's lazy chunk is now ~365 KB (Recharts is the majority of that) — isolated to that one page/chunk, not the initial load, but worth knowing if more chart-heavy pages get added later.
+- **Business name is now genuinely editable end-to-end.** Earlier, the sidebar logo text and the Dashboard's "Welcome back" subtitle both read from a hardcoded stub (`useAuth.ts`'s fake signed-in user) rather than the real Business Profile record — editing the name in Settings silently did nothing elsewhere. Fixed: `businessName` was removed from `AuthedUser`/`useAuth` entirely (it's Settings data, not user-identity data), and both the Sidebar and Dashboard now read it live from `useBusinessProfile()`. Verified end-to-end: changed the name in Settings, confirmed it updated in both places and the old name was gone. The "IC" monogram badge in the sidebar is left as a fixed logo mark (it's also baked into the actual PWA icon image files) rather than derived from the name — making just the text dynamic while the app icon stays fixed would be a worse inconsistency than leaving both fixed.
+
+## Rebranding this app for a different business
+
+This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.
+
+**Already dynamic — no code change needed:** the business name shown in the sidebar, the Dashboard's "Welcome back" line, the Settings landing page subtitle, and the About page all read live from **Settings → Business Profile**. Change it there and it updates everywhere immediately (this was fixed in this pass — it used to be hardcoded in two places disconnected from Business Profile).
+
+**Needs a one-time manual edit** (these are baked in at build time — the installed app's icon/name and the GitHub Pages URL have to exist before any user data loads, so they can't come from Settings):
+- `vite.config.ts` — the PWA `manifest.name`/`manifest.short_name` (shown when someone installs the app), and the `base` path (must match your GitHub repo name)
+- `index.html` — the browser tab title and meta description
+- `public/icons/*.png`, `public/favicon.svg` — the "IC" logo mark; regenerate with a different monogram/logo for a different business
+- `package.json` — the `name` field is cosmetic (internal npm identifier only), not user-visible, safe to leave or change
+
+Each of these is commented in place pointing back to this section. Everything else in `src/` is already business-name-agnostic.
+
+**What this is *not*:** this app is still single-tenant — one deployment serves one business, with data stored in each visitor's own browser. It is **not** set up for multiple businesses to share one live deployment with separate logins and isolated data (that would need a real backend database, real authentication, and per-business data isolation — a substantially larger project, out of scope here). "Rebrandable template" means: copy this repo, edit the handful of files above, deploy it separately for a different business.
 
 ## Folder structure
 
@@ -142,6 +174,14 @@ src/
 - ✅ Low Stock report returns real rows computed from actual product data
 
 Also fixed during this pass: several form labels across the Inventory module weren't properly associated with their inputs (`<label>` without `htmlFor`/`id`) — a real accessibility gap, not just a test-script issue. Fixed in `StockAdjustmentModal`, `ProductFormModal`, `SupplierFormModal`, and `ProductDetailPage`.
+
+**Inventory Dashboard refinement** — verified with scripted browser tests plus a zero-console-error structural check:
+- ✅ Breadcrumb renders "Dashboard > Inventory"
+- ✅ Search autocomplete finds a product by partial name match
+- ✅ Category filter correctly narrows the Low Stock Preview panel (confirmed by reading the panel's actual text content, not just page-wide text presence)
+- ✅ Trend chart range buttons (7 days/30 days/12 months) switch active state on click
+- ✅ Product Statistics, Recent Stock Activity, Low Stock Preview, and the KPI grid all render with zero console/page errors
+- Not separately screenshot-verified in this pass beyond the automated checks above (relied on structural/functional checks rather than pixel inspection this round)
 
 Not yet covered (needs a real device/browser session or a connected Supabase project): full backup→restore round-trip verification, PWA install prompt behavior, Lighthouse PWA audit, RLS policies (no live database yet to apply them to).
 

@@ -53,7 +53,7 @@ export function downloadBackupFile(file: { createdAt: string; version: 1; data: 
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `imagecare-backup-${file.createdAt.slice(0, 10)}.json`
+  a.download = `business-backup-${file.createdAt.slice(0, 10)}.json`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -62,7 +62,7 @@ export function downloadBackupFile(file: { createdAt: string; version: 1; data: 
 
 export class InvalidBackupFileError extends Error {
   constructor() {
-    super('This file is not a valid ImageCare backup.')
+    super('This file is not a valid backup for this app.')
     this.name = 'InvalidBackupFileError'
   }
 }

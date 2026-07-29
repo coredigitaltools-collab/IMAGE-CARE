@@ -1,4 +1,4 @@
-import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
+import { getCollection, setCollection, enqueueSync, withSingleFlight } from '../lib/localStore'
 import { stampNew, stampUpdated } from '../lib/audit'
 import { seedStaff } from '../data/settingsSeed'
 import { listBranches } from './branchService'
@@ -23,11 +23,15 @@ export class LastActiveOwnerError extends Error {
 export async function listStaff(): Promise<StaffMember[]> {
   const cached = await getCollection<StaffMember>(KEY, () => [])
   if (cached.length > 0) return cached
-  // Staff seeding depends on branches existing first — seed lazily.
-  const branches = await listBranches()
-  const seeded = seedStaff(branches)
-  await setCollection(KEY, seeded)
-  return seeded
+  return withSingleFlight(`${KEY}:dependent-seed`, async () => {
+    const recheck = await getCollection<StaffMember>(KEY, () => [])
+    if (recheck.length > 0) return recheck
+    // Staff seeding depends on branches existing first — seed lazily.
+    const branches = await listBranches()
+    const seeded = seedStaff(branches)
+    await setCollection(KEY, seeded)
+    return seeded
+  })
 }
 
 function normalizeUsername(username: string): string {

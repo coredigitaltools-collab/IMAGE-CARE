@@ -1,4 +1,4 @@
-import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
+import { getCollection, setCollection, enqueueSync, withSingleFlight } from '../lib/localStore'
 import { stampNew, stampUpdated } from '../lib/audit'
 import { seedCategories, seedBrands, seedUnits, seedSuppliers, seedProducts } from '../data/inventorySeed'
 import { listCategories } from './categoryService'
@@ -34,16 +34,21 @@ export class ArchivedProductError extends Error {
 export async function listProducts(): Promise<Product[]> {
   const cached = await getCollection<Product>(KEY, () => [])
   if (cached.length > 0) return cached
-  // Products depend on categories/brands/units/suppliers existing first.
-  const [categories, brands, units, suppliers] = await Promise.all([
-    listCategories(),
-    listBrands(),
-    listUnits(),
-    listSuppliers(),
-  ])
-  const seeded = seedProducts(categories, brands, units, suppliers)
-  await setCollection(KEY, seeded)
-  return seeded
+  return withSingleFlight(`${KEY}:dependent-seed`, async () => {
+    // Re-check — another concurrent caller may have just finished seeding.
+    const recheck = await getCollection<Product>(KEY, () => [])
+    if (recheck.length > 0) return recheck
+    // Products depend on categories/brands/units/suppliers existing first.
+    const [categories, brands, units, suppliers] = await Promise.all([
+      listCategories(),
+      listBrands(),
+      listUnits(),
+      listSuppliers(),
+    ])
+    const seeded = seedProducts(categories, brands, units, suppliers)
+    await setCollection(KEY, seeded)
+    return seeded
+  })
 }
 
 export async function getProduct(id: string): Promise<Product | null> {
@@ -155,7 +160,7 @@ export async function duplicateProduct(id: string, userId: string): Promise<Prod
     unitId: source.unitId,
     supplierId: source.supplierId,
     description: source.description,
-    notes: '',
+    notes: source.notes,
     buyingPrice: source.buyingPrice,
     sellingPrice: source.sellingPrice,
     taxRateId: source.taxRateId,

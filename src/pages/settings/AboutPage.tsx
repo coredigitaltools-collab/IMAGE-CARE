@@ -1,6 +1,7 @@
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
+import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
 
 const IMPLEMENTED = ['Dashboard (IMP-001)', 'Settings (IMP-002)', 'Inventory (IMP-003)']
 const PLANNED = [
@@ -11,12 +12,15 @@ const PLANNED = [
 ]
 
 export function AboutPage() {
+  const businessProfileQuery = useBusinessProfile()
+  const businessName = businessProfileQuery.data?.businessName ?? 'Your Business'
+
   return (
     <div className="mx-auto max-w-2xl">
       <SettingsPageHeader title="About" description="App version and module status." />
 
       <Card className="p-5">
-        <p className="text-sm font-semibold text-ink-900">ImageCare Business Management System</p>
+        <p className="text-sm font-semibold text-ink-900">{businessName} Business Management System</p>
         <p className="mt-1 text-xs text-ink-500">Progressive Web App · Built with React, Vite, and Supabase</p>
       </Card>
 

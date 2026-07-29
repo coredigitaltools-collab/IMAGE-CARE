@@ -1,6 +1,22 @@
 import { cacheGet, cacheSet } from './offlineDb'
 import type { SyncQueueItem } from '../types/settings'
 
+// Guards against a real race: on a cold IndexedDB, two hooks can both call
+// a seeding function (e.g. listProducts) before either has finished
+// writing its seed — each would otherwise generate its own random IDs and
+// the loser's write clobbers the winner's, leaving stale references (e.g.
+// a list page linking to an ID the detail page can no longer find).
+// Concurrent callers for the same key now share a single in-flight promise.
+const inFlight = new Map<string, Promise<unknown>>()
+
+export async function withSingleFlight<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inFlight.get(key)
+  if (existing) return existing as Promise<T>
+  const promise = fn().finally(() => inFlight.delete(key))
+  inFlight.set(key, promise)
+  return promise
+}
+
 // Every write made while Supabase isn't configured lands here first. This
 // is intentionally the same storage the Dashboard already reads through
 // (see services/dashboardService.ts) — one offline-first data layer for
@@ -9,9 +25,14 @@ import type { SyncQueueItem } from '../types/settings'
 export async function getCollection<T>(key: string, seedFn: () => T[]): Promise<T[]> {
   const cached = await cacheGet<T[]>(key)
   if (cached) return cached.data
-  const seeded = seedFn()
-  await cacheSet(key, seeded)
-  return seeded
+  return withSingleFlight(key, async () => {
+    // Re-check after acquiring the lock — another caller may have just seeded it.
+    const recheck = await cacheGet<T[]>(key)
+    if (recheck) return recheck.data
+    const seeded = seedFn()
+    await cacheSet(key, seeded)
+    return seeded
+  })
 }
 
 export async function setCollection<T>(key: string, value: T[]): Promise<void> {
@@ -21,9 +42,13 @@ export async function setCollection<T>(key: string, value: T[]): Promise<void> {
 export async function getSingleton<T>(key: string, seedFn: () => T): Promise<T> {
   const cached = await cacheGet<T>(key)
   if (cached) return cached.data
-  const seeded = seedFn()
-  await cacheSet(key, seeded)
-  return seeded
+  return withSingleFlight(key, async () => {
+    const recheck = await cacheGet<T>(key)
+    if (recheck) return recheck.data
+    const seeded = seedFn()
+    await cacheSet(key, seeded)
+    return seeded
+  })
 }
 
 export async function setSingleton<T>(key: string, value: T): Promise<void> {

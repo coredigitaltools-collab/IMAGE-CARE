@@ -38,7 +38,7 @@ export function ProductsListPage() {
   const createProduct = useCreateProduct(user.id)
   const duplicateProduct = useDuplicateProduct(user.id)
 
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [showArchived, setShowArchived] = useState(false)
   const [isAddOpen, setIsAddOpen] = useState(searchParams.get('new') === '1')
   const [formError, setFormError] = useState<string | undefined>()

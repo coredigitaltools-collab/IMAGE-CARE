@@ -13,7 +13,6 @@ export interface AuthedUser {
   id: string
   name: string
   role: UserRole
-  businessName: string
   /** Branches this user is permitted to view. Owners/managers may see all. */
   allowedBranchIds: string[]
 }

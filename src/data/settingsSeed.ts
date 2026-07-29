@@ -15,6 +15,8 @@ import type {
 const SEED_USER = 'system-seed'
 
 export function seedBusinessProfile(): BusinessProfile {
+  // First-run default only — shown until someone edits it via Settings →
+  // Business Profile, which is how this actually gets renamed day to day.
   return {
     ...stampNew(SEED_USER),
     businessName: 'ImageCare',

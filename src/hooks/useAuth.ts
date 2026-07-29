@@ -11,7 +11,6 @@ const CURRENT_USER: AuthedUser = {
   id: 'user-owner-1',
   name: 'Owner',
   role: 'owner',
-  businessName: 'ImageCare',
   allowedBranchIds: ['branch-main', 'branch-westlands', 'branch-industrial'],
 }
 

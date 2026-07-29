@@ -23,6 +23,7 @@ import {
   Settings,
   X,
 } from 'lucide-react'
+import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
 
 interface NavItem {
   label: string
@@ -64,6 +65,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation()
+  const businessProfileQuery = useBusinessProfile()
 
   return (
     <>
@@ -81,10 +83,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-ink-100 px-5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue-700 text-sm font-bold text-white">
-              IC
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-blue-700 text-[10px] font-bold tracking-tight text-white">
+              IMC
             </div>
-            <span className="text-sm font-semibold text-ink-900">ImageCare</span>
+            <span className="truncate text-sm font-semibold text-ink-900">
+              {businessProfileQuery.data?.businessName ?? 'ImageCare'}
+            </span>
           </div>
           <button
             onClick={onClose}

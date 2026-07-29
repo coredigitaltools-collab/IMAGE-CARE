@@ -11,6 +11,7 @@ import { useToast } from '../components/ui/Toast'
 import { BRANCHES } from '../data/mockData'
 import type { SupportedCurrency } from '../lib/currency'
 import { useDashboardSummary, useLowStockItems, useRecentSales } from '../features/dashboard/hooks/useDashboardData'
+import { useBusinessProfile } from '../features/settings/hooks/useSettingsData'
 
 const MODULE_LABELS: Record<'sale' | 'purchase' | 'expense' | 'reports', string> = {
   sale: 'Sales',
@@ -21,6 +22,7 @@ const MODULE_LABELS: Record<'sale' | 'purchase' | 'expense' | 'reports', string>
 
 export function DashboardPage() {
   const { user } = useAuth()
+  const businessProfileQuery = useBusinessProfile()
   const { showToast } = useToast()
 
   // Business rule (IMP-001 §7): branch users see only branches they're
@@ -43,7 +45,7 @@ export function DashboardPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <WelcomeHeader userName={user.name} businessName={user.businessName} />
+        <WelcomeHeader userName={user.name} businessName={businessProfileQuery.data?.businessName ?? 'ImageCare'} />
         <div className="flex items-center gap-3">
           <BranchSelector
             branches={visibleBranches}

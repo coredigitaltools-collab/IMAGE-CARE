@@ -102,3 +102,57 @@ export async function getProfitabilityReport(currency: SupportedCurrency): Promi
     })
     .sort((a, b) => b.potentialProfit - a.potentialProfit)
 }
+
+// ---------- Inventory value trend ----------
+
+export type TrendRange = '7d' | '30d' | '12m'
+export interface TrendPoint {
+  label: string
+  value: number
+}
+
+/** Reconstructs inventory value (at cost) over time from real stock
+ *  movement history — nothing here is fabricated. Every product's stock
+ *  at a given moment is replayed from its movements up to that point
+ *  (opening stock is itself a movement, so this covers a product's full
+ *  life). For a fresh install this will legitimately look like a flat
+ *  line that steps up once — that's accurate, not a bug; it fills in as
+ *  more real activity accumulates. This recomputes on every call, which
+ *  is fine at demo data volumes — a real deployment would want daily
+ *  valuation snapshots instead of replaying full history each time. */
+export async function getInventoryValueTrend(range: TrendRange, currency: SupportedCurrency): Promise<TrendPoint[]> {
+  const [products, movements] = await Promise.all([listProducts(), listMovements()])
+  const buyingPriceById = new Map(products.map((p) => [p.id, p.buyingPrice]))
+  const sorted = [...movements].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+  const valueAt = (cutoff: number): number => {
+    const stockById = new Map<string, number>()
+    for (const m of sorted) {
+      if (new Date(m.createdAt).getTime() > cutoff) break
+      stockById.set(m.productId, (stockById.get(m.productId) ?? 0) + m.quantityChange)
+    }
+    let total = 0
+    for (const [productId, qty] of stockById) {
+      total += (buyingPriceById.get(productId) ?? 0) * Math.max(qty, 0)
+    }
+    return convertFromUgx(total, currency)
+  }
+
+  const now = Date.now()
+  const points: TrendPoint[] = []
+
+  if (range === '7d' || range === '30d') {
+    const days = range === '7d' ? 7 : 30
+    for (let i = days - 1; i >= 0; i--) {
+      const cutoff = now - i * 86_400_000
+      points.push({ label: new Date(cutoff).toLocaleDateString('en-UG', { day: 'numeric', month: 'short' }), value: valueAt(cutoff) })
+    }
+  } else {
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now)
+      d.setMonth(d.getMonth() - i, 28)
+      points.push({ label: d.toLocaleDateString('en-UG', { month: 'short' }), value: valueAt(d.getTime()) })
+    }
+  }
+  return points
+}

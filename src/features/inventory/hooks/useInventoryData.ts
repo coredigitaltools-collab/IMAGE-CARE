@@ -5,7 +5,7 @@ import * as unitService from '../../../services/unitService'
 import * as supplierService from '../../../services/supplierService'
 import * as productService from '../../../services/productService'
 import * as stockService from '../../../services/stockService'
-import { getInventoryKpis } from '../../../services/inventoryDashboardService'
+import { getInventoryKpis, getProductStatistics } from '../../../services/inventoryDashboardService'
 import * as reports from '../../../services/inventoryReportsService'
 import type { SupportedCurrency } from '../../../lib/currency'
 import type {
@@ -24,6 +24,17 @@ const invalidateInventory = (queryClient: ReturnType<typeof useQueryClient>, key
 
 export function useInventoryKpis(currency: SupportedCurrency) {
   return useQuery({ queryKey: ['inventory', 'kpis', currency], queryFn: () => getInventoryKpis(currency) })
+}
+
+export function useProductStatistics() {
+  return useQuery({ queryKey: ['inventory', 'product-stats'], queryFn: getProductStatistics })
+}
+
+export function useInventoryValueTrend(range: reports.TrendRange, currency: SupportedCurrency) {
+  return useQuery({
+    queryKey: ['inventory', 'value-trend', range, currency],
+    queryFn: () => reports.getInventoryValueTrend(range, currency),
+  })
 }
 
 // ---------- Categories ----------
@@ -161,35 +172,35 @@ export function useCreateProduct(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: ProductInput) => productService.createProduct(input, userId),
-    onSuccess: () => invalidateInventory(qc, ['products', 'kpis', 'movements']),
+    onSuccess: () => invalidateInventory(qc, ['products', 'product', 'kpis', 'movements']),
   })
 }
 export function useUpdateProduct(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: ProductInput }) => productService.updateProduct(id, input, userId),
-    onSuccess: () => invalidateInventory(qc, ['products', 'kpis']),
+    onSuccess: () => invalidateInventory(qc, ['products', 'product', 'kpis']),
   })
 }
 export function useArchiveProduct(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => productService.archiveProduct(id, userId),
-    onSuccess: () => invalidateInventory(qc, ['products', 'kpis']),
+    onSuccess: () => invalidateInventory(qc, ['products', 'product', 'kpis']),
   })
 }
 export function useReactivateProduct(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => productService.reactivateProduct(id, userId),
-    onSuccess: () => invalidateInventory(qc, ['products', 'kpis']),
+    onSuccess: () => invalidateInventory(qc, ['products', 'product', 'kpis']),
   })
 }
 export function useDuplicateProduct(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => productService.duplicateProduct(id, userId),
-    onSuccess: () => invalidateInventory(qc, ['products', 'kpis']),
+    onSuccess: () => invalidateInventory(qc, ['products', 'product', 'kpis']),
   })
 }
 
@@ -205,7 +216,7 @@ export function useCreateAdjustment(userId: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: StockAdjustmentInput) => stockService.createAdjustment(input, userId),
-    onSuccess: () => invalidateInventory(qc, ['products', 'movements', 'adjustments', 'kpis']),
+    onSuccess: () => invalidateInventory(qc, ['products', 'product', 'movements', 'adjustments', 'kpis']),
   })
 }
 
