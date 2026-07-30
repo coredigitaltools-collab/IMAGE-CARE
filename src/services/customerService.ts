@@ -124,18 +124,12 @@ export async function reassignCustomerNotes(sourceId: string, targetId: string):
 }
 
 /** Called by salesService when a sale completes for a registered
- *  (non-walk-in) customer — updates lifetime spend, loyalty points, and
- *  (for credit sales) the outstanding balance. This is the one place
- *  those fields ever change, so every module reading Customer sees
- *  consistent numbers (IMP-004: "Reuse one customer profile across all
- *  modules"). */
-export async function recordCustomerPurchase(
-  customerId: string,
-  amount: number,
-  loyaltyPointsEarned: number,
-  isCredit: boolean,
-  userId: string,
-): Promise<void> {
+ *  (non-walk-in) customer — updates lifetime spend and (for credit
+ *  sales) the outstanding balance. Loyalty points are deliberately NOT
+ *  touched here — loyaltyService owns that field exclusively (see
+ *  loyaltyService.ts) so there's exactly one place it's ever written,
+ *  the same lesson learned from an earlier double-counted-stock bug. */
+export async function recordCustomerPurchase(customerId: string, amount: number, isCredit: boolean, userId: string): Promise<void> {
   const customers = await listCustomers()
   const next = customers.map((c) => {
     if (c.id !== customerId) return c
@@ -143,12 +137,21 @@ export async function recordCustomerPurchase(
       {
         ...c,
         lifetimePurchases: c.lifetimePurchases + amount,
-        loyaltyPoints: c.loyaltyPoints + loyaltyPointsEarned,
         creditBalance: isCredit ? c.creditBalance + amount : c.creditBalance,
       },
       userId,
     )
   })
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'customer', entityId: customerId, operation: 'update' })
+}
+
+/** The one place Customer.loyaltyPoints is ever written — used
+ *  exclusively by loyaltyService so the balance and the transaction log
+ *  behind it can never drift apart. */
+export async function adjustCustomerLoyaltyPoints(customerId: string, delta: number, userId: string): Promise<void> {
+  const customers = await listCustomers()
+  const next = customers.map((c) => (c.id === customerId ? stampUpdated({ ...c, loyaltyPoints: Math.max(0, c.loyaltyPoints + delta) }, userId) : c))
   await setCollection(KEY, next)
   await enqueueSync({ entityType: 'customer', entityId: customerId, operation: 'update' })
 }

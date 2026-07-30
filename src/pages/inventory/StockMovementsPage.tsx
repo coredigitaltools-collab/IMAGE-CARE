@@ -14,6 +14,7 @@ const TYPE_TONE: Record<StockMovementType, 'success' | 'warning' | 'info' | 'neu
   purchase: 'info',
   purchase_return: 'warning',
   sale: 'success',
+  refund: 'warning',
   adjustment: 'warning',
   transfer: 'info',
 }

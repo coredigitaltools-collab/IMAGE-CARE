@@ -6,9 +6,10 @@ import { useBusinessProfile } from '../../features/settings/hooks/useSettingsDat
 const IMPLEMENTED = [
   'Dashboard (IMP-001)', 'Settings (IMP-002)', 'Inventory (IMP-003)', 'Sales & POS (IMP-004)',
   'CRM (IMP-005)', 'Credit Management (IMC-SRS-006)', 'Purchasing & Procurement (IMC-SRS-007)',
+  'Loyalty Programme (IMC-SRS-008)',
 ]
 const PLANNED = [
-  'Loyalty Programme', 'Invoices',
+  'Invoices',
   'Bills & Payables', 'Payroll', 'Expenses', 'Sales Targets',
   'Stock Summary', 'Cash Flow', 'Monthly Summary', 'Annual Summary',
   'Daily Summary', 'Bank Reconciliation', 'Branch Overview', 'Offline',

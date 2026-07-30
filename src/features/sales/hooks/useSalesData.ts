@@ -139,6 +139,19 @@ export function useCheckout(userId: string) {
   })
 }
 
+export function useRefundSale(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ saleId, reason }: { saleId: string; reason: string }) => salesService.refundSale(saleId, reason, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales'] })
+      qc.invalidateQueries({ queryKey: ['inventory'] })
+      qc.invalidateQueries({ queryKey: ['loyalty'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-summary'] })
+    },
+  })
+}
+
 export function useResumeParkedSale() {
   const qc = useQueryClient()
   return useMutation({

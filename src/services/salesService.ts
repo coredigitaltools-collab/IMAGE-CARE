@@ -4,9 +4,17 @@ import { getProduct, assertSellable, ArchivedProductError } from './productServi
 import { getSalesSettings } from './configSettingsService'
 import { listTaxRates } from './taxSettingsService'
 import { recordCustomerPurchase, getCustomer } from './customerService'
+import { awardPoints, reversePointsForSale } from './loyaltyService'
 import type { CheckoutInput, Sale } from '../types/sales'
 
 const KEY = 'sales:sales'
+
+export class SaleNotRefundableError extends Error {
+  constructor() {
+    super('Only a completed sale can be refunded.')
+    this.name = 'SaleNotRefundableError'
+  }
+}
 
 export class DiscountNotAllowedError extends Error {
   constructor() {
@@ -56,11 +64,6 @@ export class PaymentReferenceRequiredError extends Error {
     this.name = 'PaymentReferenceRequiredError'
   }
 }
-
-// Simple placeholder loyalty rule (1 point per 1,000 UGX spent) — a real
-// Loyalty Programme module would make this configurable; documented here
-// so it's easy to find and replace later.
-const LOYALTY_UGX_PER_POINT = 1000
 
 export async function listSales(): Promise<Sale[]> {
   const sales = await getCollection<Sale>(KEY, () => [])
@@ -179,6 +182,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
     changeDue,
     paymentReference: input.paymentMethod === 'mobile_money' || input.paymentMethod === 'card' ? (input.paymentReference?.trim() || null) : null,
     status: input.status,
+    refundReason: null,
     createdAt: new Date().toISOString(),
     createdBy: userId,
     syncStatus: 'pending',
@@ -197,11 +201,58 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
   await enqueueSync({ entityType: 'sale', entityId: sale.id, operation: 'create' })
 
   if (input.status === 'completed' && input.customerId) {
-    const loyaltyPointsEarned = Math.floor(totalAmount / LOYALTY_UGX_PER_POINT)
-    await recordCustomerPurchase(input.customerId, totalAmount, loyaltyPointsEarned, input.paymentMethod === 'credit', userId)
+    await recordCustomerPurchase(input.customerId, totalAmount, input.paymentMethod === 'credit', userId)
+    await awardPoints(input.customerId, sale.id, totalAmount, userId)
   }
 
   return sale
+}
+
+/** "Refunds reverse points" (IMC-SRS-008) — and reverse everything else
+ *  the original sale did: stock comes back (a real, audited 'refund'
+ *  movement — never a silent edit to currentStock), lifetime spend and
+ *  any credit balance the sale created are backed out, and loyalty
+ *  points earned on it are reversed via the same Points Engine that
+ *  awarded them. Nothing here is a parallel accounting of what the sale
+ *  did — it's the same functions run in reverse. */
+export async function refundSale(saleId: string, reason: string, userId: string): Promise<Sale> {
+  const sale = await getSale(saleId)
+  if (!sale) throw new Error('Sale not found.')
+  if (sale.status !== 'completed') throw new SaleNotRefundableError()
+  if (!reason.trim()) throw new Error('A reason is required to refund a sale.')
+
+  for (const item of sale.items) {
+    await recordMovement({ productId: item.productId, type: 'refund', quantityChange: item.quantity, reason: `Refund ${sale.reference}` }, userId)
+  }
+
+  if (sale.customerId) {
+    await recordCustomerPurchase(sale.customerId, -sale.totalAmount, false, userId)
+    if (sale.paymentMethod === 'credit') {
+      // Reduce the credit balance this sale created. Written directly
+      // here (not via creditService) because creditService already
+      // imports listSales from this file — importing creditService here
+      // too would create a circular dependency between the two.
+      const customers = await getCollection<import('../types/sales').Customer>('sales:customers', () => [])
+      const next = customers.map((c) =>
+        c.id === sale.customerId ? { ...c, creditBalance: Math.max(0, c.creditBalance - sale.totalAmount) } : c,
+      )
+      await setCollection('sales:customers', next)
+      await enqueueSync({ entityType: 'customer', entityId: sale.customerId, operation: 'update' })
+    }
+    await reversePointsForSale(saleId, userId)
+  }
+
+  const sales = await listSales()
+  let updated: Sale | null = null
+  const next = sales.map((s) => {
+    if (s.id !== saleId) return s
+    updated = { ...s, status: 'refunded' as const, refundReason: reason.trim() }
+    return updated
+  })
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'sale', entityId: saleId, operation: 'update' })
+  if (!updated) throw new Error('Sale not found.')
+  return updated
 }
 
 export async function resumeParkedSale(id: string): Promise<Sale> {

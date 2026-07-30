@@ -23,11 +23,17 @@ import {
   useCustomer,
   useCustomerNotes,
   useReactivateCustomer,
+  useRefundSale,
   useSales,
   useUpdateCustomer,
 } from '../../features/sales/hooks/useSalesData'
 import { useApproveCreditLimit, useCreditPayments, useCreditWriteOffs, useRecordPayment, useWriteOffBalance } from '../../features/credit/hooks/useCreditData'
+import { useLoyaltyTransactions } from '../../features/loyalty/hooks/useLoyaltyData'
 import { PaymentExceedsBalanceError, WriteOffExceedsBalanceError } from '../../services/creditService'
+import { SaleNotRefundableError } from '../../services/salesService'
+import { LOYALTY_TRANSACTION_LABELS } from '../../types/loyalty'
+
+const LOYALTY_TX_TONE = { earn: 'success', redeem: 'info', reverse: 'danger', expire: 'warning', adjust: 'neutral' } as const
 
 const TABS = ['Overview', 'Purchases', 'Credit', 'Loyalty', 'Quotes', 'Invoices', 'Notes', 'Audit Log'] as const
 type Tab = (typeof TABS)[number]
@@ -43,6 +49,8 @@ export function CustomerDetailPage() {
   const salesQuery = useSales()
   const notesQuery = useCustomerNotes(id)
   const paymentsQuery = useCreditPayments(id)
+  const loyaltyTxQuery = useLoyaltyTransactions(id)
+  const refundSale = useRefundSale(user.id)
   const writeOffsQuery = useCreditWriteOffs(id)
   const updateCustomer = useUpdateCustomer(user.id)
   const archiveCustomer = useArchiveCustomer(user.id)
@@ -204,12 +212,29 @@ export function CustomerDetailPage() {
           ) : (
             <ul className="divide-y divide-ink-100">
               {purchases.map((sale) => (
-                <li key={sale.id} className="flex items-center justify-between py-2.5 text-sm">
+                <li key={sale.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                   <div>
                     <p className="font-medium text-ink-900">{sale.reference}</p>
                     <p className="text-xs text-ink-500">{formatRelativeTime(sale.createdAt)}</p>
                   </div>
-                  <p className="font-medium text-ink-900">{formatCurrency(sale.totalAmount, 'UGX')}</p>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <p className="font-medium text-ink-900">{formatCurrency(sale.totalAmount, 'UGX')}</p>
+                    <Button
+                      variant="secondary"
+                      onClick={async () => {
+                        const reason = window.prompt('Reason for this refund?')
+                        if (!reason) return
+                        try {
+                          await refundSale.mutateAsync({ saleId: sale.id, reason })
+                          showToast('Sale refunded — stock and points reversed.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof SaleNotRefundableError ? err.message : 'Could not refund this sale.')
+                        }
+                      }}
+                    >
+                      Refund
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -381,13 +406,35 @@ export function CustomerDetailPage() {
       )}
 
       {tab === 'Loyalty' && (
-        <Card className="p-5">
-          <p className="text-xs text-ink-500">Loyalty points balance</p>
-          <p className="mt-1 text-2xl font-semibold text-ink-900">{customer.loyaltyPoints} pts</p>
-          <p className="mt-3 border-t border-ink-100 pt-3 text-xs text-ink-500">
-            Earned automatically on completed purchases (1 point per 1,000 UGX spent).
-          </p>
-        </Card>
+        <div className="space-y-4">
+          <Card className="p-5">
+            <p className="text-xs text-ink-500">Loyalty points balance</p>
+            <p className="mt-1 text-2xl font-semibold text-ink-900">{customer.loyaltyPoints} pts</p>
+          </Card>
+          <Card className="p-5">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">Points history</h2>
+            {(loyaltyTxQuery.data ?? []).length === 0 ? (
+              <EmptyState icon={Award} title="No points activity yet" description="Earned, redeemed, and reversed points will appear here." />
+            ) : (
+              <ul className="divide-y divide-ink-100">
+                {(loyaltyTxQuery.data ?? []).map((t) => (
+                  <li key={t.id} className="py-2.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <Badge tone={LOYALTY_TX_TONE[t.type]}>{LOYALTY_TRANSACTION_LABELS[t.type]}</Badge>
+                      <span className={t.points >= 0 ? 'font-medium text-success-700' : 'font-medium text-brand-red-700'}>
+                        {t.points >= 0 ? '+' : ''}
+                        {t.points}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-ink-500">
+                      {t.reason} · {formatRelativeTime(t.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </div>
       )}
 
       {tab === 'Quotes' && (

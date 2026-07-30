@@ -124,6 +124,7 @@ export interface Sale {
   changeDue: number | null // cash only
   paymentReference: string | null // mobile money reference / card transaction ID
   status: SaleStatus
+  refundReason: string | null
   createdAt: string
   createdBy: string
   syncStatus: 'synced' | 'pending' | 'error'
