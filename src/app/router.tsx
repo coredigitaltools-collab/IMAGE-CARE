@@ -55,6 +55,12 @@ const LoyaltyRedemptionsPage = lazy(() => import('../pages/loyalty/LoyaltyRedemp
 const LoyaltyReportsPage = lazy(() => import('../pages/loyalty/LoyaltyReportsPage').then((m) => ({ default: m.LoyaltyReportsPage })))
 const LoyaltySettingsPage = lazy(() => import('../pages/loyalty/LoyaltySettingsPage').then((m) => ({ default: m.LoyaltySettingsPage })))
 
+const InvoiceDashboardPage = lazy(() => import('../pages/invoices/InvoiceDashboardPage').then((m) => ({ default: m.InvoiceDashboardPage })))
+const InvoicesListPage = lazy(() => import('../pages/invoices/InvoicesListPage').then((m) => ({ default: m.InvoicesListPage })))
+const InvoiceDetailPage = lazy(() => import('../pages/invoices/InvoiceDetailPage').then((m) => ({ default: m.InvoiceDetailPage })))
+const InvoiceReportsPage = lazy(() => import('../pages/invoices/InvoiceReportsPage').then((m) => ({ default: m.InvoiceReportsPage })))
+const InvoiceSettingsPage = lazy(() => import('../pages/invoices/InvoiceSettingsPage').then((m) => ({ default: m.InvoiceSettingsPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -122,6 +128,11 @@ export const router = createBrowserRouter(
         { path: 'loyalty/redemptions', element: withSuspense(<LoyaltyRedemptionsPage />) },
         { path: 'loyalty/reports', element: withSuspense(<LoyaltyReportsPage />) },
         { path: 'loyalty/settings', element: withSuspense(<LoyaltySettingsPage />) },
+        { path: 'invoices', element: withSuspense(<InvoiceDashboardPage />) },
+        { path: 'invoices/all', element: withSuspense(<InvoicesListPage />) },
+        { path: 'invoices/reports', element: withSuspense(<InvoiceReportsPage />) },
+        { path: 'invoices/settings', element: withSuspense(<InvoiceSettingsPage />) },
+        { path: 'invoices/:id', element: withSuspense(<InvoiceDetailPage />) },
       ],
     },
   ],

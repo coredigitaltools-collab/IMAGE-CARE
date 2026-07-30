@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { Archive, ArchiveRestore, Award, CreditCard, FileText, Quote, Receipt as ReceiptIcon, Sliders, Wallet, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
@@ -29,11 +29,15 @@ import {
 } from '../../features/sales/hooks/useSalesData'
 import { useApproveCreditLimit, useCreditPayments, useCreditWriteOffs, useRecordPayment, useWriteOffBalance } from '../../features/credit/hooks/useCreditData'
 import { useLoyaltyTransactions } from '../../features/loyalty/hooks/useLoyaltyData'
+import { useGenerateInvoice, useInvoices } from '../../features/invoices/hooks/useInvoicesData'
 import { PaymentExceedsBalanceError, WriteOffExceedsBalanceError } from '../../services/creditService'
 import { SaleNotRefundableError } from '../../services/salesService'
+import { AlreadyInvoicedError, effectiveStatus as effectiveInvoiceStatus } from '../../services/invoiceService'
 import { LOYALTY_TRANSACTION_LABELS } from '../../types/loyalty'
+import { INVOICE_STATUS_LABELS } from '../../types/invoices'
 
 const LOYALTY_TX_TONE = { earn: 'success', redeem: 'info', reverse: 'danger', expire: 'warning', adjust: 'neutral' } as const
+const INVOICE_STATUS_TONE = { unpaid: 'warning', partially_paid: 'warning', paid: 'success', overdue: 'danger', cancelled: 'neutral' } as const
 
 const TABS = ['Overview', 'Purchases', 'Credit', 'Loyalty', 'Quotes', 'Invoices', 'Notes', 'Audit Log'] as const
 type Tab = (typeof TABS)[number]
@@ -51,6 +55,8 @@ export function CustomerDetailPage() {
   const paymentsQuery = useCreditPayments(id)
   const loyaltyTxQuery = useLoyaltyTransactions(id)
   const refundSale = useRefundSale(user.id)
+  const invoicesQuery = useInvoices()
+  const generateInvoice = useGenerateInvoice(user.id)
   const writeOffsQuery = useCreditWriteOffs(id)
   const updateCustomer = useUpdateCustomer(user.id)
   const archiveCustomer = useArchiveCustomer(user.id)
@@ -66,6 +72,8 @@ export function CustomerDetailPage() {
 
   const customer = customerQuery.data
   const purchases = (salesQuery.data ?? []).filter((s) => s.customerId === id && s.status === 'completed')
+  const customerInvoices = (invoicesQuery.data ?? []).filter((inv) => inv.customerId === id)
+  const invoicedSaleIds = new Set(customerInvoices.map((inv) => inv.saleId))
   const creditSales = purchases.filter((s) => s.paymentMethod === 'credit')
   const lastPurchase = purchases[0] // useSales() already sorts newest-first
   const averagePurchaseValue = purchases.length > 0 ? Math.round(purchases.reduce((sum, s) => sum + s.totalAmount, 0) / purchases.length) : 0
@@ -217,8 +225,23 @@ export function CustomerDetailPage() {
                     <p className="font-medium text-ink-900">{sale.reference}</p>
                     <p className="text-xs text-ink-500">{formatRelativeTime(sale.createdAt)}</p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-2">
                     <p className="font-medium text-ink-900">{formatCurrency(sale.totalAmount, 'UGX')}</p>
+                    {!invoicedSaleIds.has(sale.id) && (
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          try {
+                            await generateInvoice.mutateAsync({ saleId: sale.id, dueDate: null })
+                            showToast('Invoice generated.', 'success')
+                          } catch (err) {
+                            showToast(err instanceof AlreadyInvoicedError ? err.message : 'Could not generate an invoice for this sale.')
+                          }
+                        }}
+                      >
+                        Invoice
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       onClick={async () => {
@@ -445,7 +468,23 @@ export function CustomerDetailPage() {
 
       {tab === 'Invoices' && (
         <Card className="p-5">
-          <EmptyState icon={FileText} title="No invoices yet" description="This will populate once the Invoices module is implemented." />
+          {customerInvoices.length === 0 ? (
+            <EmptyState icon={FileText} title="No invoices yet" description="Generate one from the Purchases tab, or from the Invoices module." />
+          ) : (
+            <ul className="divide-y divide-ink-100">
+              {customerInvoices.map((inv) => (
+                <li key={inv.id} className="flex items-center justify-between py-2.5 text-sm">
+                  <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-brand-blue-700">
+                    {inv.invoiceNumber}
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={INVOICE_STATUS_TONE[effectiveInvoiceStatus(inv)]}>{INVOICE_STATUS_LABELS[effectiveInvoiceStatus(inv)]}</Badge>
+                    <span className="font-medium text-ink-900">{formatCurrency(inv.totalAmount, 'UGX')}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       )}
 

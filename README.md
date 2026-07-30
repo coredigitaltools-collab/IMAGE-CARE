@@ -223,6 +223,17 @@ Follows the spec's exact workflow: Supplier → Requisition → Purchase Order �
 - **Points expiry is a deliberate, logged, manually-triggered action**, not a silent background job — there's no server-side cron in this offline-first PWA, so expiring a customer's points without them (or you) knowing would be worse than not expiring them automatically at all.
 - **The Customer Profile is the same flagship page every other module reads from** — its Loyalty tab now shows real transaction history (not a placeholder), and its Purchases tab gained the Refund action, both pulling from the exact same services the dedicated Loyalty pages use.
 
+## Invoices (IMC-SRS-009) — a document layer over Sales, not a parallel record
+
+- **An Invoice references a Sale rather than re-implementing it.** The transaction (Sale) and the formal document a customer receives (Invoice) are deliberately different things with independent lifecycles — a sale happens once at checkout; an invoice can be generated later, resent, marked paid separately, or cancelled while the underlying sale stays exactly as it was. This is also why sale references (`INV-xxxxx`, assigned at checkout) and invoice numbers (`IVC-xxxxx`, assigned when formally invoiced) are deliberately different numbering sequences.
+- **"Invoices are generated from completed sales only" is enforced, not just true by convention.** `generateInvoice()` rejects anything that isn't a completed sale, and rejects generating a second invoice for a sale that already has one — verified: the "Invoice" action correctly disappears from a sale's row the moment it's been invoiced.
+- **Cash/mobile money/card invoices are automatically marked paid** (the money already changed hands at checkout) while **credit invoices start unpaid**, since Credit Management's balance — not the invoice itself — is the real source of truth for whether a credit sale has actually been settled. Verified both paths independently: a cash sale's invoice showed "Paid" immediately; a credit sale's invoice showed "Unpaid" until manually marked paid.
+- **"Cancelled invoices remain in audit history"** — cancellation is a status flip (with a mandatory reason), never a deletion. A paid invoice can't be cancelled at all (the correct path is a refund on the underlying sale, which Loyalty's refund work already built).
+- **Overdue status is derived, not stored** — an invoice becomes "overdue" purely because its due date has passed while still unpaid, computed fresh every time rather than requiring a background job to keep it accurate.
+- **The Customer Profile's Invoices tab is real now**, not the placeholder it was — and the Purchases tab gained a "Generate Invoice" action, tested end-to-end for both a cash and a credit sale.
+- **Settings are genuinely configurable** (default due days, footer text, tax-breakdown visibility, business-name visibility) — not hardcoded into the invoice template.
+- **Not built in this pass, said plainly:** Email/Share Invoice (the spec lists it as a core feature) wasn't implemented — there's no email-sending infrastructure anywhere in this offline-first PWA yet, so building a convincing "share" action without real delivery behind it would have been decorative. Print is fully functional; sharing isn't.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

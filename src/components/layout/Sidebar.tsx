@@ -41,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Customers', icon: Users, to: '/customers' },
   { label: 'Credit', icon: CreditCard, to: '/credit' },
   { label: 'Loyalty Programme', icon: Award, to: '/loyalty' },
-  { label: 'Invoices', icon: FileText },
+  { label: 'Invoices', icon: FileText, to: '/invoices' },
   { label: 'Purchasing', icon: ClipboardList, to: '/purchasing' },
   { label: 'Bills & Payables', icon: Receipt },
   { label: 'Payroll', icon: Wallet },
