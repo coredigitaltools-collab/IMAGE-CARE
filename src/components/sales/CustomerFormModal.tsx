@@ -7,7 +7,9 @@ import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
 import { Button } from '../ui/Button'
 import { useFindDuplicateCustomers } from '../../features/sales/hooks/useSalesData'
-import type { Customer, CustomerInput } from '../../types/sales'
+import { useBranches } from '../../features/settings/hooks/useSettingsData'
+import { CUSTOMER_STATUSES, CUSTOMER_STATUS_LABELS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '../../types/sales'
+import type { Customer, CustomerInput, CustomerStatus, PaymentMethod } from '../../types/sales'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Customer name is required.'),
@@ -15,6 +17,11 @@ const schema = z.object({
   email: z.string().trim().email('Enter a valid email address.').or(z.literal('')),
   address: z.string().trim(),
   notes: z.string().trim(),
+  status: z.enum(['active', 'vip', 'blacklisted']),
+  dateOfBirth: z.string(),
+  preferredBranchId: z.string(),
+  preferredPaymentMethod: z.string(),
+  creditLimit: z.number().min(0, 'Must be 0 or higher.'),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -32,9 +39,11 @@ function parseTags(text: string): string[] {
 
 export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubmit }: CustomerFormModalProps) {
   const findDuplicates = useFindDuplicateCustomers()
+  const branchesQuery = useBranches()
   const [duplicates, setDuplicates] = useState<Customer[]>([])
   const [confirmedDespiteDuplicates, setConfirmedDespiteDuplicates] = useState(false)
   const [tagsText, setTagsText] = useState(initial?.tags.join(', ') ?? '')
+  const [showMoreDetails, setShowMoreDetails] = useState(Boolean(initial))
 
   const {
     register,
@@ -43,10 +52,35 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: initial ?? { name: '', phone: '', email: '', address: '', notes: '' },
+    defaultValues: initial
+      ? {
+          ...initial,
+          dateOfBirth: initial.dateOfBirth ?? '',
+          preferredBranchId: initial.preferredBranchId ?? '',
+          preferredPaymentMethod: initial.preferredPaymentMethod ?? '',
+        }
+      : {
+          name: '',
+          phone: '',
+          email: '',
+          address: '',
+          notes: '',
+          status: 'active',
+          dateOfBirth: '',
+          preferredBranchId: '',
+          preferredPaymentMethod: '',
+          creditLimit: 0,
+        },
   })
 
-  const buildInput = (values: FormValues): CustomerInput => ({ ...values, tags: parseTags(tagsText) })
+  const buildInput = (values: FormValues): CustomerInput => ({
+    ...values,
+    tags: parseTags(tagsText),
+    status: values.status as CustomerStatus,
+    dateOfBirth: values.dateOfBirth || null,
+    preferredBranchId: values.preferredBranchId || null,
+    preferredPaymentMethod: (values.preferredPaymentMethod || null) as PaymentMethod | null,
+  })
 
   const submit = handleSubmit(async (values) => {
     if (!initial && !confirmedDespiteDuplicates) {
@@ -61,11 +95,10 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
 
   return (
     <Modal title={title ?? (initial ? 'Edit customer' : 'Add customer')} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
         <FormField label="Customer name" {...register('name')} error={errors.name?.message} />
         <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
         <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
-        <FormField label="Address" {...register('address')} error={errors.address?.message} />
         <FormField
           id="cf-tags"
           label="Tags"
@@ -74,17 +107,95 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
           placeholder="Comma-separated, e.g. Wholesale, Priority"
           hint="Your own labels for grouping customers — nothing preset."
         />
-        <div>
-          <label htmlFor="cf-notes" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Notes
-          </label>
-          <textarea
-            id="cf-notes"
-            {...register('notes')}
-            rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-          />
-        </div>
+
+        {!showMoreDetails ? (
+          <button
+            type="button"
+            onClick={() => setShowMoreDetails(true)}
+            className="text-xs font-medium text-brand-blue-700 hover:underline"
+          >
+            + Add address, status, and preferences
+          </button>
+        ) : (
+          <>
+            <FormField label="Address" {...register('address')} error={errors.address?.message} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="cf-status" className="mb-1.5 block text-sm font-medium text-ink-700">
+                  Status
+                </label>
+                <select
+                  id="cf-status"
+                  {...register('status')}
+                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                >
+                  {CUSTOMER_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {CUSTOMER_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <FormField id="cf-dob" label="Date of birth" type="date" {...register('dateOfBirth')} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="cf-branch" className="mb-1.5 block text-sm font-medium text-ink-700">
+                  Preferred branch
+                </label>
+                <select
+                  id="cf-branch"
+                  {...register('preferredBranchId')}
+                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                >
+                  <option value="">None</option>
+                  {(branchesQuery.data ?? []).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="cf-payment" className="mb-1.5 block text-sm font-medium text-ink-700">
+                  Preferred payment
+                </label>
+                <select
+                  id="cf-payment"
+                  {...register('preferredPaymentMethod')}
+                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                >
+                  <option value="">None</option>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <FormField
+              id="cf-credit-limit"
+              label="Credit limit (UGX)"
+              type="number"
+              min={0}
+              hint="0 = no explicit limit set."
+              {...register('creditLimit', { valueAsNumber: true })}
+              error={errors.creditLimit?.message}
+            />
+            <div>
+              <label htmlFor="cf-notes" className="mb-1.5 block text-sm font-medium text-ink-700">
+                Description
+              </label>
+              <textarea
+                id="cf-notes"
+                {...register('notes')}
+                rows={2}
+                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              />
+            </div>
+          </>
+        )}
 
         {duplicates.length > 0 && (
           <div className="rounded-md border border-warning-100 bg-warning-100/40 p-3">

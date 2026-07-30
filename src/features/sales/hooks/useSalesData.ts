@@ -49,6 +49,24 @@ export function useReactivateCustomer(userId: string) {
   })
 }
 
+/** Merges sourceId into targetId across every place a customer record
+ *  is referenced — Sales (purchase history), Notes, and the customer
+ *  record itself (points/spend/credit summed, tags unioned). No
+ *  historical data is dropped; the source is archived, not deleted. */
+export function useMergeCustomers(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ sourceId, targetId }: { sourceId: string; targetId: string }) => {
+      await salesService.reassignCustomerSales(sourceId, targetId)
+      await customerService.reassignCustomerNotes(sourceId, targetId)
+      return customerService.applyCustomerMerge(sourceId, targetId, userId)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales'] })
+    },
+  })
+}
+
 export function useFindDuplicateCustomers() {
   return useMutation({
     mutationFn: (input: Pick<CustomerInput, 'name' | 'phone' | 'email'>) => customerService.findPossibleDuplicates(input),

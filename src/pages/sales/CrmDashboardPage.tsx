@@ -68,12 +68,12 @@ export function CrmDashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Clients' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Customers' }]} />
       <CustomerTabs />
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Clients</h1>
+          <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Customers</h1>
           <p className="mt-0.5 text-sm text-ink-500">Customer relationships, spend, and credit at a glance.</p>
         </div>
       </div>
@@ -99,9 +99,9 @@ export function CrmDashboardPage() {
             <Users size={26} strokeWidth={1.75} />
           </span>
           <div>
-            <p className="text-base font-semibold text-ink-900">No customers yet</p>
+            <p className="text-base font-semibold text-ink-900">No customers have been added yet</p>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-500">
-              Customers are added here directly, or automatically the first time someone checks out at Sales.
+              Customers will automatically appear here after their first identified sale, or you can add one manually.
             </p>
           </div>
           <button

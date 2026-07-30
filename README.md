@@ -183,6 +183,22 @@ Every element here was held to one standard: does it answer a real question an o
 
 
 
+## Credit Management (IMC-SRS-006) — built on Customer Master, not a parallel ledger
+
+"One customer has one credit account" is implemented literally: there is no separate CreditAccount entity. `Customer.creditLimit` and `Customer.creditBalance` *are* the account; `CreditPayment`, `CreditWriteOff`, and `CreditLimitChange` are the transaction log behind it.
+
+- **"Credit limits enforced through approvals" is a real mechanism, not a slogan.** Every new customer starts with `creditLimit: 0` — meaning credit sales are impossible until an owner/manager explicitly approves a limit via "Approve credit limit." Checkout (`salesService.ts`) now blocks a credit sale outright if no limit has been approved, or if the sale would push the balance past the approved limit — verified with a real 3-step test: sale blocked with no limit approved → limit approved → same sale now succeeds → a second sale exceeding what's left is blocked again.
+- **Credit Dashboard** (`/credit`) — 5 KPIs (Total Outstanding, Accounts with Balance, Overdue Accounts, Overdue Amount, Collected This Month) plus a "Most overdue accounts" panel, all computed from real Sales/Customer data.
+- **Credit Accounts** (`/credit/accounts`) — every account with an approved limit or a balance, with Record Payment / Approve Limit / Write Off actions right on each row, plus an "overdue only" filter.
+- **Credit Reports** (`/credit/reports`) — an aging report (Current / 31-60 / 61-90 / 90+ day buckets). Documented honestly in `creditService.ts`: aging is a running-balance approximation (oldest unpaid credit sale since the last payment), not a full sub-ledger matching specific payments to specific invoices — reasonable for a single-branch business, worth revisiting if per-invoice allocation is ever needed.
+- **Payments** reduce the balance and are logged permanently (method, reference, who recorded it, when) — validated so a payment can never exceed the outstanding balance.
+- **Write-offs** require a reason, are permanently logged as bad debt, and are validated the same way.
+- **The Customer Profile's Credit tab** (the same page every other module already reads from) now shows the limit, available credit, full payment history, and write-off history alongside the existing credit sales list, with the same three actions available in context.
+- **Two components that existed but were never wired in were connected during this pass**: a Customer Health widget and a unified activity Timeline (both built in an earlier session) now actually appear on the Customer Profile's Overview tab.
+- **A real bug was found and fixed while testing, not before:** the two new credit-blocking errors (no approved limit, limit exceeded) weren't in the POS's list of recognized errors, so a correctly-blocked sale showed a generic "Something went wrong" instead of the actual reason. Fixed by adding both to the POS's error handling, verified by confirming the specific message now appears.
+- **Role-based permissions**: added a `manage_credit` permission to the existing Permission Matrix (Owner/Manager/Accountant: yes by default, Cashier: no) — structurally complete, though full UI-level gating is limited by the same stub authentication noted elsewhere in this README (there's currently one hardcoded "Owner" user, not a real multi-user login system).
+- **Not built in this pass, flagged honestly:** Customer Statements (printable running-balance documents) and Notifications integration (overdue-account alerts in the existing bell-icon Notification Center) were in scope for a complete module but weren't completed here — the core accounting (limits, sales, payments, write-offs, aging) was prioritized as the part that had to be correct.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.
@@ -282,6 +298,13 @@ Also fixed during this pass: several form labels across the Inventory module wer
 - ✅ Home Dashboard shows zero/empty state on fresh install (no fake "Grace Nakato" sale), then correctly reflects a real POS sale's total and customer once one happens
 - ✅ Opening stock bug: created a product with opening stock 5, confirmed it shows exactly 5 (previously showed 10) and exactly one "opening" movement is recorded (previously two)
 - ✅ Re-ran the full IMP-003/IMP-004 regression suite (product creation, stock decrement on sale, park/resume, credit sales, customer profile updates) against freshly-created test data to confirm nothing broke
+
+**Credit Management (IMC-SRS-006)** — verified with scripted browser tests exercising the real accounting flow end-to-end:
+- ✅ Credit sale blocked with a clear message when no limit has been approved for the customer
+- ✅ Full lifecycle: approve a 250,000 UGX limit → sell 200,000 on credit (succeeds) → attempt another 200,000 (blocked — only 50,000 available) → record a 200,000 payment → balance confirmed back to exactly 0
+- ✅ Write-off: sold on credit → wrote off the full balance with a reason → balance confirmed 0 and the reason confirmed visible on the customer's Credit tab
+- ✅ Credit Dashboard KPIs correctly reflect 0 outstanding after everything above is settled
+- ✅ Found and fixed a real bug in the process: the two new credit-blocking errors weren't recognized by the POS's error handler, so a correctly-blocked sale showed a generic message instead of the actual reason — fixed and re-verified
 
 Not yet covered (needs a real device/browser session or a connected Supabase project): full backup→restore round-trip verification, PWA install prompt behavior, Lighthouse PWA audit, RLS policies (no live database yet to apply them to).
 

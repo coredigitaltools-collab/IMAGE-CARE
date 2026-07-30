@@ -3,7 +3,7 @@ import { recordMovement, NegativeStockError } from './stockService'
 import { getProduct, assertSellable, ArchivedProductError } from './productService'
 import { getSalesSettings } from './configSettingsService'
 import { listTaxRates } from './taxSettingsService'
-import { recordCustomerPurchase } from './customerService'
+import { recordCustomerPurchase, getCustomer } from './customerService'
 import type { CheckoutInput, Sale } from '../types/sales'
 
 const KEY = 'sales:sales'
@@ -24,6 +24,18 @@ export class CreditRequiresCustomerError extends Error {
   constructor() {
     super('A customer must be selected for credit sales (set in Sales Settings).')
     this.name = 'CreditRequiresCustomerError'
+  }
+}
+export class NoCreditLimitApprovedError extends Error {
+  constructor() {
+    super("This customer has no approved credit limit. Approve one under Credit before selling on credit.")
+    this.name = 'NoCreditLimitApprovedError'
+  }
+}
+export class CreditLimitExceededError extends Error {
+  constructor(available: number) {
+    super(`This sale exceeds the customer's available credit. Only ${available.toLocaleString()} UGX is available.`)
+    this.name = 'CreditLimitExceededError'
   }
 }
 export class EmptyCartError extends Error {
@@ -131,6 +143,15 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
       if (!input.paymentReference?.trim()) throw new PaymentReferenceRequiredError('mobile money reference number')
     } else if (input.paymentMethod === 'card') {
       if (!input.paymentReference?.trim()) throw new PaymentReferenceRequiredError('card transaction ID')
+    } else if (input.paymentMethod === 'credit' && input.customerId) {
+      // "Credit limits enforced through approvals" (IMC-SRS-006) — a
+      // limit of 0 means nobody has approved credit for this customer
+      // yet; that's the enforcement mechanism, not just a display field.
+      const customer = await getCustomer(input.customerId)
+      if (!customer) throw new Error('Customer not found.')
+      if (customer.creditLimit <= 0) throw new NoCreditLimitApprovedError()
+      const available = customer.creditLimit - customer.creditBalance
+      if (totalAmount > available) throw new CreditLimitExceededError(Math.max(0, available))
     }
   }
 
@@ -198,6 +219,21 @@ export async function deleteParkedSale(id: string): Promise<void> {
     KEY,
     sales.filter((s) => s.id !== id),
   )
+}
+
+/** Used by Customer Merge (IMP-005 refinement) — reassigns every sale
+ *  pointing at sourceCustomerId to targetCustomerId, so purchase history
+ *  isn't lost when two duplicate customer records are combined. */
+export async function reassignCustomerSales(sourceCustomerId: string, targetCustomerId: string): Promise<number> {
+  const sales = await listSales()
+  let count = 0
+  const next = sales.map((s) => {
+    if (s.customerId !== sourceCustomerId) return s
+    count++
+    return { ...s, customerId: targetCustomerId }
+  })
+  await setCollection(KEY, next)
+  return count
 }
 
 export { NegativeStockError, ArchivedProductError }

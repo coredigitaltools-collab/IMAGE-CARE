@@ -79,6 +79,50 @@ export async function reactivateCustomer(id: string, userId: string): Promise<vo
   await enqueueSync({ entityType: 'customer', entityId: id, operation: 'update' })
 }
 
+// ---------- Merge (IMP-005 refinement) ----------
+// Orchestrated from the hook layer (useMergeCustomers), not from inside
+// this file — merging also needs to reassign Sales, and salesService
+// already imports this file (for recordCustomerPurchase), so this file
+// importing salesService back would create a circular dependency. This
+// function handles only the customer-record side: combine the numbers,
+// union the tags, and archive the duplicate. Sales and Notes reassignment
+// happen via their own dedicated functions, called alongside this one.
+
+export async function applyCustomerMerge(sourceId: string, targetId: string, userId: string): Promise<Customer> {
+  const customers = await listCustomers()
+  const source = customers.find((c) => c.id === sourceId)
+  const target = customers.find((c) => c.id === targetId)
+  if (!source || !target) throw new Error('Customer not found')
+
+  const mergedTarget = stampUpdated(
+    {
+      ...target,
+      tags: [...new Set([...target.tags, ...source.tags])],
+      loyaltyPoints: target.loyaltyPoints + source.loyaltyPoints,
+      lifetimePurchases: target.lifetimePurchases + source.lifetimePurchases,
+      creditBalance: target.creditBalance + source.creditBalance,
+      notes: [target.notes, source.notes].filter(Boolean).join(' · '),
+    },
+    userId,
+  )
+
+  const next = customers.map((c) => {
+    if (c.id === targetId) return mergedTarget
+    if (c.id === sourceId) return stampUpdated({ ...c, is_active: false }, userId)
+    return c
+  })
+  await setCollection(KEY, next)
+  await enqueueSync({ entityType: 'customer', entityId: targetId, operation: 'update' })
+  await enqueueSync({ entityType: 'customer', entityId: sourceId, operation: 'disable' })
+  return mergedTarget
+}
+
+export async function reassignCustomerNotes(sourceId: string, targetId: string): Promise<void> {
+  const notes = await getCollection<CustomerNote>(NOTES_KEY, () => [])
+  const next = notes.map((n) => (n.customerId === sourceId ? { ...n, customerId: targetId } : n))
+  await setCollection(NOTES_KEY, next)
+}
+
 /** Called by salesService when a sale completes for a registered
  *  (non-walk-in) customer — updates lifetime spend, loyalty points, and
  *  (for credit sales) the outstanding balance. This is the one place

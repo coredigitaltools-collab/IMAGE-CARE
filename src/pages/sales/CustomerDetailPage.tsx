@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, Award, CreditCard, FileText, Quote, Receipt as ReceiptIcon, Wallet } from 'lucide-react'
+import { Archive, ArchiveRestore, Award, CreditCard, FileText, Quote, Receipt as ReceiptIcon, Sliders, Wallet, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -8,9 +8,15 @@ import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
+import { CustomerHealthWidget } from '../../components/sales/CustomerHealthWidget'
+import { CustomerTimeline } from '../../components/sales/CustomerTimeline'
+import { RecordPaymentModal } from '../../components/credit/RecordPaymentModal'
+import { WriteOffModal } from '../../components/credit/WriteOffModal'
+import { CreditLimitModal } from '../../components/credit/CreditLimitModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
+import { getCustomerHealth } from '../../lib/customerHealth'
 import {
   useAddCustomerNote,
   useArchiveCustomer,
@@ -20,6 +26,8 @@ import {
   useSales,
   useUpdateCustomer,
 } from '../../features/sales/hooks/useSalesData'
+import { useApproveCreditLimit, useCreditPayments, useCreditWriteOffs, useRecordPayment, useWriteOffBalance } from '../../features/credit/hooks/useCreditData'
+import { PaymentExceedsBalanceError, WriteOffExceedsBalanceError } from '../../services/creditService'
 
 const TABS = ['Overview', 'Purchases', 'Credit', 'Loyalty', 'Quotes', 'Invoices', 'Notes', 'Audit Log'] as const
 type Tab = (typeof TABS)[number]
@@ -34,18 +42,27 @@ export function CustomerDetailPage() {
   const customerQuery = useCustomer(id)
   const salesQuery = useSales()
   const notesQuery = useCustomerNotes(id)
+  const paymentsQuery = useCreditPayments(id)
+  const writeOffsQuery = useCreditWriteOffs(id)
   const updateCustomer = useUpdateCustomer(user.id)
   const archiveCustomer = useArchiveCustomer(user.id)
   const reactivateCustomer = useReactivateCustomer(user.id)
   const addNote = useAddCustomerNote(user.id)
+  const recordPayment = useRecordPayment(user.id)
+  const writeOffBalance = useWriteOffBalance(user.id)
+  const approveLimit = useApproveCreditLimit(user.id)
 
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [creditModal, setCreditModal] = useState<'payment' | 'writeoff' | 'limit' | null>(null)
+  const [creditFormError, setCreditFormError] = useState<string | undefined>()
 
   const customer = customerQuery.data
   const purchases = (salesQuery.data ?? []).filter((s) => s.customerId === id && s.status === 'completed')
   const creditSales = purchases.filter((s) => s.paymentMethod === 'credit')
   const lastPurchase = purchases[0] // useSales() already sorts newest-first
   const averagePurchaseValue = purchases.length > 0 ? Math.round(purchases.reduce((sum, s) => sum + s.totalAmount, 0) / purchases.length) : 0
+  const health = customer ? getCustomerHealth({ lastPurchaseAt: lastPurchase?.createdAt ?? null, creditBalance: customer.creditBalance }) : null
+  const availableCredit = customer ? Math.max(0, customer.creditLimit - customer.creditBalance) : 0
 
   if (customerQuery.isLoading) {
     return (
@@ -126,6 +143,7 @@ export function CustomerDetailPage() {
 
       {tab === 'Overview' && (
         <div className="space-y-4">
+          {health && <CustomerHealthWidget health={health} />}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Card className="p-4">
               <div className="flex items-center gap-2">
@@ -172,6 +190,10 @@ export function CustomerDetailPage() {
               </div>
             )}
           </Card>
+          <Card className="p-5">
+            <h2 className="mb-4 text-sm font-semibold text-ink-900">Activity timeline</h2>
+            <CustomerTimeline sales={purchases} notes={notesQuery.data ?? []} />
+          </Card>
         </div>
       )}
 
@@ -198,11 +220,56 @@ export function CustomerDetailPage() {
       {tab === 'Credit' && (
         <div className="space-y-4">
           <Card className="p-5">
-            <p className="text-xs text-ink-500">Current balance owed</p>
-            <p className={`mt-1 text-2xl font-semibold ${customer.creditBalance > 0 ? 'text-brand-red-700' : 'text-ink-900'}`}>
-              {formatCurrency(customer.creditBalance, 'UGX')}
-            </p>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="grid grid-cols-3 gap-6">
+                <div>
+                  <p className="text-xs text-ink-500">Balance owed</p>
+                  <p className={`mt-1 text-xl font-semibold ${customer.creditBalance > 0 ? 'text-brand-red-700' : 'text-ink-900'}`}>
+                    {formatCurrency(customer.creditBalance, 'UGX')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-500">Approved limit</p>
+                  <p className="mt-1 text-xl font-semibold text-ink-900">{formatCurrency(customer.creditLimit, 'UGX')}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-500">Available credit</p>
+                  <p className="mt-1 text-xl font-semibold text-success-700">{formatCurrency(availableCredit, 'UGX')}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setCreditFormError(undefined)
+                    setCreditModal('payment')
+                  }}
+                  disabled={customer.creditBalance === 0}
+                >
+                  <Wallet size={14} /> Record payment
+                </Button>
+                <Button variant="secondary" onClick={() => setCreditModal('limit')}>
+                  <Sliders size={14} /> Approve limit
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setCreditFormError(undefined)
+                    setCreditModal('writeoff')
+                  }}
+                  disabled={customer.creditBalance === 0}
+                >
+                  <XCircle size={14} /> Write off
+                </Button>
+              </div>
+            </div>
+            {customer.creditLimit === 0 && (
+              <p className="rounded-md bg-warning-100/40 px-3 py-2 text-xs text-warning-700">
+                No credit limit has been approved for this customer yet — credit sales are blocked until one is.
+              </p>
+            )}
           </Card>
+
           <Card className="p-5">
             <h2 className="mb-3 text-sm font-semibold text-ink-900">Credit sales</h2>
             {creditSales.length === 0 ? (
@@ -221,7 +288,96 @@ export function CustomerDetailPage() {
               </ul>
             )}
           </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-3 text-sm font-semibold text-ink-900">Payment history</h2>
+            {(paymentsQuery.data ?? []).length === 0 ? (
+              <EmptyState icon={Wallet} title="No payments recorded" description="Payments received against this balance will appear here." />
+            ) : (
+              <ul className="divide-y divide-ink-100">
+                {(paymentsQuery.data ?? []).map((payment) => (
+                  <li key={payment.id} className="flex items-center justify-between py-2.5 text-sm">
+                    <div>
+                      <p className="font-medium text-ink-900 capitalize">{payment.method.replace('_', ' ')}</p>
+                      <p className="text-xs text-ink-500">
+                        {formatRelativeTime(payment.createdAt)}
+                        {payment.reference ? ` · ${payment.reference}` : ''}
+                      </p>
+                    </div>
+                    <p className="font-medium text-success-700">{formatCurrency(payment.amount, 'UGX')}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          {(writeOffsQuery.data ?? []).length > 0 && (
+            <Card className="p-5">
+              <h2 className="mb-3 text-sm font-semibold text-ink-900">Write-offs</h2>
+              <ul className="divide-y divide-ink-100">
+                {(writeOffsQuery.data ?? []).map((writeOff) => (
+                  <li key={writeOff.id} className="py-2.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-ink-900">{formatRelativeTime(writeOff.createdAt)}</p>
+                      <p className="font-medium text-brand-red-700">{formatCurrency(writeOff.amount, 'UGX')}</p>
+                    </div>
+                    <p className="text-xs text-ink-500">{writeOff.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
+      )}
+
+      {creditModal === 'payment' && (
+        <RecordPaymentModal
+          customerName={customer.name}
+          outstandingBalance={customer.creditBalance}
+          submitError={creditFormError}
+          onClose={() => setCreditModal(null)}
+          onSubmit={async (values) => {
+            try {
+              await recordPayment.mutateAsync({ customerId: customer.id, ...values })
+              showToast('Payment recorded.', 'success')
+              setCreditModal(null)
+            } catch (err) {
+              setCreditFormError(err instanceof PaymentExceedsBalanceError ? err.message : 'Could not record this payment.')
+            }
+          }}
+        />
+      )}
+
+      {creditModal === 'writeoff' && (
+        <WriteOffModal
+          customerName={customer.name}
+          outstandingBalance={customer.creditBalance}
+          submitError={creditFormError}
+          onClose={() => setCreditModal(null)}
+          onSubmit={async (values) => {
+            try {
+              await writeOffBalance.mutateAsync({ customerId: customer.id, ...values })
+              showToast('Balance written off.', 'success')
+              setCreditModal(null)
+            } catch (err) {
+              setCreditFormError(err instanceof WriteOffExceedsBalanceError ? err.message : 'Could not write off this balance.')
+            }
+          }}
+        />
+      )}
+
+      {creditModal === 'limit' && (
+        <CreditLimitModal
+          customerName={customer.name}
+          currentLimit={customer.creditLimit}
+          currentBalance={customer.creditBalance}
+          onClose={() => setCreditModal(null)}
+          onSubmit={async ({ newLimit }) => {
+            await approveLimit.mutateAsync({ customerId: customer.id, newLimit })
+            showToast('Credit limit updated.', 'success')
+            setCreditModal(null)
+          }}
+        />
       )}
 
       {tab === 'Loyalty' && (

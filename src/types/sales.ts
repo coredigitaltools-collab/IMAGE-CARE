@@ -7,6 +7,14 @@ import type { AuditFields } from '../lib/audit'
 // Reports, and Marketing." (IMP-004) — this type is deliberately the one
 // future modules will import, not a Sales-only shape.
 
+export type CustomerStatus = 'active' | 'vip' | 'blacklisted'
+export const CUSTOMER_STATUSES: CustomerStatus[] = ['active', 'vip', 'blacklisted']
+export const CUSTOMER_STATUS_LABELS: Record<CustomerStatus, string> = {
+  active: 'Active',
+  vip: 'VIP',
+  blacklisted: 'Blacklisted',
+}
+
 export interface Customer extends AuditFields {
   name: string
   phone: string
@@ -14,6 +22,11 @@ export interface Customer extends AuditFields {
   address: string
   notes: string
   tags: string[] // free-text, business-defined segments (e.g. "Wholesale", "VIP") — never a preset industry list
+  status: CustomerStatus // business-set relationship status — distinct from is_active (archived or not)
+  dateOfBirth: string | null // optional, ISO date — for future birthday-based promotions/loyalty
+  preferredBranchId: string | null
+  preferredPaymentMethod: PaymentMethod | null
+  creditLimit: number // 0 = no explicit limit set; UGX
   loyaltyPoints: number
   lifetimePurchases: number // total amount spent, in UGX
   creditBalance: number // amount currently owed on credit, in UGX
@@ -31,7 +44,44 @@ export interface CustomerNote {
   createdBy: string
 }
 
-export type CustomerInput = Pick<Customer, 'name' | 'phone' | 'email' | 'address' | 'notes' | 'tags'>
+export type CustomerInput = Pick<
+  Customer,
+  'name' | 'phone' | 'email' | 'address' | 'notes' | 'tags' | 'status' | 'dateOfBirth' | 'preferredBranchId' | 'preferredPaymentMethod' | 'creditLimit'
+>
+
+// ---------- Credit Management (IMC-SRS-006) ----------
+// "One customer has one credit account" — that account IS
+// Customer.creditLimit / Customer.creditBalance; there is deliberately
+// no separate CreditAccount entity duplicating those fields. These
+// three types are the transaction log behind that single account.
+
+export interface CreditPayment {
+  id: string
+  customerId: string
+  amount: number
+  method: 'cash' | 'mobile_money' | 'card' | 'bank_transfer'
+  reference: string
+  createdAt: string
+  createdBy: string
+}
+
+export interface CreditWriteOff {
+  id: string
+  customerId: string
+  amount: number
+  reason: string
+  createdAt: string
+  createdBy: string
+}
+
+export interface CreditLimitChange {
+  id: string
+  customerId: string
+  previousLimit: number
+  newLimit: number
+  createdAt: string
+  createdBy: string
+}
 
 // ---------- Sales & POS ----------
 

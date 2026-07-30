@@ -37,6 +37,10 @@ const CrmDashboardPage = lazy(() => import('../pages/sales/CrmDashboardPage').th
 const CustomerDirectoryPage = lazy(() => import('../pages/sales/CustomerDirectoryPage').then((m) => ({ default: m.CustomerDirectoryPage })))
 const CustomerDetailPage = lazy(() => import('../pages/sales/CustomerDetailPage').then((m) => ({ default: m.CustomerDetailPage })))
 
+const CreditDashboardPage = lazy(() => import('../pages/credit/CreditDashboardPage').then((m) => ({ default: m.CreditDashboardPage })))
+const CreditAccountsPage = lazy(() => import('../pages/credit/CreditAccountsPage').then((m) => ({ default: m.CreditAccountsPage })))
+const CreditReportsPage = lazy(() => import('../pages/credit/CreditReportsPage').then((m) => ({ default: m.CreditReportsPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -89,6 +93,9 @@ export const router = createBrowserRouter(
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
         { path: 'customers/:id', element: withSuspense(<CustomerDetailPage />) },
+        { path: 'credit', element: withSuspense(<CreditDashboardPage />) },
+        { path: 'credit/accounts', element: withSuspense(<CreditAccountsPage />) },
+        { path: 'credit/reports', element: withSuspense(<CreditReportsPage />) },
       ],
     },
   ],

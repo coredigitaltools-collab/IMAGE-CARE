@@ -51,7 +51,7 @@ export function CustomerDirectoryPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Clients' }]} />
+      <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Customers' }]} />
       <CustomerTabs />
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">

@@ -34,6 +34,7 @@ export type Permission =
   | 'manage_expenses'
   | 'manage_payroll'
   | 'manage_clients'
+  | 'manage_credit'
   | 'manage_staff'
   | 'manage_settings'
   | 'view_reports'
@@ -46,6 +47,7 @@ export const PERMISSIONS: Permission[] = [
   'manage_expenses',
   'manage_payroll',
   'manage_clients',
+  'manage_credit',
   'manage_staff',
   'manage_settings',
   'view_reports',
@@ -59,6 +61,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   manage_expenses: 'Manage Expenses',
   manage_payroll: 'Manage Payroll',
   manage_clients: 'Manage Clients',
+  manage_credit: 'Manage Credit',
   manage_staff: 'Manage Staff',
   manage_settings: 'Manage Settings',
   view_reports: 'View Reports',

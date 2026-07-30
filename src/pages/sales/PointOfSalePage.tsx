@@ -22,12 +22,14 @@ import {
   useSales,
 } from '../../features/sales/hooks/useSalesData'
 import {
+  CreditLimitExceededError,
   CreditRequiresCustomerError,
   DiscountExceedsLimitError,
   DiscountNotAllowedError,
   EmptyCartError,
   InsufficientPaymentError,
   NegativeStockError,
+  NoCreditLimitApprovedError,
   PaymentReferenceRequiredError,
 } from '../../services/salesService'
 import { ArchivedProductError } from '../../services/productService'
@@ -138,7 +140,9 @@ export function PointOfSalePage() {
       err instanceof CreditRequiresCustomerError ||
       err instanceof EmptyCartError ||
       err instanceof InsufficientPaymentError ||
-      err instanceof PaymentReferenceRequiredError
+      err instanceof PaymentReferenceRequiredError ||
+      err instanceof NoCreditLimitApprovedError ||
+      err instanceof CreditLimitExceededError
     ) {
       showToast(err.message)
     } else {
