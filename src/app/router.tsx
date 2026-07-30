@@ -41,6 +41,14 @@ const CreditDashboardPage = lazy(() => import('../pages/credit/CreditDashboardPa
 const CreditAccountsPage = lazy(() => import('../pages/credit/CreditAccountsPage').then((m) => ({ default: m.CreditAccountsPage })))
 const CreditReportsPage = lazy(() => import('../pages/credit/CreditReportsPage').then((m) => ({ default: m.CreditReportsPage })))
 
+const PurchaseDashboardPage = lazy(() => import('../pages/purchasing/PurchaseDashboardPage').then((m) => ({ default: m.PurchaseDashboardPage })))
+const RequisitionsPage = lazy(() => import('../pages/purchasing/RequisitionsPage').then((m) => ({ default: m.RequisitionsPage })))
+const PurchaseOrdersPage = lazy(() => import('../pages/purchasing/PurchaseOrdersPage').then((m) => ({ default: m.PurchaseOrdersPage })))
+const PurchaseOrderDetailPage = lazy(() => import('../pages/purchasing/PurchaseOrderDetailPage').then((m) => ({ default: m.PurchaseOrderDetailPage })))
+const SupplierInvoicesPage = lazy(() => import('../pages/purchasing/SupplierInvoicesPage').then((m) => ({ default: m.SupplierInvoicesPage })))
+const PurchaseReturnsPage = lazy(() => import('../pages/purchasing/PurchaseReturnsPage').then((m) => ({ default: m.PurchaseReturnsPage })))
+const PurchaseReportsPage = lazy(() => import('../pages/purchasing/PurchaseReportsPage').then((m) => ({ default: m.PurchaseReportsPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -96,6 +104,13 @@ export const router = createBrowserRouter(
         { path: 'credit', element: withSuspense(<CreditDashboardPage />) },
         { path: 'credit/accounts', element: withSuspense(<CreditAccountsPage />) },
         { path: 'credit/reports', element: withSuspense(<CreditReportsPage />) },
+        { path: 'purchasing', element: withSuspense(<PurchaseDashboardPage />) },
+        { path: 'purchasing/requisitions', element: withSuspense(<RequisitionsPage />) },
+        { path: 'purchasing/orders', element: withSuspense(<PurchaseOrdersPage />) },
+        { path: 'purchasing/orders/:id', element: withSuspense(<PurchaseOrderDetailPage />) },
+        { path: 'purchasing/invoices', element: withSuspense(<SupplierInvoicesPage />) },
+        { path: 'purchasing/returns', element: withSuspense(<PurchaseReturnsPage />) },
+        { path: 'purchasing/reports', element: withSuspense(<PurchaseReportsPage />) },
       ],
     },
   ],

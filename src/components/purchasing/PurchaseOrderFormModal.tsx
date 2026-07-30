@@ -1,0 +1,126 @@
+import { useState } from 'react'
+import { Modal } from '../ui/Modal'
+import { Button } from '../ui/Button'
+import { ProductLineItemsEditor } from './ProductLineItemsEditor'
+import { formatCurrency } from '../../lib/format'
+import type { LineItemRow } from './ProductLineItemsEditor'
+import type { Product, Supplier } from '../../types/inventory'
+import type { PurchaseOrderInput } from '../../types/purchasing'
+
+interface PurchaseOrderFormModalProps {
+  suppliers: Supplier[]
+  products: Product[]
+  requisitionId?: string
+  initialRows?: LineItemRow[]
+  onClose: () => void
+  onSubmit: (input: PurchaseOrderInput) => Promise<void>
+  submitError?: string
+}
+
+export function PurchaseOrderFormModal({ suppliers, products, requisitionId, initialRows, onClose, onSubmit, submitError }: PurchaseOrderFormModalProps) {
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
+  const [rows, setRows] = useState<LineItemRow[]>(initialRows?.length ? initialRows : products[0] ? [{ productId: products[0].id, quantity: 1, unitCost: 0 }] : [])
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('')
+  const [notes, setNotes] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const total = rows.reduce((sum, r) => sum + r.quantity * (r.unitCost ?? 0), 0)
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true)
+    try {
+      await onSubmit({
+        supplierId,
+        requisitionId: requisitionId ?? null,
+        expectedDeliveryDate: expectedDeliveryDate || null,
+        notes,
+        items: rows
+          .filter((r) => r.productId)
+          .map((r) => {
+            const product = products.find((p) => p.id === r.productId)
+            return {
+              productId: r.productId,
+              productName: product?.name ?? '',
+              sku: product?.sku ?? '',
+              quantityOrdered: r.quantity,
+              quantityReceived: 0,
+              unitCost: r.unitCost ?? 0,
+            }
+          }),
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal title="New purchase order" onClose={onClose}>
+      <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+        <div>
+          <label htmlFor="po-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
+            Supplier
+          </label>
+          <select
+            id="po-supplier"
+            value={supplierId}
+            onChange={(e) => setSupplierId(e.target.value)}
+            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+          >
+            {suppliers.length === 0 && <option value="">No suppliers yet — add one under Inventory → Suppliers</option>}
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">Line items</label>
+          <ProductLineItemsEditor products={products} rows={rows} onChange={setRows} quantityLabel="Quantity ordered" />
+        </div>
+
+        <div>
+          <label htmlFor="po-delivery" className="mb-1.5 block text-sm font-medium text-ink-700">
+            Expected delivery date (optional)
+          </label>
+          <input
+            id="po-delivery"
+            type="date"
+            value={expectedDeliveryDate}
+            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="po-notes" className="mb-1.5 block text-sm font-medium text-ink-700">
+            Notes
+          </label>
+          <textarea
+            id="po-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+          />
+        </div>
+
+        <p className="rounded-md bg-ink-50 px-3 py-2 text-sm">
+          Order total: <span className="font-semibold text-ink-900">{formatCurrency(total, 'UGX')}</span>
+        </p>
+
+        {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={isSubmitting || suppliers.length === 0 || rows.length === 0}>
+            {isSubmitting ? 'Creating…' : 'Submit for approval'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}

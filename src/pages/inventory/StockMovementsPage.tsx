@@ -12,6 +12,7 @@ import type { StockMovementType } from '../../types/inventory'
 const TYPE_TONE: Record<StockMovementType, 'success' | 'warning' | 'info' | 'neutral' | 'danger'> = {
   opening: 'neutral',
   purchase: 'info',
+  purchase_return: 'warning',
   sale: 'success',
   adjustment: 'warning',
   transfer: 'info',

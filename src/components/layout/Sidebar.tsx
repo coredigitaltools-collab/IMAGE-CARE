@@ -42,7 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Credit', icon: CreditCard, to: '/credit' },
   { label: 'Loyalty Programme', icon: Award },
   { label: 'Invoices', icon: FileText },
-  { label: 'Purchase Orders', icon: ClipboardList },
+  { label: 'Purchasing', icon: ClipboardList, to: '/purchasing' },
   { label: 'Bills & Payables', icon: Receipt },
   { label: 'Payroll', icon: Wallet },
   { label: 'Expenses', icon: FileMinus },

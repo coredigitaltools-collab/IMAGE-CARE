@@ -199,6 +199,20 @@ Every element here was held to one standard: does it answer a real question an o
 - **Role-based permissions**: added a `manage_credit` permission to the existing Permission Matrix (Owner/Manager/Accountant: yes by default, Cashier: no) — structurally complete, though full UI-level gating is limited by the same stub authentication noted elsewhere in this README (there's currently one hardcoded "Owner" user, not a real multi-user login system).
 - **Not built in this pass, flagged honestly:** Customer Statements (printable running-balance documents) and Notifications integration (overdue-account alerts in the existing bell-icon Notification Center) were in scope for a complete module but weren't completed here — the core accounting (limits, sales, payments, write-offs, aging) was prioritized as the part that had to be correct.
 
+## Purchasing & Procurement (IMC-SRS-007) — the full requisition-to-payment workflow
+
+Follows the spec's exact workflow: Supplier → Requisition → Purchase Order → Approval → Goods Receipt → Inventory Update → Invoice → Payment.
+
+- **"Receiving stock updates inventory automatically" is not a description, it's literally what happens.** `recordGoodsReceipt()` calls the exact same `stockService.recordMovement()` that every other stock change in the app goes through — same no-negative-stock guarantee, same permanent audit trail. Verified: created a PO for 10 units, approved it, received 6 (partial), confirmed stock went from 5→11 and the order correctly showed "Partially Received," then received the remaining 4, confirmed stock reached 15 and the order became fully "Received."
+- **The approval gate is real, not cosmetic.** A purchase order cannot have goods received against it until it's been approved — verified by confirming the "Receive Goods" button is genuinely absent before approval and appears immediately after.
+- **Over-receiving is blocked.** Tried receiving 999 units against an order with far less remaining — correctly rejected with a clear message, validated at the service layer (not just an HTML `max` attribute that a user could bypass).
+- **"Suppliers from Supplier Master only" / "Products from Product Master only"** — every dropdown in every Purchasing form (Requisitions, Purchase Orders, Goods Receipt, Returns, Invoices) pulls live from the existing Supplier and Product Master; nothing is free-text entry of either.
+- **Requisitions convert cleanly into Purchase Orders** — approved a requisition, converted it, confirmed it's correctly marked "Converted to PO" and the resulting order carries the right line items.
+- **Supplier Invoices support partial payments** — recorded a 100,000 UGX invoice, paid 40,000, confirmed it correctly shows "partially paid" rather than snapping straight to paid or unpaid.
+- **Purchase Returns reduce stock immediately** (with a mandatory reason) — verified stock dropped by exactly the returned quantity.
+- **A reusable `ProductLineItemsEditor`** component is shared across all four forms that need "pick a real product and a quantity" (Requisition, PO, Goods Receipt, Return) rather than four separate implementations.
+- **Not built in this pass, said plainly:** Purchase Reports currently covers spend-by-supplier only, not a fuller reporting suite; and — consistent with the same limitation noted under Credit Management — the Approval Workflow is a single-step approve/reject rather than a multi-tier workflow, since the app currently has one hardcoded "Owner" user rather than real multi-user authentication.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

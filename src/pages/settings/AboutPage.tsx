@@ -3,10 +3,13 @@ import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
 
-const IMPLEMENTED = ['Dashboard (IMP-001)', 'Settings (IMP-002)', 'Inventory (IMP-003)', 'Sales & POS (IMP-004)', 'CRM (IMP-005)', 'Credit Management (IMC-SRS-006)']
+const IMPLEMENTED = [
+  'Dashboard (IMP-001)', 'Settings (IMP-002)', 'Inventory (IMP-003)', 'Sales & POS (IMP-004)',
+  'CRM (IMP-005)', 'Credit Management (IMC-SRS-006)', 'Purchasing & Procurement (IMC-SRS-007)',
+]
 const PLANNED = [
   'Loyalty Programme', 'Invoices',
-  'Purchase Orders', 'Bills & Payables', 'Payroll', 'Expenses', 'Sales Targets',
+  'Bills & Payables', 'Payroll', 'Expenses', 'Sales Targets',
   'Stock Summary', 'Cash Flow', 'Monthly Summary', 'Annual Summary',
   'Daily Summary', 'Bank Reconciliation', 'Branch Overview', 'Offline',
 ]

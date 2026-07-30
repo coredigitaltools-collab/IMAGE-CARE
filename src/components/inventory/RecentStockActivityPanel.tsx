@@ -10,6 +10,7 @@ import type { Product, StockMovement, StockMovementType } from '../../types/inve
 const TYPE_TONE: Record<StockMovementType, 'success' | 'warning' | 'info' | 'neutral'> = {
   opening: 'neutral',
   purchase: 'info',
+  purchase_return: 'warning',
   sale: 'success',
   adjustment: 'warning',
   transfer: 'info',
