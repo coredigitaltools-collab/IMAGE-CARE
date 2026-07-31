@@ -1,11 +1,33 @@
 import { getSingleton, setSingleton, enqueueSync } from '../lib/localStore'
 import { seedPermissionMatrix } from '../data/settingsSeed'
+import { listRoles } from './roleService'
+import { OWNER_ROLE_ID, PERMISSIONS } from '../types/settings'
 import type { Permission, PermissionMatrix, StaffRole } from '../types/settings'
 
 const KEY = 'settings:permission-matrix'
 
+function emptyPermissionRow(): Record<Permission, boolean> {
+  return Object.fromEntries(PERMISSIONS.map((p) => [p, false])) as Record<Permission, boolean>
+}
+
+/** Self-healing: any role that exists in the role catalogue but doesn't
+ *  have a matrix entry yet (because it was added after the matrix was
+ *  last saved) gets a safe, all-false starting row here rather than
+ *  crashing the Permission Matrix table or silently granting nothing
+ *  through a missing lookup. */
 export async function getPermissionMatrix(): Promise<PermissionMatrix> {
-  return getSingleton(KEY, seedPermissionMatrix)
+  const [stored, roles] = await Promise.all([getSingleton(KEY, seedPermissionMatrix), listRoles()])
+  let healed = false
+  const next: PermissionMatrix = { ...stored }
+  for (const role of roles) {
+    if (!role.is_active) continue
+    if (!next[role.id]) {
+      next[role.id] = emptyPermissionRow()
+      healed = true
+    }
+  }
+  if (healed) await setSingleton(KEY, next)
+  return next
 }
 
 export class OwnerPermissionsLockedError extends Error {
@@ -21,7 +43,7 @@ export async function setPermission(
   granted: boolean,
   _userId: string,
 ): Promise<PermissionMatrix> {
-  if (role === 'owner') throw new OwnerPermissionsLockedError()
+  if (role === OWNER_ROLE_ID) throw new OwnerPermissionsLockedError()
   const matrix = await getPermissionMatrix()
   const next: PermissionMatrix = {
     ...matrix,

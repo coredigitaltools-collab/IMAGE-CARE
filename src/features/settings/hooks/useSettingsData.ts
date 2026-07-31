@@ -15,6 +15,7 @@ import {
   updateStaff,
 } from '../../../services/staffService'
 import { getPermissionMatrix, setPermission } from '../../../services/permissionsService'
+import { listRoles, createRole, renameRole, archiveRole } from '../../../services/roleService'
 import { createTaxRate, listTaxRates, updateTaxRate } from '../../../services/taxSettingsService'
 import {
   getAppearanceSettings,
@@ -37,7 +38,7 @@ import {
   restoreBackup,
   runSync,
 } from '../../../services/backupSyncService'
-import type { BranchInput, BusinessProfileInput, Permission, StaffInput, StaffRole, TaxRateInput } from '../../../types/settings'
+import type { BranchInput, BusinessProfileInput, Permission, RoleDefinitionInput, StaffInput, StaffRole, TaxRateInput } from '../../../types/settings'
 
 // ---------- Business Profile ----------
 
@@ -123,6 +124,42 @@ export function useReactivateStaff(userId: string) {
 
 export function useResetStaffPassword() {
   return useMutation({ mutationFn: (id: string) => resetStaffPassword(id) })
+}
+
+// ---------- Roles ----------
+
+export function useRoles() {
+  return useQuery({ queryKey: ['settings', 'roles'], queryFn: listRoles })
+}
+
+export function useCreateRole(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: RoleDefinitionInput) => createRole(input, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings', 'roles'] })
+      qc.invalidateQueries({ queryKey: ['settings', 'permission-matrix'] })
+    },
+  })
+}
+
+export function useRenameRole(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => renameRole(id, name, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'roles'] }),
+  })
+}
+
+export function useArchiveRole(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => archiveRole(id, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings', 'roles'] })
+      qc.invalidateQueries({ queryKey: ['settings', 'permission-matrix'] })
+    },
+  })
 }
 
 // ---------- Permissions ----------

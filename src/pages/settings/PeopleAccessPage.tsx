@@ -10,18 +10,22 @@ import { PermissionMatrixTable } from '../../components/settings/PermissionMatri
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import {
+  useArchiveRole,
   useBranches,
+  useCreateRole,
   useCreateStaff,
   useDisableStaff,
   usePermissionMatrix,
   useReactivateStaff,
   useResetStaffPassword,
+  useRoles,
   useSetPermission,
   useStaff,
   useUpdateStaff,
 } from '../../features/settings/hooks/useSettingsData'
 import type { StaffInput, StaffMember } from '../../types/settings'
 import { DuplicateUsernameError, LastActiveOwnerError } from '../../services/staffService'
+import { DuplicateRoleNameError, OwnerRoleProtectedError, RoleInUseError } from '../../services/roleService'
 
 export function PeopleAccessPage() {
   const { user } = useAuth()
@@ -29,6 +33,7 @@ export function PeopleAccessPage() {
 
   const staffQuery = useStaff()
   const branchesQuery = useBranches()
+  const rolesQuery = useRoles()
   const permissionMatrixQuery = usePermissionMatrix()
 
   const createStaff = useCreateStaff(user.id)
@@ -37,6 +42,12 @@ export function PeopleAccessPage() {
   const reactivateStaff = useReactivateStaff(user.id)
   const resetPassword = useResetStaffPassword()
   const setPermission = useSetPermission(user.id)
+  const createRole = useCreateRole(user.id)
+  const archiveRole = useArchiveRole(user.id)
+
+  const roles = rolesQuery.data ?? []
+  const activeRoles = roles.filter((r) => r.is_active)
+  const roleName = (roleId: string) => roles.find((r) => r.id === roleId)?.name ?? 'Unknown role'
 
   const [modalState, setModalState] = useState<{ mode: 'create' } | { mode: 'edit'; staff: StaffMember } | null>(null)
   const [formError, setFormError] = useState<string | undefined>()
@@ -77,6 +88,27 @@ export function PeopleAccessPage() {
     showToast(`Temporary password for ${member.fullName}: ${result.temporaryPassword}`)
   }
 
+  const handleAddRole = async () => {
+    const name = window.prompt('New role name (e.g. Social Media Manager, Warehouse Assistant)')
+    if (!name?.trim()) return
+    try {
+      await createRole.mutateAsync({ name })
+      showToast('Role added — set its permissions below.', 'success')
+    } catch (err) {
+      showToast(err instanceof DuplicateRoleNameError ? err.message : 'Could not create this role.')
+    }
+  }
+
+  const handleArchiveRole = async (role: { id: string; name: string }) => {
+    if (!window.confirm(`Remove the "${role.name}" role?`)) return
+    try {
+      await archiveRole.mutateAsync(role.id)
+      showToast('Role removed.', 'success')
+    } catch (err) {
+      showToast(err instanceof OwnerRoleProtectedError || err instanceof RoleInUseError ? err.message : 'Could not remove this role.')
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <SettingsPageHeader
@@ -104,7 +136,7 @@ export function PeopleAccessPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium text-ink-900">{member.fullName}</p>
-                    <RoleBadge role={member.role} />
+                    <RoleBadge roleId={member.role} roleName={roleName(member.role)} />
                     {!member.is_active && (
                       <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">Disabled</span>
                     )}
@@ -153,12 +185,15 @@ export function PeopleAccessPage() {
         <p className="mb-4 text-xs text-ink-500">
           Owners always have unrestricted access. Changes apply immediately.
         </p>
-        {permissionMatrixQuery.isLoading ? (
+        {permissionMatrixQuery.isLoading || rolesQuery.isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : permissionMatrixQuery.data ? (
           <PermissionMatrixTable
             matrix={permissionMatrixQuery.data}
+            roles={activeRoles}
             onChange={(role, permission, granted) => setPermission.mutate({ role, permission, granted })}
+            onAddRole={handleAddRole}
+            onArchiveRole={handleArchiveRole}
             disabled={setPermission.isPending}
           />
         ) : null}
@@ -167,6 +202,8 @@ export function PeopleAccessPage() {
       {modalState && (
         <StaffFormModal
           branches={branches}
+          roles={activeRoles}
+          userId={user.id}
           initial={modalState.mode === 'edit' ? modalState.staff : undefined}
           onClose={() => {
             setModalState(null)

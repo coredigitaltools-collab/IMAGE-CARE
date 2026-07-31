@@ -3,26 +3,29 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from './FormField'
+import { RoleQuickSelect } from './RoleQuickSelect'
 import { Button } from '../ui/Button'
-import { STAFF_ROLES, STAFF_ROLE_LABELS, type BranchRecord, type StaffInput, type StaffMember } from '../../types/settings'
+import type { BranchRecord, RoleDefinition, StaffInput, StaffMember } from '../../types/settings'
 
 const schema = z.object({
   fullName: z.string().trim().min(1, 'Full name is required.'),
   username: z.string().trim().min(3, 'Username must be at least 3 characters.'),
   email: z.string().trim().email('Enter a valid email address.'),
-  role: z.enum(['owner', 'manager', 'cashier', 'accountant']),
+  role: z.string().min(1, 'Select a role.'),
   branchIds: z.array(z.string()).min(1, 'Assign at least one branch.'),
 })
 
 interface StaffFormModalProps {
   branches: BranchRecord[]
+  roles: RoleDefinition[]
+  userId: string
   initial?: StaffMember
   onClose: () => void
   onSubmit: (input: StaffInput) => Promise<void>
   submitError?: string
 }
 
-export function StaffFormModal({ branches, initial, onClose, onSubmit, submitError }: StaffFormModalProps) {
+export function StaffFormModal({ branches, roles, userId, initial, onClose, onSubmit, submitError }: StaffFormModalProps) {
   const {
     register,
     handleSubmit,
@@ -39,10 +42,11 @@ export function StaffFormModal({ branches, initial, onClose, onSubmit, submitErr
           role: initial.role,
           branchIds: initial.branchIds,
         }
-      : { fullName: '', username: '', email: '', role: 'cashier', branchIds: [] },
+      : { fullName: '', username: '', email: '', role: roles.find((r) => r.id !== 'owner')?.id ?? roles[0]?.id ?? '', branchIds: [] },
   })
 
   const selectedBranchIds = watch('branchIds')
+  const selectedRole = watch('role')
 
   const toggleBranch = (id: string) => {
     const next = selectedBranchIds.includes(id)
@@ -58,22 +62,14 @@ export function StaffFormModal({ branches, initial, onClose, onSubmit, submitErr
         <FormField label="Username" {...register('username')} error={errors.username?.message} />
         <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
 
-        <div>
-          <label htmlFor="role" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Role
-          </label>
-          <select
-            id="role"
-            {...register('role')}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-          >
-            {STAFF_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {STAFF_ROLE_LABELS[r]}
-              </option>
-            ))}
-          </select>
-        </div>
+        <RoleQuickSelect
+          id="role"
+          roles={roles}
+          value={selectedRole}
+          onChange={(roleId) => setValue('role', roleId, { shouldValidate: true, shouldDirty: true })}
+          userId={userId}
+          error={errors.role?.message}
+        />
 
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink-700">Assigned branches</p>

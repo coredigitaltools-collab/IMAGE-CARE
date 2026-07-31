@@ -1,4 +1,5 @@
 import { stampNew } from '../lib/audit'
+import { OWNER_ROLE_ID } from '../types/settings'
 import type {
   AppearanceSettings,
   BranchRecord,
@@ -7,6 +8,7 @@ import type {
   NotificationSettings,
   PermissionMatrix,
   ReceiptSettings,
+  RoleDefinition,
   SalesSettingsConfig,
   StaffMember,
   TaxRate,
@@ -46,6 +48,21 @@ export function seedStaff(branches: BranchRecord[]): StaffMember[] {
       role: 'owner',
       branchIds: allBranchIds,
     },
+  ]
+}
+
+// The starting role catalogue — Owner's id is fixed (everything from
+// permissions to staff.role='owner' depends on that exact id being
+// stable). Manager/Cashier/Accountant are just the starting examples,
+// no different from any role added later — a business can rename or
+// archive them, and add "Social Media Manager" or anything else right
+// alongside them.
+export function seedRoles(): RoleDefinition[] {
+  return [
+    { ...stampNew(SEED_USER), id: OWNER_ROLE_ID, name: 'Owner' },
+    { ...stampNew(SEED_USER), id: 'manager', name: 'Manager' },
+    { ...stampNew(SEED_USER), id: 'cashier', name: 'Cashier' },
+    { ...stampNew(SEED_USER), id: 'accountant', name: 'Accountant' },
   ]
 }
 

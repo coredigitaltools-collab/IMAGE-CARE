@@ -278,6 +278,17 @@ A mandatory correction applied before continuing finance modules, requiring ever
   - **Settings** now has a genuine, configurable rule: an auto-approval threshold. Expenses at or below it skip manual approval entirely when submitted; set it to 0 and every expense requires approval with no exceptions. Verified both sides directly: a 15,000 UGX expense against a 20,000 threshold auto-approved on submit, while a 50,000 UGX expense against the same threshold correctly still required manual approval.
   - **Notifications** now surfaces expenses awaiting approval in the same bell-icon Notification Center that already shows low-stock alerts — same pattern, same place, not a separate system. Verified the unread count and the listed item both appeared correctly for a real pending expense.
 
+## Open Staff Roles — fixing a real limitation, not a cosmetic tweak
+
+The "Add staff member" Role field was a hardcoded 4-item list (Owner/Manager/Cashier/Accountant), reported directly by the business: not every staff member fits those categories — a social media person, a warehouse assistant, a delivery rider, none of them had anywhere to go.
+
+- **The fix isn't a free-text box bolted onto the form** — that would have disconnected "role" from the Permission Matrix, which is what actually controls what someone can do in the app. Instead, roles are now a real, business-defined catalogue (`RoleDefinition`), the same open-ended pattern already used for product categories, expense categories, and pay components elsewhere in this app — never a hardcoded set.
+- **"+ Add new role…" is available right in the Role dropdown** when adding or editing staff — type a name, confirm, and it's created and selected immediately, no need to leave the form. New roles start with zero permissions until explicitly configured, a safe default rather than silently inheriting access from somewhere.
+- **The Permission Matrix now has a column for every role that exists**, not a fixed four — including an "+ Add role" control directly in the matrix, and a remove action on every non-Owner column.
+- **Owner stays exactly as protected as before**: locked icon, no editable checkboxes, can't be renamed or removed — verified directly, along with confirming a brand-new custom role can have permissions granted to it and that those permissions actually take effect.
+- **A real referential-integrity guard**, the same kind used for categories elsewhere: a role still assigned to an active staff member can't be removed until they're reassigned — verified by trying it and confirming both the block and the clear explanation shown.
+- **Self-healing by design**: if a role somehow exists without a Permission Matrix entry (e.g. added in one session, matrix read in another), the matrix fills in a safe all-false row automatically rather than crashing or silently failing — checked directly, not just assumed.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded — it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.
