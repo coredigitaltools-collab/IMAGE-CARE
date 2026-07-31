@@ -80,7 +80,7 @@ export async function getDashboardSummary(branchId: string, reportingCurrency: S
     // branch; Cash in Hand and outstanding credit are business-wide
     // (one till, one accounting engine), not tracked per branch.
     const todaysSalesUgx = todaysCompleted.reduce((sum, s) => sum + s.totalAmount, 0)
-    const todaysCogsUgx = todaysCompleted.reduce((sum, s) => sum + s.items.reduce((lineSum, i) => lineSum + i.unitCost * i.quantity, 0), 0)
+    const todaysCogsUgx = todaysCompleted.reduce((sum, s) => sum + s.items.reduce((lineSum, i) => lineSum + (i.unitCost ?? 0) * i.quantity, 0), 0)
     const grossProfitUgx = todaysSalesUgx - todaysCogsUgx
 
     const [cashBreakdown, allExpenses, creditKpis] = await Promise.all([

@@ -54,7 +54,12 @@ function isSameDay(iso: string, ref: Date): boolean {
 }
 
 function computeCogs(sales: Sale[]): number {
-  return sales.reduce((sum, s) => sum + s.items.reduce((lineSum, i) => lineSum + i.unitCost * i.quantity, 0), 0)
+  // A sale created before unitCost was tracked has no cost saved on its
+  // line items — treat that as 0 rather than letting undefined * qty
+  // produce NaN and poison every figure derived from it (Gross Profit,
+  // Net Profit). This only affects historical data from before the fix;
+  // every sale going forward always has a real cost snapshot.
+  return sales.reduce((sum, s) => sum + s.items.reduce((lineSum, i) => lineSum + (i.unitCost ?? 0) * i.quantity, 0), 0)
 }
 
 /** "Sales = Sum(Selling Price × Quantity Sold), COGS = Sum(Buying Price
