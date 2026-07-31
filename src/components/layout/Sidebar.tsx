@@ -44,7 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Invoices', icon: FileText, to: '/invoices' },
   { label: 'Purchasing', icon: ClipboardList, to: '/purchasing' },
   { label: 'Bills & Payables', icon: Receipt, to: '/bills' },
-  { label: 'Payroll', icon: Wallet },
+  { label: 'Payroll', icon: Wallet, to: '/payroll' },
   { label: 'Expenses', icon: FileMinus },
   { label: 'Sales Targets', icon: BarChart3 },
   { label: 'Stock Summary', icon: Package },

@@ -7,9 +7,10 @@ const IMPLEMENTED = [
   'Dashboard (IMP-001)', 'Settings (IMP-002)', 'Inventory (IMP-003)', 'Sales & POS (IMP-004)',
   'CRM (IMP-005)', 'Credit Management (IMC-SRS-006)', 'Purchasing & Procurement (IMC-SRS-007)',
   'Loyalty Programme (IMC-SRS-008)', 'Invoices (IMC-SRS-009)', 'Bills & Payables (IMC-SRS-010)',
+  'Payroll (IMC-SRS-011)',
 ]
 const PLANNED = [
-  'Payroll', 'Expenses', 'Sales Targets',
+  'Expenses', 'Sales Targets',
   'Stock Summary', 'Cash Flow', 'Monthly Summary', 'Annual Summary',
   'Daily Summary', 'Bank Reconciliation', 'Branch Overview', 'Offline',
 ]

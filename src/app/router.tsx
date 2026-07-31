@@ -67,6 +67,13 @@ const BillDetailPage = lazy(() => import('../pages/bills/BillDetailPage').then((
 const BillsReportsPage = lazy(() => import('../pages/bills/BillsReportsPage').then((m) => ({ default: m.BillsReportsPage })))
 const BillsSettingsPage = lazy(() => import('../pages/bills/BillsSettingsPage').then((m) => ({ default: m.BillsSettingsPage })))
 
+const PayrollDashboardPage = lazy(() => import('../pages/payroll/PayrollDashboardPage').then((m) => ({ default: m.PayrollDashboardPage })))
+const PayrollEmployeesPage = lazy(() => import('../pages/payroll/PayrollEmployeesPage').then((m) => ({ default: m.PayrollEmployeesPage })))
+const PayComponentsPage = lazy(() => import('../pages/payroll/PayComponentsPage').then((m) => ({ default: m.PayComponentsPage })))
+const PayrollPeriodsPage = lazy(() => import('../pages/payroll/PayrollPeriodsPage').then((m) => ({ default: m.PayrollPeriodsPage })))
+const PayrollPeriodDetailPage = lazy(() => import('../pages/payroll/PayrollPeriodDetailPage').then((m) => ({ default: m.PayrollPeriodDetailPage })))
+const PayrollReportsPage = lazy(() => import('../pages/payroll/PayrollReportsPage').then((m) => ({ default: m.PayrollReportsPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -142,6 +149,12 @@ export const router = createBrowserRouter(
         { path: 'bills/register', element: withSuspense(<PayablesRegisterPage />) },
         { path: 'bills/reports', element: withSuspense(<BillsReportsPage />) },
         { path: 'bills/settings', element: withSuspense(<BillsSettingsPage />) },
+        { path: 'payroll', element: withSuspense(<PayrollDashboardPage />) },
+        { path: 'payroll/employees', element: withSuspense(<PayrollEmployeesPage />) },
+        { path: 'payroll/components', element: withSuspense(<PayComponentsPage />) },
+        { path: 'payroll/periods', element: withSuspense(<PayrollPeriodsPage />) },
+        { path: 'payroll/periods/:id', element: withSuspense(<PayrollPeriodDetailPage />) },
+        { path: 'payroll/reports', element: withSuspense(<PayrollReportsPage />) },
         { path: 'bills/:id', element: withSuspense(<BillDetailPage />) },
         { path: 'invoices/:id', element: withSuspense(<InvoiceDetailPage />) },
       ],
