@@ -43,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Loyalty Programme', icon: Award, to: '/loyalty' },
   { label: 'Invoices', icon: FileText, to: '/invoices' },
   { label: 'Purchasing', icon: ClipboardList, to: '/purchasing' },
-  { label: 'Bills & Payables', icon: Receipt },
+  { label: 'Bills & Payables', icon: Receipt, to: '/bills' },
   { label: 'Payroll', icon: Wallet },
   { label: 'Expenses', icon: FileMinus },
   { label: 'Sales Targets', icon: BarChart3 },

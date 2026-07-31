@@ -61,6 +61,12 @@ const InvoiceDetailPage = lazy(() => import('../pages/invoices/InvoiceDetailPage
 const InvoiceReportsPage = lazy(() => import('../pages/invoices/InvoiceReportsPage').then((m) => ({ default: m.InvoiceReportsPage })))
 const InvoiceSettingsPage = lazy(() => import('../pages/invoices/InvoiceSettingsPage').then((m) => ({ default: m.InvoiceSettingsPage })))
 
+const BillsDashboardPage = lazy(() => import('../pages/bills/BillsDashboardPage').then((m) => ({ default: m.BillsDashboardPage })))
+const PayablesRegisterPage = lazy(() => import('../pages/bills/PayablesRegisterPage').then((m) => ({ default: m.PayablesRegisterPage })))
+const BillDetailPage = lazy(() => import('../pages/bills/BillDetailPage').then((m) => ({ default: m.BillDetailPage })))
+const BillsReportsPage = lazy(() => import('../pages/bills/BillsReportsPage').then((m) => ({ default: m.BillsReportsPage })))
+const BillsSettingsPage = lazy(() => import('../pages/bills/BillsSettingsPage').then((m) => ({ default: m.BillsSettingsPage })))
+
 function PageFallback() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -132,6 +138,11 @@ export const router = createBrowserRouter(
         { path: 'invoices/all', element: withSuspense(<InvoicesListPage />) },
         { path: 'invoices/reports', element: withSuspense(<InvoiceReportsPage />) },
         { path: 'invoices/settings', element: withSuspense(<InvoiceSettingsPage />) },
+        { path: 'bills', element: withSuspense(<BillsDashboardPage />) },
+        { path: 'bills/register', element: withSuspense(<PayablesRegisterPage />) },
+        { path: 'bills/reports', element: withSuspense(<BillsReportsPage />) },
+        { path: 'bills/settings', element: withSuspense(<BillsSettingsPage />) },
+        { path: 'bills/:id', element: withSuspense(<BillDetailPage />) },
         { path: 'invoices/:id', element: withSuspense(<InvoiceDetailPage />) },
       ],
     },

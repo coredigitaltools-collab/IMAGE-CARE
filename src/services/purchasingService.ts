@@ -287,6 +287,9 @@ export async function createSupplierInvoice(
     amountPaid: 0,
     dueDate: input.dueDate,
     status: 'unpaid',
+    cancelledAt: null,
+    cancelReason: null,
+    closedAt: null,
     createdAt: new Date().toISOString(),
     createdBy: userId,
   }
@@ -305,6 +308,9 @@ export async function recordInvoicePayment(supplierInvoiceId: string, amount: nu
   const invoices = await listSupplierInvoices()
   const invoice = invoices.find((i) => i.id === supplierInvoiceId)
   if (!invoice) throw new Error('Invoice not found.')
+  if (invoice.status === 'cancelled' || invoice.status === 'closed') {
+    throw new Error(`This bill is ${invoice.status} and can no longer accept payments.`)
+  }
   const owed = invoice.amount - invoice.amountPaid
   if (amount <= 0) throw new Error('Enter a payment amount greater than 0.')
   if (amount > owed) throw new PaymentExceedsInvoiceError()

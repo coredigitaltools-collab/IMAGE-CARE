@@ -22,7 +22,7 @@ import {
 import { PaymentExceedsInvoiceError } from '../../services/purchasingService'
 import type { SupplierInvoice } from '../../types/purchasing'
 
-const STATUS_TONE = { unpaid: 'danger', partially_paid: 'warning', paid: 'success' } as const
+const STATUS_TONE = { unpaid: 'danger', partially_paid: 'warning', paid: 'success', cancelled: 'neutral', closed: 'info' } as const
 
 export function SupplierInvoicesPage() {
   const { user } = useAuth()
@@ -81,7 +81,7 @@ export function SupplierInvoicesPage() {
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span className="text-sm font-semibold text-ink-900">{formatCurrency(inv.amount, 'UGX')}</span>
-                    {owed > 0 && (
+                    {owed > 0 && inv.status !== 'cancelled' && inv.status !== 'closed' && (
                       <Button
                         variant="secondary"
                         onClick={() => {

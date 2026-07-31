@@ -86,7 +86,7 @@ export interface GoodsReceipt {
   notes: string
 }
 
-export type SupplierInvoiceStatus = 'unpaid' | 'partially_paid' | 'paid'
+export type SupplierInvoiceStatus = 'unpaid' | 'partially_paid' | 'paid' | 'cancelled' | 'closed'
 
 export interface SupplierInvoice {
   id: string
@@ -98,6 +98,9 @@ export interface SupplierInvoice {
   amountPaid: number
   dueDate: string | null
   status: SupplierInvoiceStatus
+  cancelledAt: string | null
+  cancelReason: string | null
+  closedAt: string | null
   createdAt: string
   createdBy: string
 }
