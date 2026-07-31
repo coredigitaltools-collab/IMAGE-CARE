@@ -105,10 +105,12 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
     throw new CreditRequiresCustomerError()
   }
 
+  const costByProductId = new Map<string, number>()
   for (const item of input.items) {
     const product = await getProduct(item.productId)
     if (!product) throw new Error(`Product ${item.productName} no longer exists.`)
     assertSellable(product)
+    costByProductId.set(item.productId, product.buyingPrice)
   }
 
   const subtotal = input.items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
@@ -168,6 +170,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
       productName: i.productName,
       sku: i.sku,
       unitPrice: i.unitPrice,
+      unitCost: costByProductId.get(i.productId) ?? 0,
       quantity: i.quantity,
       lineTotal: i.unitPrice * i.quantity,
     })),

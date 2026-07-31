@@ -6,6 +6,14 @@ import { Skeleton } from '../components/ui/Skeleton'
 // IMC-004 §6 requires lazy loading for large pages — every route below is
 // code-split so the initial bundle only includes what the first screen needs.
 const DashboardPage = lazy(() => import('../pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
+const CashMovementsPage = lazy(() => import('../pages/accounting/CashMovementsPage').then((m) => ({ default: m.CashMovementsPage })))
+
+const ExpenseDashboardPage = lazy(() => import('../pages/expenses/ExpenseDashboardPage').then((m) => ({ default: m.ExpenseDashboardPage })))
+const ExpenseRegisterPage = lazy(() => import('../pages/expenses/ExpenseRegisterPage').then((m) => ({ default: m.ExpenseRegisterPage })))
+const ExpenseCategoriesPage = lazy(() => import('../pages/expenses/ExpenseCategoriesPage').then((m) => ({ default: m.ExpenseCategoriesPage })))
+const RecurringExpensesPage = lazy(() => import('../pages/expenses/RecurringExpensesPage').then((m) => ({ default: m.RecurringExpensesPage })))
+const ExpenseDetailPage = lazy(() => import('../pages/expenses/ExpenseDetailPage').then((m) => ({ default: m.ExpenseDetailPage })))
+const ExpenseReportsPage = lazy(() => import('../pages/expenses/ExpenseReportsPage').then((m) => ({ default: m.ExpenseReportsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -123,6 +131,13 @@ export const router = createBrowserRouter(
         { path: 'inventory/barcode', element: withSuspense(<BarcodeManagementPage />) },
         { path: 'inventory/reports', element: withSuspense(<InventoryReportsPage />) },
         { path: 'sales', element: withSuspense(<PointOfSalePage />) },
+        { path: 'cash-movements', element: withSuspense(<CashMovementsPage />) },
+        { path: 'expenses', element: withSuspense(<ExpenseDashboardPage />) },
+        { path: 'expenses/register', element: withSuspense(<ExpenseRegisterPage />) },
+        { path: 'expenses/categories', element: withSuspense(<ExpenseCategoriesPage />) },
+        { path: 'expenses/recurring', element: withSuspense(<RecurringExpensesPage />) },
+        { path: 'expenses/reports', element: withSuspense(<ExpenseReportsPage />) },
+        { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
         { path: 'customers/:id', element: withSuspense(<CustomerDetailPage />) },

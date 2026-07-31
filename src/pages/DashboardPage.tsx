@@ -40,9 +40,21 @@ export function DashboardPage() {
   const lowStockQuery = useLowStockItems(selectedBranchId)
   const recentSalesQuery = useRecentSales(selectedBranchId)
 
-  const handleQuickAction = (target: 'sale' | 'purchase' | 'expense' | 'reports') => {
+  const handleQuickAction = (target: 'sale' | 'purchase' | 'expense' | 'reports' | 'cash') => {
     if (target === 'sale') {
       navigate('/sales')
+      return
+    }
+    if (target === 'purchase') {
+      navigate('/purchasing')
+      return
+    }
+    if (target === 'cash') {
+      navigate('/cash-movements')
+      return
+    }
+    if (target === 'expense') {
+      navigate('/expenses')
       return
     }
     showToast(`${MODULE_LABELS[target]} isn't built yet — coming in a future implementation pack.`)

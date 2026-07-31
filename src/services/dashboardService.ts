@@ -4,6 +4,9 @@ import { mockGetSyncStatus } from '../data/mockData'
 import { listSales } from './salesService'
 import { listCustomers } from './customerService'
 import { getLowStockReport } from './inventoryReportsService'
+import { getCashInHandBreakdown } from './accountingService'
+import { listExpenses } from './expenseService'
+import { getCreditDashboardKpis } from './creditService'
 import { convertFromUgx, type SupportedCurrency } from '../lib/currency'
 import type { DashboardSummary, LowStockItem, RecentSale, SyncStatus } from '../types/domain'
 
@@ -69,22 +72,39 @@ export async function getDashboardSummary(branchId: string, reportingCurrency: S
     const sales = await listSales()
     const scoped = branchId === 'all' ? sales : sales.filter((s) => s.branchId === branchId)
     const completed = scoped.filter((s) => s.status === 'completed')
+    const todaysCompleted = completed.filter((s) => isToday(s.createdAt))
 
-    const todaysSalesUgx = completed.filter((s) => isToday(s.createdAt)).reduce((sum, s) => sum + s.totalAmount, 0)
+    // "Sales = Sum(Selling Price × Quantity Sold), COGS = Sum(Buying
+    // Price × Quantity Sold), Gross Profit = Sales − COGS" — computed
+    // here from the branch-scoped set so the KPI respects the selected
+    // branch; Cash in Hand and outstanding credit are business-wide
+    // (one till, one accounting engine), not tracked per branch.
+    const todaysSalesUgx = todaysCompleted.reduce((sum, s) => sum + s.totalAmount, 0)
+    const todaysCogsUgx = todaysCompleted.reduce((sum, s) => sum + s.items.reduce((lineSum, i) => lineSum + i.unitCost * i.quantity, 0), 0)
+    const grossProfitUgx = todaysSalesUgx - todaysCogsUgx
 
-    // No Expenses module yet — honestly zero rather than fabricated.
-    const todaysExpensesUgx = 0
-
-    // "Cash available" placeholder: cumulative revenue actually collected
-    // (excludes credit sales, which are owed, not in hand) — a stand-in
-    // until a real Cash Flow / till-reconciliation module exists.
-    const cashAvailableUgx = completed.filter((s) => s.paymentMethod !== 'credit').reduce((sum, s) => sum + s.totalAmount, 0)
+    const [cashBreakdown, allExpenses, creditKpis] = await Promise.all([
+      getCashInHandBreakdown(),
+      listExpenses(),
+      getCreditDashboardKpis(),
+    ])
+    const todaysExpensesUgx = allExpenses
+      .filter((e) => e.status === 'paid' && isToday(e.paidAt ?? e.expenseDate))
+      .reduce((sum, e) => sum + e.amount, 0)
+    // Net Profit = Gross Profit − Operating Expenses (IMC Accounting
+    // Engine Correction). Never subtract COGS again here — it's already
+    // inside Gross Profit above.
+    const netProfitUgx = grossProfitUgx - todaysExpensesUgx
 
     return {
       branchId,
       todaysSales: convertFromUgx(todaysSalesUgx, reportingCurrency),
+      todaysCogs: convertFromUgx(todaysCogsUgx, reportingCurrency),
+      grossProfit: convertFromUgx(grossProfitUgx, reportingCurrency),
       todaysExpenses: convertFromUgx(todaysExpensesUgx, reportingCurrency),
-      cashAvailable: convertFromUgx(cashAvailableUgx, reportingCurrency),
+      netProfit: convertFromUgx(netProfitUgx, reportingCurrency),
+      cashInHand: convertFromUgx(cashBreakdown.cashInHandUgx, reportingCurrency),
+      outstandingCredit: convertFromUgx(creditKpis.totalOutstandingUgx, reportingCurrency),
       currency: reportingCurrency,
       asOf: new Date().toISOString(),
     }

@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Wallet, PackageX } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PackageX, Receipt, BadgeDollarSign, PiggyBank, CreditCard } from 'lucide-react'
 import { KpiCard } from './KpiCard'
 import { formatCurrency } from '../../lib/format'
 import type { DashboardSummary, LowStockItem } from '../../types/domain'
@@ -10,6 +10,9 @@ interface KpiGridProps {
   isLowStockLoading: boolean
 }
 
+// The 8 KPIs required by the shared Accounting Engine (IMC Accounting
+// Engine Correction v1.0) — every figure here reads from that one
+// engine, never a locally re-derived number.
 export function KpiGrid({ summary, lowStock, isSummaryLoading, isLowStockLoading }: KpiGridProps) {
   const currency = summary?.currency ?? 'KES'
   const lowStockCount = lowStock?.length ?? 0
@@ -24,6 +27,22 @@ export function KpiGrid({ summary, lowStock, isSummaryLoading, isLowStockLoading
         isLoading={isSummaryLoading}
       />
       <KpiCard
+        label="Today's COGS"
+        value={summary ? formatCurrency(summary.todaysCogs, currency) : '—'}
+        hint="Cost of goods sold"
+        icon={Receipt}
+        tone="neutral"
+        isLoading={isSummaryLoading}
+      />
+      <KpiCard
+        label="Gross profit"
+        value={summary ? formatCurrency(summary.grossProfit, currency) : '—'}
+        hint="Sales − COGS"
+        icon={BadgeDollarSign}
+        tone={summary && summary.grossProfit >= 0 ? 'success' : 'red'}
+        isLoading={isSummaryLoading}
+      />
+      <KpiCard
         label="Today's expenses"
         value={summary ? formatCurrency(summary.todaysExpenses, currency) : '—'}
         icon={TrendingDown}
@@ -31,10 +50,25 @@ export function KpiGrid({ summary, lowStock, isSummaryLoading, isLowStockLoading
         isLoading={isSummaryLoading}
       />
       <KpiCard
-        label="Cash available"
-        value={summary ? formatCurrency(summary.cashAvailable, currency) : '—'}
+        label="Net profit"
+        value={summary ? formatCurrency(summary.netProfit, currency) : '—'}
+        hint="Gross profit − expenses"
+        icon={PiggyBank}
+        tone={summary && summary.netProfit >= 0 ? 'success' : 'red'}
+        isLoading={isSummaryLoading}
+      />
+      <KpiCard
+        label="Cash in hand"
+        value={summary ? formatCurrency(summary.cashInHand, currency) : '—'}
         icon={Wallet}
         tone="success"
+        isLoading={isSummaryLoading}
+      />
+      <KpiCard
+        label="Outstanding credit"
+        value={summary ? formatCurrency(summary.outstandingCredit, currency) : '—'}
+        icon={CreditCard}
+        tone={summary && summary.outstandingCredit > 0 ? 'red' : 'neutral'}
         isLoading={isSummaryLoading}
       />
       <KpiCard

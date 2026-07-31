@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { ShoppingCart, Receipt, FileMinus, BarChart3 } from 'lucide-react'
+import { ShoppingCart, Receipt, FileMinus, BarChart3, Wallet } from 'lucide-react'
 
 interface QuickAction {
   label: string
@@ -8,7 +8,7 @@ interface QuickAction {
 }
 
 interface QuickActionsProps {
-  onNavigate: (target: 'sale' | 'purchase' | 'expense' | 'reports') => void
+  onNavigate: (target: 'sale' | 'purchase' | 'expense' | 'reports' | 'cash') => void
 }
 
 export function QuickActions({ onNavigate }: QuickActionsProps) {
@@ -16,11 +16,12 @@ export function QuickActions({ onNavigate }: QuickActionsProps) {
     { label: 'New sale', icon: ShoppingCart, onClick: () => onNavigate('sale') },
     { label: 'New purchase', icon: Receipt, onClick: () => onNavigate('purchase') },
     { label: 'Log expense', icon: FileMinus, onClick: () => onNavigate('expense') },
+    { label: 'Cash movement', icon: Wallet, onClick: () => onNavigate('cash') },
     { label: 'View reports', icon: BarChart3, onClick: () => onNavigate('reports') },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
       {actions.map(({ label, icon: Icon, onClick }) => (
         <button
           key={label}

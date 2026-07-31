@@ -103,6 +103,7 @@ export interface SaleLineItem {
   productName: string // snapshot — survives later product edits/archival
   sku: string
   unitPrice: number // snapshot of sellingPrice at time of sale, UGX
+  unitCost: number // snapshot of buyingPrice at time of sale, UGX — the basis for COGS (IMC Accounting Engine Correction)
   quantity: number
   lineTotal: number
 }

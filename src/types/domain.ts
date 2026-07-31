@@ -20,8 +20,12 @@ export interface AuthedUser {
 export interface DashboardSummary {
   branchId: string | 'all'
   todaysSales: number
+  todaysCogs: number
+  grossProfit: number
   todaysExpenses: number
-  cashAvailable: number
+  netProfit: number
+  cashInHand: number
+  outstandingCredit: number
   /** The currency these figures are expressed in (display/reporting currency — user-selectable). */
   currency: string
   asOf: string // ISO timestamp

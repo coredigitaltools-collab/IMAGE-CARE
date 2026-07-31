@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Purchasing', icon: ClipboardList, to: '/purchasing' },
   { label: 'Bills & Payables', icon: Receipt, to: '/bills' },
   { label: 'Payroll', icon: Wallet, to: '/payroll' },
-  { label: 'Expenses', icon: FileMinus },
+  { label: 'Expenses', icon: FileMinus, to: '/expenses' },
   { label: 'Sales Targets', icon: BarChart3 },
   { label: 'Stock Summary', icon: Package },
   { label: 'Cash Flow', icon: Landmark },
