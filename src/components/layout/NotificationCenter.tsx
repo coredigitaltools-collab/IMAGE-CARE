@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, AlertOctagon, PackageX, CheckCircle2 } from 'lucide-react'
+import { Bell, AlertOctagon, PackageX, CheckCircle2, FileMinus } from 'lucide-react'
 import { useLowStockReport, useOutOfStockReport } from '../../features/inventory/hooks/useInventoryData'
+import { useExpenses } from '../../features/expenses/hooks/useExpensesData'
 
 export function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false)
@@ -9,10 +10,12 @@ export function NotificationCenter() {
 
   const lowStockQuery = useLowStockReport()
   const outOfStockQuery = useOutOfStockReport()
+  const expensesQuery = useExpenses()
 
   const lowStock = lowStockQuery.data ?? []
   const outOfStock = outOfStockQuery.data ?? []
-  const totalAlerts = lowStock.length + outOfStock.length
+  const pendingExpenses = (expensesQuery.data ?? []).filter((e) => e.status === 'pending_approval')
+  const totalAlerts = lowStock.length + outOfStock.length + pendingExpenses.length
 
   return (
     <div className="relative" ref={containerRef}>
@@ -36,7 +39,7 @@ export function NotificationCenter() {
       {isOpen && (
         <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-md border border-ink-100 bg-white shadow-card-hover">
           <div className="border-b border-ink-100 px-4 py-3">
-            <p className="text-sm font-semibold text-ink-900">Inventory alerts</p>
+            <p className="text-sm font-semibold text-ink-900">Alerts</p>
           </div>
 
           <div className="max-h-80 overflow-y-auto">
@@ -47,6 +50,21 @@ export function NotificationCenter() {
               </div>
             ) : (
               <ul className="divide-y divide-ink-100">
+                {pendingExpenses.slice(0, 4).map((e) => (
+                  <li key={e.id}>
+                    <Link
+                      to={`/expenses/${e.id}`}
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-ink-50"
+                    >
+                      <FileMinus size={14} className="shrink-0 text-warning-500" />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-ink-900">{e.reference} · {e.categoryName}</p>
+                        <p className="text-xs text-ink-500">Awaiting approval</p>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
                 {outOfStock.slice(0, 4).map((p) => (
                   <li key={p.id}>
                     <Link
@@ -85,11 +103,11 @@ export function NotificationCenter() {
 
           {totalAlerts > 0 && (
             <Link
-              to="/inventory/reports"
+              to={lowStock.length + outOfStock.length > 0 ? '/inventory/reports' : '/expenses/register'}
               onClick={() => setIsOpen(false)}
               className="block border-t border-ink-100 px-4 py-2.5 text-center text-xs font-medium text-brand-blue-700 hover:bg-brand-blue-50"
             >
-              View all in Reports
+              View all
             </Link>
           )}
         </div>

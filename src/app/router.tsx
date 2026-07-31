@@ -14,6 +14,7 @@ const ExpenseCategoriesPage = lazy(() => import('../pages/expenses/ExpenseCatego
 const RecurringExpensesPage = lazy(() => import('../pages/expenses/RecurringExpensesPage').then((m) => ({ default: m.RecurringExpensesPage })))
 const ExpenseDetailPage = lazy(() => import('../pages/expenses/ExpenseDetailPage').then((m) => ({ default: m.ExpenseDetailPage })))
 const ExpenseReportsPage = lazy(() => import('../pages/expenses/ExpenseReportsPage').then((m) => ({ default: m.ExpenseReportsPage })))
+const ExpenseSettingsPage = lazy(() => import('../pages/expenses/ExpenseSettingsPage').then((m) => ({ default: m.ExpenseSettingsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -137,6 +138,7 @@ export const router = createBrowserRouter(
         { path: 'expenses/categories', element: withSuspense(<ExpenseCategoriesPage />) },
         { path: 'expenses/recurring', element: withSuspense(<RecurringExpensesPage />) },
         { path: 'expenses/reports', element: withSuspense(<ExpenseReportsPage />) },
+        { path: 'expenses/settings', element: withSuspense(<ExpenseSettingsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },

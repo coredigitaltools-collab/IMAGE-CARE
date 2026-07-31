@@ -1,10 +1,11 @@
-import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
+import { getCollection, setCollection, getSingleton, setSingleton, enqueueSync } from '../lib/localStore'
 import { stampNew, stampUpdated } from '../lib/audit'
 import type {
   Expense,
   ExpenseCategory,
   ExpenseCategoryInput,
   ExpenseInput,
+  ExpenseSettings,
   RecurringExpenseInput,
   RecurringExpenseTemplate,
 } from '../types/expenses'
@@ -12,6 +13,7 @@ import type {
 const CATEGORIES_KEY = 'expenses:categories'
 const EXPENSES_KEY = 'expenses:expenses'
 const RECURRING_KEY = 'expenses:recurring'
+const SETTINGS_KEY = 'expenses:settings'
 
 export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024 // 3MB — generous for a receipt photo, bounded so it doesn't bloat the offline cache
 
@@ -38,6 +40,20 @@ function generateReference(existing: { reference: string }[], prefix: string): s
   const numbers = existing.map((e) => Number(e.reference.replace(/\D/g, ''))).filter((n) => !Number.isNaN(n))
   const next = (numbers.length > 0 ? Math.max(...numbers) : 40000) + 1
   return `${prefix}-${next}`
+}
+
+function seedExpenseSettings(): ExpenseSettings {
+  return { autoApproveThresholdUgx: 0 }
+}
+
+export async function getExpenseSettings(): Promise<ExpenseSettings> {
+  return getSingleton(SETTINGS_KEY, seedExpenseSettings)
+}
+
+export async function saveExpenseSettings(input: ExpenseSettings): Promise<ExpenseSettings> {
+  await setSingleton(SETTINGS_KEY, input)
+  await enqueueSync({ entityType: 'expense_settings', entityId: 'singleton', operation: 'update' })
+  return input
 }
 
 // ---------- Categories ("Configurable categories" — nothing preset) ----------
@@ -117,6 +133,20 @@ export async function submitExpense(id: string, userId: string): Promise<Expense
   const expense = await getExpense(id)
   if (!expense) throw new Error('Expense not found.')
   if (expense.status !== 'draft') throw new InvalidExpenseTransitionError('Only a draft expense can be submitted for approval.')
+
+  const settings = await getExpenseSettings()
+  if (settings.autoApproveThresholdUgx > 0 && expense.amount <= settings.autoApproveThresholdUgx) {
+    return updateExpense(
+      id,
+      {
+        status: 'approved',
+        submittedAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString(),
+        approvedByName: 'Auto-approved (below threshold)',
+      },
+      userId,
+    )
+  }
   return updateExpense(id, { status: 'pending_approval', submittedAt: new Date().toISOString() }, userId)
 }
 

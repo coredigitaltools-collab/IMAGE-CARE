@@ -6,6 +6,7 @@ const TABS = [
   { to: '/expenses/categories', label: 'Categories' },
   { to: '/expenses/recurring', label: 'Recurring' },
   { to: '/expenses/reports', label: 'Reports' },
+  { to: '/expenses/settings', label: 'Settings' },
 ]
 
 export function ExpenseTabs() {

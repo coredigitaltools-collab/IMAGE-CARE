@@ -1,9 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as expenseService from '../../../services/expenseService'
-import type { ExpenseCategoryInput, ExpenseInput, RecurringExpenseInput } from '../../../types/expenses'
+import type { ExpenseCategoryInput, ExpenseInput, ExpenseSettings, RecurringExpenseInput } from '../../../types/expenses'
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['expenses'] })
+}
+
+// ---------- Settings ----------
+
+export function useExpenseSettings() {
+  return useQuery({ queryKey: ['expenses', 'settings'], queryFn: expenseService.getExpenseSettings })
+}
+
+export function useSaveExpenseSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ExpenseSettings) => expenseService.saveExpenseSettings(input),
+    onSuccess: () => invalidateAll(qc),
+  })
 }
 
 // ---------- Categories ----------

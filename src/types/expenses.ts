@@ -64,3 +64,10 @@ export interface RecurringExpenseTemplate extends AuditFields {
   nextDueDate: string
 }
 export type RecurringExpenseInput = Pick<RecurringExpenseTemplate, 'categoryId' | 'categoryName' | 'description' | 'amount' | 'frequency' | 'nextDueDate'>
+
+export interface ExpenseSettings {
+  // Expenses at or below this amount skip manual approval entirely when
+  // submitted — 0 means every expense requires approval, no exceptions.
+  // A real, configurable business rule, not a cosmetic setting.
+  autoApproveThresholdUgx: number
+}
