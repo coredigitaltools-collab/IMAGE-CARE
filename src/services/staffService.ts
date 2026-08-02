@@ -26,7 +26,7 @@ export async function listStaff(): Promise<StaffMember[]> {
   return withSingleFlight(`${KEY}:dependent-seed`, async () => {
     const recheck = await getCollection<StaffMember>(KEY, () => [])
     if (recheck.length > 0) return recheck
-    // Staff seeding depends on branches existing first — seed lazily.
+    // Staff seeding depends on branches existing first, seed lazily.
     const branches = await listBranches()
     const seeded = seedStaff(branches)
     await setCollection(KEY, seeded)
@@ -87,7 +87,7 @@ export async function disableStaff(id: string, userId: string): Promise<void> {
     if (activeOwners.length === 0) throw new LastActiveOwnerError()
   }
 
-  // Business rule: never permanently delete staff with transactions —
+  // Business rule: never permanently delete staff with transactions,
   // this disables (soft delete) rather than removing the record.
   const next = staff.map((s) => (s.id === id ? stampUpdated({ ...s, is_active: false }, userId) : s))
   await setCollection(KEY, next)
@@ -101,7 +101,7 @@ export async function reactivateStaff(id: string, userId: string): Promise<void>
   await enqueueSync({ entityType: 'staff', entityId: id, operation: 'update' })
 }
 
-/** Mock — real password reset requires Supabase Auth (not yet connected).
+/** Mock, real password reset requires Supabase Auth (not yet connected).
  *  Returns a temporary password so the flow is genuinely testable today;
  *  swap this for a Supabase Auth admin call once configured. */
 export async function resetStaffPassword(_id: string): Promise<{ temporaryPassword: string }> {

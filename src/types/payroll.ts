@@ -2,7 +2,7 @@ import type { AuditFields } from '../lib/audit'
 
 // ---------- Payroll (IMC-SRS-011) ----------
 // "Employees come from Staff Master" is implemented literally: a
-// PayrollEmployeeRecord references an existing StaffMember (staffId) —
+// PayrollEmployeeRecord references an existing StaffMember (staffId),
 // it adds compensation data (base salary, assigned allowances/
 // deductions), it never duplicates name/role/branch, which stay owned
 // by Staff Master (Settings → People & Access). Same pattern as Bills
@@ -15,7 +15,7 @@ export interface PayrollEmployeeRecord extends AuditFields {
 export type PayrollEmployeeInput = Pick<PayrollEmployeeRecord, 'staffId' | 'baseSalaryUgx'>
 
 // Allowance/Deduction TYPES are the business-defined catalogue ("No
-// hard coded payroll data") — e.g. "Transport Allowance," "NSSF,"
+// hard coded payroll data"), e.g. "Transport Allowance," "NSSF,"
 // "PAYE." Nothing here assumes a specific country's tax code or a
 // preset list; the business defines every one of these themselves.
 export interface PayComponentType extends AuditFields {

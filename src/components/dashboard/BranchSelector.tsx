@@ -8,7 +8,7 @@ interface BranchSelectorProps {
 }
 
 /** Business rule: branch users see their own branch unless authorized (IMP-001 §7).
- *  This component itself doesn't decide permissions — it only renders the
+ *  This component itself doesn't decide permissions, it only renders the
  *  branch list its caller passes in, which the caller (Dashboard page)
  *  restricts to `user.allowedBranchIds`. */
 export function BranchSelector({ branches, selectedBranchId, onChange }: BranchSelectorProps) {

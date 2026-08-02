@@ -14,7 +14,7 @@ interface RoleQuickSelectProps {
   error?: string
 }
 
-/** A role dropdown plus an always-available "+ Add new role" option — a
+/** A role dropdown plus an always-available "+ Add new role" option, a
  *  business is never limited to Owner/Manager/Cashier/Accountant. Typing
  *  a name and confirming creates a real role (the same catalogue the
  *  Permission Matrix reads from) and selects it immediately; its
@@ -85,7 +85,7 @@ export function RoleQuickSelect({ id, roles, value, onChange, userId, error }: R
           </button>
         </div>
         {createError && <p className="mt-1 text-xs text-brand-red-700">{createError}</p>}
-        <p className="mt-1 text-xs text-ink-500">New roles start with no permissions — set them in the Permission Matrix below.</p>
+        <p className="mt-1 text-xs text-ink-500">New roles start with no permissions, set them in the Permission Matrix below.</p>
       </div>
     )
   }

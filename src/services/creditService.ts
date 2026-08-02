@@ -8,7 +8,7 @@ const PAYMENTS_KEY = 'credit:payments'
 const WRITEOFFS_KEY = 'credit:writeoffs'
 const LIMIT_CHANGES_KEY = 'credit:limit-changes'
 
-// Standard payment terms — placeholder pending a configurable field in
+// Standard payment terms, placeholder pending a configurable field in
 // Sales Settings; documented here so it's the one place to change.
 export const CREDIT_TERMS_DAYS = 30
 
@@ -101,7 +101,7 @@ export async function listLimitChanges(customerId?: string): Promise<CreditLimit
   return customerId ? sorted.filter((c) => c.customerId === customerId) : sorted
 }
 
-/** The "approval" in "credit limits enforced through approvals" — this
+/** The "approval" in "credit limits enforced through approvals", this
  *  is the only way a customer's limit ever changes, and every change is
  *  logged permanently, including who approved it and what it was before. */
 export async function approveCreditLimit(customerId: string, newLimit: number, userId: string): Promise<Customer> {
@@ -128,7 +128,7 @@ export async function approveCreditLimit(customerId: string, newLimit: number, u
   return next.find((c) => c.id === customerId) as Customer
 }
 
-// Internal — used by recordPayment/writeOffBalance to adjust the balance
+// Internal, used by recordPayment/writeOffBalance to adjust the balance
 // without duplicating the audit-stamp/persist logic from customerService.
 async function setCustomerCreditBalance(customerId: string, newBalance: number, userId: string): Promise<void> {
   const customers = await listCustomers()
@@ -139,11 +139,11 @@ async function setCustomerCreditBalance(customerId: string, newBalance: number, 
 
 // ---------- Aging (Collections) ----------
 // Approximation, documented as such: a customer's "age" is the number of
-// days since their oldest still-outstanding credit sale — where "still
+// days since their oldest still-outstanding credit sale, where "still
 // outstanding" means it happened after their most recent payment (or all
 // credit sales, if they've never paid). This is a running-balance
 // approximation, not a full sub-ledger that matches specific payments to
-// specific invoices — reasonable for a single-branch small business,
+// specific invoices, reasonable for a single-branch small business,
 // worth revisiting if per-invoice payment allocation is ever needed.
 
 export interface CreditAccountRow {

@@ -51,7 +51,7 @@ export function RecurringExpensesPage() {
       <Card className="mb-4 p-5">
         <h2 className="mb-2 text-sm font-semibold text-ink-900">Generate due expenses</h2>
         <p className="mb-3 text-xs text-ink-500">
-          There's no background job in this offline-first app — generating due recurring expenses is a deliberate, logged action you run when you
+          There's no background job in this offline-first app, generating due recurring expenses is a deliberate, logged action you run when you
           want it.
         </p>
         <Button

@@ -29,7 +29,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? ''
 
   // Only categories that actually have a sellable product show up as a
-  // chip — an empty install shows just "All", nothing pre-populated.
+  // chip, an empty install shows just "All", nothing pre-populated.
   const categoriesWithProducts = useMemo(() => {
     const ids = new Set(sellable.map((p) => p.categoryId))
     return categories.filter((c) => ids.has(c.id))
@@ -48,7 +48,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
-    // Barcode scanners type the code then send Enter — if the current
+    // Barcode scanners type the code then send Enter, if the current
     // query is an exact barcode match, add it straight to the cart and
     // clear the field so the cashier can keep scanning without touching
     // the mouse (IMP-004 POS Workflow: "scan barcode").
@@ -110,7 +110,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
           <div className="col-span-full flex flex-col items-center justify-center gap-2 py-12 text-center">
             <Package size={22} className="text-ink-300" />
             <p className="text-sm font-medium text-ink-900">No products found</p>
-            <p className="max-w-xs text-xs text-ink-500">Add your first product to get started — it'll show up here right away.</p>
+            <p className="max-w-xs text-xs text-ink-500">Add your first product to get started, it'll show up here right away.</p>
           </div>
         ) : filtered.length === 0 ? (
           <p className="col-span-full py-8 text-center text-sm text-ink-500">

@@ -12,7 +12,7 @@ interface CustomerTimelineProps {
   notes: CustomerNote[]
 }
 
-/** The customer's complete business history in one chronological feed —
+/** The customer's complete business history in one chronological feed,
  *  every entry here is a real, already-recorded event (a completed sale,
  *  a logged note). Quotes/Invoices/loyalty-redemption events will appear
  *  here automatically once those modules exist and start writing real
@@ -39,7 +39,7 @@ export function CustomerTimeline({ sales, notes }: CustomerTimelineProps) {
               </span>
               <div className="min-w-0 flex-1 pt-1">
                 <p className="text-sm text-ink-900">
-                  Purchase <span className="font-medium">{event.sale.reference}</span> — {formatCurrency(event.sale.totalAmount, 'UGX')} via{' '}
+                  Purchase <span className="font-medium">{event.sale.reference}</span>, {formatCurrency(event.sale.totalAmount, 'UGX')} via{' '}
                   {PAYMENT_METHOD_LABELS[event.sale.paymentMethod]}
                   {event.sale.totalAmount >= 1000 && (
                     <span className="text-ink-500"> · +{Math.floor(event.sale.totalAmount / 1000)} loyalty pts</span>

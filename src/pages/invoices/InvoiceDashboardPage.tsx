@@ -82,35 +82,35 @@ export function InvoiceDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           label="Invoiced this month"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.invoicedThisMonthUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.invoicedThisMonthUgx, 'UGX') : '-'}
           icon={FileText}
           tone="blue"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Outstanding"
-          value={kpisQuery.data ? String(kpisQuery.data.outstandingCount) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.outstandingCount) : '-'}
           icon={Clock}
           tone={kpisQuery.data && kpisQuery.data.outstandingCount > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Outstanding amount"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.outstandingAmountUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.outstandingAmountUgx, 'UGX') : '-'}
           icon={Wallet}
           tone={kpisQuery.data && kpisQuery.data.outstandingAmountUgx > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Overdue"
-          value={kpisQuery.data ? String(kpisQuery.data.overdueCount) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.overdueCount) : '-'}
           icon={AlertTriangle}
           tone={kpisQuery.data && kpisQuery.data.overdueCount > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Paid this month"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.paidThisMonthUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.paidThisMonthUgx, 'UGX') : '-'}
           icon={CheckCircle2}
           tone="success"
           isLoading={kpisQuery.isLoading}

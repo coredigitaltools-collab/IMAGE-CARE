@@ -7,7 +7,7 @@ interface CurrencySelectorProps {
 }
 
 /** Lets the owner view Dashboard totals converted into any supported
- *  currency. This only affects display — the business's ledger figures
+ *  currency. This only affects display, the business's ledger figures
  *  stay in UGX underneath (see src/lib/currency.ts). */
 export function CurrencySelector({ selected, onChange }: CurrencySelectorProps) {
   return (

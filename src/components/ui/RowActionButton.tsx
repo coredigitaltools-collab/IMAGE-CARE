@@ -17,7 +17,7 @@ interface RowActionButtonProps {
 
 /** The standard action-icon pattern for every list row across the app
  *  (Products, Customers, Categories, Brands, Units, Suppliers, Staff,
- *  Branches, ...) — established once here so future modules reuse it
+ *  Branches, ...), established once here so future modules reuse it
  *  instead of inventing a new row-actions style each time. */
 export function RowActionButton({ icon: Icon, label, onClick, tone = 'default' }: RowActionButtonProps) {
   return (

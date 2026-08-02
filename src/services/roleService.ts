@@ -15,7 +15,7 @@ export class OwnerRoleProtectedError extends Error {
 }
 export class RoleInUseError extends Error {
   constructor(count: number) {
-    super(`This role is assigned to ${count} staff member${count === 1 ? '' : 's'} — reassign them first.`)
+    super(`This role is assigned to ${count} staff member${count === 1 ? '' : 's'}, reassign them first.`)
     this.name = 'RoleInUseError'
   }
 }
@@ -61,7 +61,7 @@ export async function renameRole(id: string, name: string, userId: string): Prom
 }
 
 /** Archiving (not deleting) is blocked outright for Owner, and blocked
- *  for any role currently assigned to an active staff member — the same
+ *  for any role currently assigned to an active staff member, the same
  *  referential-integrity guard used for categories elsewhere in this
  *  app, so nobody ends up with an orphaned, unresolvable role. */
 export async function archiveRole(id: string, userId: string): Promise<void> {

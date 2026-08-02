@@ -150,7 +150,7 @@ export function InventoryDashboardPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Inventory</h1>
           <p className="mt-0.5 text-sm text-ink-500">Product master, stock levels, and inventory reports.</p>
         </div>
-        {/* Only branch + currency controls live here — sync status is
+        {/* Only branch + currency controls live here, sync status is
             shown once, globally, in the app header (RootLayout). */}
         <div className="flex flex-wrap items-center gap-2">
           <BranchSelector branches={visibleBranches} selectedBranchId={selectedBranchId} onChange={setSelectedBranchId} />
@@ -179,7 +179,7 @@ export function InventoryDashboardPage() {
         </div>
       )}
 
-      {/* Quick actions — Add Product is the primary path into this page;
+      {/* Quick actions, Add Product is the primary path into this page;
           everything else is a secondary, lower-emphasis action. */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <button
@@ -216,7 +216,7 @@ export function InventoryDashboardPage() {
               Let's get your inventory started <Sparkles size={15} className="text-warning-500" />
             </p>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-500">
-              Add your first product to start tracking stock levels, valuation, and reorder alerts — it only takes a minute.
+              Add your first product to start tracking stock levels, valuation, and reorder alerts, it only takes a minute.
             </p>
           </div>
           <Button onClick={() => navigate('/inventory/products?new=1')}>
@@ -228,49 +228,49 @@ export function InventoryDashboardPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <KpiCard
               label="Total products"
-              value={kpisQuery.data ? String(kpisQuery.data.totalProducts) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.totalProducts) : '-'}
               icon={Package}
               tone="blue"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Inventory value"
-              value={kpisQuery.data ? formatCurrency(kpisQuery.data.inventoryValue, currency) : '—'}
+              value={kpisQuery.data ? formatCurrency(kpisQuery.data.inventoryValue, currency) : '-'}
               icon={Wallet}
               tone="success"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Potential profit"
-              value={kpisQuery.data ? formatCurrency(kpisQuery.data.potentialProfit, currency) : '—'}
+              value={kpisQuery.data ? formatCurrency(kpisQuery.data.potentialProfit, currency) : '-'}
               icon={TrendingUp}
               tone="success"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Low stock"
-              value={kpisQuery.data ? String(kpisQuery.data.lowStockCount) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.lowStockCount) : '-'}
               icon={AlertTriangle}
               tone={kpisQuery.data && kpisQuery.data.lowStockCount > 0 ? 'red' : 'neutral'}
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Out of stock"
-              value={kpisQuery.data ? String(kpisQuery.data.outOfStockCount) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.outOfStockCount) : '-'}
               icon={PackageX}
               tone={kpisQuery.data && kpisQuery.data.outOfStockCount > 0 ? 'red' : 'neutral'}
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Categories"
-              value={kpisQuery.data ? String(kpisQuery.data.categoriesCount) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.categoriesCount) : '-'}
               icon={Tags}
               tone="neutral"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Suppliers"
-              value={kpisQuery.data ? String(kpisQuery.data.suppliersCount) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.suppliersCount) : '-'}
               icon={Truck}
               tone="neutral"
               isLoading={kpisQuery.isLoading}

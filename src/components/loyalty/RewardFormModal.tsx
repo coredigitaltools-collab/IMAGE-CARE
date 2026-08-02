@@ -33,7 +33,7 @@ export function RewardFormModal({ initial, onClose, onSubmit }: RewardFormModalP
   return (
     <Modal title={initial ? 'Edit reward' : 'New reward'} onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <FormField label="Reward name" {...register('name')} error={errors.name?.message} placeholder="Your own reward — nothing preset" />
+        <FormField label="Reward name" {...register('name')} error={errors.name?.message} placeholder="Your own reward, nothing preset" />
         <div>
           <label htmlFor="rw-desc" className="mb-1.5 block text-sm font-medium text-ink-700">
             Description

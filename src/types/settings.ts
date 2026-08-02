@@ -2,14 +2,14 @@ import type { AuditFields } from '../lib/audit'
 
 // ---------- People & Access ----------
 
-// Roles are a business-defined catalogue, not a fixed list — a real
+// Roles are a business-defined catalogue, not a fixed list, a real
 // organization has far more positions than "Owner/Manager/Cashier/
 // Accountant" (social media, warehouse, delivery, whatever the business
 // actually runs). Owner is the one protected exception: it always has
 // unrestricted access and can't be renamed, deleted, or have its
 // permissions edited (IMP-002 business rule). Every other role is just
 // a RoleDefinition someone added, the same way product categories or
-// expense categories are added — never a hardcoded set.
+// expense categories are added, never a hardcoded set.
 export const OWNER_ROLE_ID = 'owner'
 
 export type StaffRole = string
@@ -29,7 +29,7 @@ export interface StaffMember extends AuditFields {
 
 export type StaffInput = Pick<StaffMember, 'fullName' | 'username' | 'email' | 'role' | 'branchIds'>
 
-// Permission Matrix — Owners are always fully permitted (IMP-002 business
+// Permission Matrix, Owners are always fully permitted (IMP-002 business
 // rule: "Only Owners have unrestricted access") and that row is not
 // editable. Other roles are configurable.
 export type Permission =

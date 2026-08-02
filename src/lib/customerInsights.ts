@@ -3,7 +3,7 @@ import type { PaymentMethod, Sale } from '../types/sales'
 
 export type LoyaltyTier = 'Bronze' | 'Silver' | 'Gold'
 
-/** Simple, transparent thresholds — recomputed from the live points
+/** Simple, transparent thresholds, recomputed from the live points
  *  balance every time, never stored, so it can never drift out of sync
  *  with reality. */
 export function getLoyaltyTier(loyaltyPoints: number): LoyaltyTier {
@@ -22,7 +22,7 @@ export interface CustomerInsights {
 }
 
 /** Every number here is computed from the customer's own completed
- *  sales — nothing pre-aggregated or cached, so it's always current the
+ *  sales, nothing pre-aggregated or cached, so it's always current the
  *  moment a new sale completes. */
 export function computeCustomerInsights(purchases: Sale[], products: Product[]): CustomerInsights {
   if (purchases.length === 0) {

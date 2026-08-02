@@ -93,7 +93,7 @@ export function PeopleAccessPage() {
     if (!name?.trim()) return
     try {
       await createRole.mutateAsync({ name })
-      showToast('Role added — set its permissions below.', 'success')
+      showToast('Role added, set its permissions below.', 'success')
     } catch (err) {
       showToast(err instanceof DuplicateRoleNameError ? err.message : 'Could not create this role.')
     }

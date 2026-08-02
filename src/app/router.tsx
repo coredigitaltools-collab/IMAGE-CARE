@@ -3,7 +3,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { RootLayout } from '../components/layout/RootLayout'
 import { Skeleton } from '../components/ui/Skeleton'
 
-// IMC-004 §6 requires lazy loading for large pages — every route below is
+// IMC-004 §6 requires lazy loading for large pages; every route below is
 // code-split so the initial bundle only includes what the first screen needs.
 const DashboardPage = lazy(() => import('../pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const CashMovementsPage = lazy(() => import('../pages/accounting/CashMovementsPage').then((m) => ({ default: m.CashMovementsPage })))
@@ -15,6 +15,12 @@ const RecurringExpensesPage = lazy(() => import('../pages/expenses/RecurringExpe
 const ExpenseDetailPage = lazy(() => import('../pages/expenses/ExpenseDetailPage').then((m) => ({ default: m.ExpenseDetailPage })))
 const ExpenseReportsPage = lazy(() => import('../pages/expenses/ExpenseReportsPage').then((m) => ({ default: m.ExpenseReportsPage })))
 const ExpenseSettingsPage = lazy(() => import('../pages/expenses/ExpenseSettingsPage').then((m) => ({ default: m.ExpenseSettingsPage })))
+
+const SalesTargetsDashboardPage = lazy(() => import('../pages/salesTargets/SalesTargetsDashboardPage').then((m) => ({ default: m.SalesTargetsDashboardPage })))
+const TargetsListPage = lazy(() => import('../pages/salesTargets/TargetsListPage').then((m) => ({ default: m.TargetsListPage })))
+const LeaderboardPage = lazy(() => import('../pages/salesTargets/LeaderboardPage').then((m) => ({ default: m.LeaderboardPage })))
+const TargetReportsPage = lazy(() => import('../pages/salesTargets/TargetReportsPage').then((m) => ({ default: m.TargetReportsPage })))
+const TargetSettingsPage = lazy(() => import('../pages/salesTargets/TargetSettingsPage').then((m) => ({ default: m.TargetSettingsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -97,7 +103,7 @@ function withSuspense(element: React.ReactNode) {
 }
 
 // IMP-001 (Dashboard) and IMP-002 (Settings) are implemented. Future
-// implementation packs (Inventory, Sales, ...) add routes here — the
+// implementation packs (Inventory, Sales, ...) add routes here; the
 // Sidebar already lists them as disabled entries per IMC-000's approved
 // scope.
 export const router = createBrowserRouter(
@@ -139,6 +145,11 @@ export const router = createBrowserRouter(
         { path: 'expenses/recurring', element: withSuspense(<RecurringExpensesPage />) },
         { path: 'expenses/reports', element: withSuspense(<ExpenseReportsPage />) },
         { path: 'expenses/settings', element: withSuspense(<ExpenseSettingsPage />) },
+        { path: 'sales-targets', element: withSuspense(<SalesTargetsDashboardPage />) },
+        { path: 'sales-targets/list', element: withSuspense(<TargetsListPage />) },
+        { path: 'sales-targets/leaderboard', element: withSuspense(<LeaderboardPage />) },
+        { path: 'sales-targets/reports', element: withSuspense(<TargetReportsPage />) },
+        { path: 'sales-targets/settings', element: withSuspense(<TargetSettingsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },

@@ -35,7 +35,7 @@ export function LoyaltyRewardsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Reward Catalogue</h1>
-          <p className="mt-0.5 text-sm text-ink-500">What customers can redeem their points for — entirely your own.</p>
+          <p className="mt-0.5 text-sm text-ink-500">What customers can redeem their points for, entirely your own.</p>
         </div>
         <Button onClick={() => setIsAddOpen(true)}>
           <Plus size={15} /> New reward

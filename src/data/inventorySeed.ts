@@ -3,7 +3,7 @@ import type { Brand, Category, Product, Supplier, UnitOfMeasure } from '../types
 
 const SEED_USER = 'system-seed'
 
-// This app is a template — it must not assume what kind of business is
+// This app is a template, it must not assume what kind of business is
 // using it. Categories, brands, suppliers, and products are therefore
 // NOT pre-populated with any industry's data; every business starts
 // with an empty catalogue and builds their own from Inventory → Add
@@ -19,7 +19,7 @@ export function seedBrands(): Brand[] {
 }
 
 // Units of measure are the one exception: "Piece", "Box", etc. aren't
-// specific to any industry — virtually every business that sells
+// specific to any industry, virtually every business that sells
 // physical goods needs at least one of these to create its first
 // product. Still fully editable/deletable in Settings → Units.
 export function seedUnits(): UnitOfMeasure[] {

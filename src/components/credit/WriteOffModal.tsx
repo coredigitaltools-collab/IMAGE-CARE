@@ -29,7 +29,7 @@ export function WriteOffModal({ customerName, outstandingBalance, onClose, onSub
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { amount: outstandingBalance, reason: '' } })
 
   return (
-    <Modal title={`Write off balance — ${customerName}`} onClose={onClose}>
+    <Modal title={`Write off balance, ${customerName}`} onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="flex items-start gap-2 rounded-md border border-warning-100 bg-warning-100/40 p-3">
           <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning-700" />

@@ -66,7 +66,7 @@ export function PurchaseOrderFormModal({ suppliers, products, requisitionId, ini
             onChange={(e) => setSupplierId(e.target.value)}
             className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
-            {suppliers.length === 0 && <option value="">No suppliers yet — add one under Inventory → Suppliers</option>}
+            {suppliers.length === 0 && <option value="">No suppliers yet, add one under Inventory → Suppliers</option>}
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}

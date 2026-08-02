@@ -60,7 +60,7 @@ export function PermissionMatrixTable({ matrix, roles, onChange, onAddRole, onAr
                     disabled={role.id === OWNER_ROLE_ID || disabled}
                     onChange={(e) => onChange(role.id, permission, e.target.checked)}
                     className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-                    aria-label={`${PERMISSION_LABELS[permission]} — ${role.name}`}
+                    aria-label={`${PERMISSION_LABELS[permission]}, ${role.name}`}
                   />
                 </td>
               ))}

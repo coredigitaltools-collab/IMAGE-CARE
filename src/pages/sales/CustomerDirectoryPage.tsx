@@ -27,7 +27,7 @@ export function CustomerDirectoryPage() {
 
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  // "Which customers owe me money right now?" — a real follow-up-on-
+  // "Which customers owe me money right now?", a real follow-up-on-
   // collections filter, not decoration.
   const [creditOnly, setCreditOnly] = useState(false)
   const [tagFilter, setTagFilter] = useState('all')

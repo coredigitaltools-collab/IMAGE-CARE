@@ -9,7 +9,7 @@ import { ReceiptModal } from '../../components/sales/ReceiptModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { useCategories, useProducts } from '../../features/inventory/hooks/useInventoryData'
-import { useTaxRates } from '../../features/settings/hooks/useSettingsData'
+import { useTaxRates, useStaff } from '../../features/settings/hooks/useSettingsData'
 import { useReceiptSettings, useSalesSettings } from '../../features/settings/hooks/useSettingsData'
 import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
 import {
@@ -58,6 +58,8 @@ export function PointOfSalePage() {
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [salesPersonId, setSalesPersonId] = useState<string | null>(null)
+  const staffQuery = useStaff()
   const [discountPercent, setDiscountPercent] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -117,6 +119,7 @@ export function PointOfSalePage() {
   const resetPOS = () => {
     setCart([])
     setSelectedCustomer(null)
+    setSalesPersonId(null)
     setDiscountPercent(0)
     setTaxRateId(defaultTaxRate?.id ?? null)
     setPaymentMethod('cash')
@@ -154,6 +157,7 @@ export function PointOfSalePage() {
     try {
       const sale = await checkout.mutateAsync({
         customerId: selectedCustomer?.id ?? null,
+        salesPersonId,
         items: cart,
         discountPercent,
         taxRateId,
@@ -172,6 +176,7 @@ export function PointOfSalePage() {
     try {
       await checkout.mutateAsync({
         customerId: selectedCustomer?.id ?? null,
+        salesPersonId,
         items: cart,
         discountPercent,
         taxRateId,
@@ -209,7 +214,7 @@ export function PointOfSalePage() {
     showToast('Parked sale resumed.', 'success')
   }
 
-  // Keyboard shortcuts for desktop cashiers — F2 search, F9 complete,
+  // Keyboard shortcuts for desktop cashiers: F2 search, F9 complete,
   // F10 park, Esc clears the cart. Ignored while a modal is open or the
   // shortcut would conflict with normal typing (only F-keys and Escape
   // are global; nothing here hijacks letter/number keys used in inputs).
@@ -265,6 +270,26 @@ export function PointOfSalePage() {
             onSelect={setSelectedCustomer}
             onAddNew={() => setIsCustomerModalOpen(true)}
           />
+          <div>
+            <label htmlFor="pos-sold-by" className="mb-1 block text-xs font-medium text-ink-500">
+              Sold by (optional)
+            </label>
+            <select
+              id="pos-sold-by"
+              value={salesPersonId ?? ''}
+              onChange={(e) => setSalesPersonId(e.target.value || null)}
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            >
+              <option value="">Unassigned</option>
+              {(staffQuery.data ?? [])
+                .filter((s) => s.is_active)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}
+                  </option>
+                ))}
+            </select>
+          </div>
           <div className="min-h-0 flex-1">
             <CartPanel
               items={cart}

@@ -65,7 +65,7 @@ export async function listAdjustments(): Promise<StockAdjustment[]> {
 
 /** IMP-003 §12: adjustments require a mandatory reason and are authorized.
  *  There's no multi-step approval workflow yet (no pending/approved
- *  states) — the acting user is recorded as both creator and authorizer,
+ *  states), the acting user is recorded as both creator and authorizer,
  *  which is honest about today's single-user-session reality while
  *  keeping the field structure ready for a real approval flow later. */
 export async function createAdjustment(input: StockAdjustmentInput, userId: string): Promise<StockAdjustment> {

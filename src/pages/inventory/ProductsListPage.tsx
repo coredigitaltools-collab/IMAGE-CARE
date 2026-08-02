@@ -49,7 +49,7 @@ export function ProductsListPage() {
   const [isAddOpen, setIsAddOpen] = useState(searchParams.get('new') === '1')
   const [formError, setFormError] = useState<string | undefined>()
 
-  const categoryName = (id: string) => categoriesQuery.data?.find((c) => c.id === id)?.name ?? '—'
+  const categoryName = (id: string) => categoriesQuery.data?.find((c) => c.id === id)?.name ?? '-'
 
   const filtered = useMemo(() => {
     const products = productsQuery.data ?? []
@@ -87,7 +87,7 @@ export function ProductsListPage() {
 
   const handleDuplicate = async (id: string) => {
     await duplicateProduct.mutateAsync(id)
-    showToast('Product duplicated — update its SKU and details.', 'success')
+    showToast('Product duplicated, update its SKU and details.', 'success')
   }
 
   return (

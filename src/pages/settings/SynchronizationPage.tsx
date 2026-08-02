@@ -33,7 +33,7 @@ export function SynchronizationPage() {
 
       {!isSupabaseConfigured && (
         <div className="mb-4 rounded-md border border-warning-100 bg-warning-100/40 p-3 text-xs text-warning-700">
-          No live backend is connected yet — "Sync now" simulates pushing offline changes so this flow is testable
+          No live backend is connected yet, "Sync now" simulates pushing offline changes so this flow is testable
           today. Connect Supabase (see README) to make it real.
         </div>
       )}

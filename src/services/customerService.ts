@@ -18,7 +18,7 @@ function normalizePhone(phone: string): string {
   return phone.replace(/[\s-]/g, '')
 }
 
-/** IMP-004 business rule: "Detect duplicates" — this is informational,
+/** IMP-004 business rule: "Detect duplicates", this is informational,
  *  not a hard block (unlike SKU/barcode uniqueness), since two real
  *  customers can legitimately share incomplete contact info. The
  *  checkout flow surfaces these as a warning the cashier can act on or
@@ -81,7 +81,7 @@ export async function reactivateCustomer(id: string, userId: string): Promise<vo
 
 // ---------- Merge (IMP-005 refinement) ----------
 // Orchestrated from the hook layer (useMergeCustomers), not from inside
-// this file — merging also needs to reassign Sales, and salesService
+// this file, merging also needs to reassign Sales, and salesService
 // already imports this file (for recordCustomerPurchase), so this file
 // importing salesService back would create a circular dependency. This
 // function handles only the customer-record side: combine the numbers,
@@ -124,9 +124,9 @@ export async function reassignCustomerNotes(sourceId: string, targetId: string):
 }
 
 /** Called by salesService when a sale completes for a registered
- *  (non-walk-in) customer — updates lifetime spend and (for credit
+ *  (non-walk-in) customer, updates lifetime spend and (for credit
  *  sales) the outstanding balance. Loyalty points are deliberately NOT
- *  touched here — loyaltyService owns that field exclusively (see
+ *  touched here, loyaltyService owns that field exclusively (see
  *  loyaltyService.ts) so there's exactly one place it's ever written,
  *  the same lesson learned from an earlier double-counted-stock bug. */
 export async function recordCustomerPurchase(customerId: string, amount: number, isCredit: boolean, userId: string): Promise<void> {
@@ -146,7 +146,7 @@ export async function recordCustomerPurchase(customerId: string, amount: number,
   await enqueueSync({ entityType: 'customer', entityId: customerId, operation: 'update' })
 }
 
-/** The one place Customer.loyaltyPoints is ever written — used
+/** The one place Customer.loyaltyPoints is ever written, used
  *  exclusively by loyaltyService so the balance and the transaction log
  *  behind it can never drift apart. */
 export async function adjustCustomerLoyaltyPoints(customerId: string, delta: number, userId: string): Promise<void> {
@@ -158,7 +158,7 @@ export async function adjustCustomerLoyaltyPoints(customerId: string, delta: num
 
 // ---------- Notes log (Customer Profile "Notes" tab) ----------
 // Separate from Customer.notes (a single free-text field on the quick
-// form) — this is a real, dated, attributed history: "what have we
+// form), this is a real, dated, attributed history: "what have we
 // discussed with this customer, and when." Answers a concrete question
 // a staff member would actually ask before calling a customer back.
 
@@ -186,7 +186,7 @@ export async function addCustomerNote(customerId: string, text: string, userId: 
 }
 
 // ---------- CRM Dashboard KPIs ----------
-// Each number here answers one specific question an owner would ask —
+// Each number here answers one specific question an owner would ask,
 // nothing decorative. "Active" is defined as "purchased in the last 30
 // days" since that's the window that actually distinguishes an engaged
 // customer from a one-time visitor for a small business.

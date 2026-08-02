@@ -19,7 +19,7 @@ export function PurchaseReportsPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Purchase Reports</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Spend by supplier — computed from received purchase orders.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Spend by supplier, computed from received purchase orders.</p>
       </div>
 
       <Card className="p-5">

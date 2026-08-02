@@ -26,7 +26,7 @@ export function InvoicePaymentModal({ invoiceReference, amountOwed, onClose, onS
   }
 
   return (
-    <Modal title={`Pay invoice — ${invoiceReference}`} onClose={onClose}>
+    <Modal title={`Pay invoice, ${invoiceReference}`} onClose={onClose}>
       <div className="space-y-4">
         <p className="rounded-md bg-ink-50 px-3 py-2 text-xs text-ink-500">
           Amount owed: <span className="font-medium text-ink-900">{formatCurrency(amountOwed, 'UGX')}</span>

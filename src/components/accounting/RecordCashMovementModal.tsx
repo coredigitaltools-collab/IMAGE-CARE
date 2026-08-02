@@ -59,7 +59,7 @@ export function RecordCashMovementModal({ onClose, onSubmit, submitError }: Reco
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
-            placeholder="Why this movement happened — required for every entry"
+            placeholder="Why this movement happened, required for every entry"
             className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>

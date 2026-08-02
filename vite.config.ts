@@ -8,7 +8,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 // ============================================================================
 // REBRANDING FOR A DIFFERENT BUSINESS
 // The app's displayed business name (sidebar, Dashboard, Settings, About)
-// already updates live from Settings → Business Profile — no code change
+// already updates live from Settings → Business Profile, no code change
 // needed for that. A small handful of values below are baked in at BUILD
 // TIME instead (the installed PWA's name/icon, and the GitHub Pages URL),
 // because they have to exist before any user data loads. To rebrand this
@@ -18,7 +18,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 // ============================================================================
 //
 // GitHub Pages serves a project repo at https://USERNAME.github.io/REPO-NAME/,
-// not from the domain root — base must match your repo name exactly,
+// not from the domain root, base must match your repo name exactly,
 // including capitalization. This is set for the "IMAGE-CARE" repo.
 export default defineConfig({
   base: '/IMAGE-CARE/',
@@ -29,7 +29,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
-        // Shown as the installed app's name/home-screen label — rename
+        // Shown as the installed app's name/home-screen label, rename
         // these two (and regenerate public/icons/* + favicon.*) for a
         // different business. See public/icons/README-if-any or just
         // regenerate with any square logo.

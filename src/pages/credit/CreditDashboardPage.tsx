@@ -74,21 +74,21 @@ export function CreditDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           label="Total outstanding"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.totalOutstandingUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.totalOutstandingUgx, 'UGX') : '-'}
           icon={Wallet}
           tone={kpisQuery.data && kpisQuery.data.totalOutstandingUgx > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Accounts with balance"
-          value={kpisQuery.data ? String(kpisQuery.data.accountsWithBalance) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.accountsWithBalance) : '-'}
           icon={Users}
           tone="neutral"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Overdue accounts"
-          value={kpisQuery.data ? String(kpisQuery.data.overdueAccounts) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.overdueAccounts) : '-'}
           hint="Past 30-day terms"
           icon={AlertTriangle}
           tone={kpisQuery.data && kpisQuery.data.overdueAccounts > 0 ? 'red' : 'neutral'}
@@ -96,14 +96,14 @@ export function CreditDashboardPage() {
         />
         <KpiCard
           label="Overdue amount"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.overdueAmountUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.overdueAmountUgx, 'UGX') : '-'}
           icon={TrendingDown}
           tone={kpisQuery.data && kpisQuery.data.overdueAmountUgx > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Collected this month"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.paymentsThisMonthUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.paymentsThisMonthUgx, 'UGX') : '-'}
           icon={Wallet}
           tone="success"
           isLoading={kpisQuery.isLoading}

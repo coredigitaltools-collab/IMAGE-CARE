@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# Runs automatically every time changes are pushed to main — including
+# Runs automatically every time changes are pushed to main, including
 # edits made directly on github.com (e.g. "Upload files" / the web editor).
 # No local npm/terminal steps are required once this is set up.
 on:

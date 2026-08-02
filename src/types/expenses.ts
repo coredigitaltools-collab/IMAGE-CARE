@@ -27,7 +27,7 @@ export interface ExpenseAttachment {
 export interface Expense extends AuditFields {
   reference: string
   categoryId: string
-  categoryName: string // snapshot — stays accurate even if the category is renamed later
+  categoryName: string // snapshot, stays accurate even if the category is renamed later
   description: string
   amount: number
   branchId: string | null
@@ -67,7 +67,7 @@ export type RecurringExpenseInput = Pick<RecurringExpenseTemplate, 'categoryId' 
 
 export interface ExpenseSettings {
   // Expenses at or below this amount skip manual approval entirely when
-  // submitted — 0 means every expense requires approval, no exceptions.
+  // submitted, 0 means every expense requires approval, no exceptions.
   // A real, configurable business rule, not a cosmetic setting.
   autoApproveThresholdUgx: number
 }

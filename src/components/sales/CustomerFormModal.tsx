@@ -105,7 +105,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
           value={tagsText}
           onChange={(e) => setTagsText(e.target.value)}
           placeholder="Comma-separated, e.g. Wholesale, Priority"
-          hint="Your own labels for grouping customers — nothing preset."
+          hint="Your own labels for grouping customers, nothing preset."
         />
 
         {!showMoreDetails ? (

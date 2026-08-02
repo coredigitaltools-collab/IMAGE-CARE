@@ -67,7 +67,7 @@ export function CartPanel({
         {items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-10 text-center">
             <ShoppingCart size={22} className="text-ink-300" />
-            <p className="text-xs text-ink-500">Cart is empty — search or scan a product to begin.</p>
+            <p className="text-xs text-ink-500">Cart is empty, search or scan a product to begin.</p>
           </div>
         ) : (
           <ul className="divide-y divide-ink-100">

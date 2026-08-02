@@ -76,7 +76,7 @@ export function SupplierInvoicesPage() {
                       <Badge tone={STATUS_TONE[inv.status]}>{inv.status.replace('_', ' ')}</Badge>
                     </div>
                     <p className="text-xs text-ink-500">
-                      {supplierName(inv.supplierId)} · #{inv.supplierInvoiceNumber || '—'} · {formatRelativeTime(inv.createdAt)}
+                      {supplierName(inv.supplierId)} · #{inv.supplierInvoiceNumber || '-'} · {formatRelativeTime(inv.createdAt)}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

@@ -27,7 +27,7 @@ export function CreditLimitModal({ customerName, currentLimit, currentBalance, o
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { newLimit: currentLimit } })
 
   return (
-    <Modal title={`Approve credit limit — ${customerName}`} onClose={onClose}>
+    <Modal title={`Approve credit limit, ${customerName}`} onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <p className="rounded-md bg-ink-50 px-3 py-2 text-xs text-ink-500">
           Current limit: <span className="font-medium text-ink-900">{formatCurrency(currentLimit, 'UGX')}</span> · Current balance:{' '}

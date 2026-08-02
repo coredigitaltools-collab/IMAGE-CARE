@@ -2,9 +2,9 @@
 
 @theme {
   /* ============================================================
-     ImageCare Design System v2.0 — Navy / Electric Blue
+     ImageCare Design System v2.0, Navy / Electric Blue
      Navy is the dominant color (navigation, primary actions).
-     Electric Blue is an ACCENT ONLY — active items, focus rings,
+     Electric Blue is an ACCENT ONLY, active items, focus rings,
      chart lines, selected controls. Never a large filled area.
      ============================================================ */
 
@@ -17,13 +17,13 @@
   --color-ink-50:  #F8FAFC;  /* Workspace background */
 
   /* Explicit navy tokens (semantic alias, same values as ink-900/
-     brand-blue-700 below) — use these for anything that should read
+     brand-blue-700 below), use these for anything that should read
      as "navy" in new code: Sidebar, headers, primary surfaces. */
   --color-navy-900: #0B1120;
   --color-navy-800: #0F172A;
   --color-navy-700: #1E293B;
 
-  /* brand-blue-* is the app's PRIMARY color family — Navy, not a
+  /* brand-blue-* is the app's PRIMARY color family, Navy, not a
      medium blue. brand-blue-500 is the one true accent (Electric
      Blue #3B82F6): active nav highlight, focus states, chart
      strokes, selected controls only. */
@@ -65,7 +65,7 @@ body {
   color: var(--color-ink-900);
 }
 
-/* Visible keyboard focus everywhere — accessibility floor */
+/* Visible keyboard focus everywhere, accessibility floor */
 :focus-visible {
   outline: 2px solid var(--color-brand-blue-500);
   outline-offset: 2px;

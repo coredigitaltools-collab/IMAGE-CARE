@@ -171,7 +171,7 @@ export function CustomerDetailPage() {
             <Card className="p-4">
               <p className="text-xs text-ink-500">Avg. purchase</p>
               <p className="mt-1 text-base font-semibold text-ink-900">
-                {purchases.length > 0 ? formatCurrency(averagePurchaseValue, 'UGX') : '—'}
+                {purchases.length > 0 ? formatCurrency(averagePurchaseValue, 'UGX') : '-'}
               </p>
             </Card>
             <Card className="p-4">
@@ -188,15 +188,15 @@ export function CustomerDetailPage() {
             <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
               <div>
                 <dt className="text-xs text-ink-500">Phone</dt>
-                <dd className="text-ink-900">{customer.phone || '—'}</dd>
+                <dd className="text-ink-900">{customer.phone || '-'}</dd>
               </div>
               <div>
                 <dt className="text-xs text-ink-500">Email</dt>
-                <dd className="text-ink-900">{customer.email || '—'}</dd>
+                <dd className="text-ink-900">{customer.email || '-'}</dd>
               </div>
               <div className="sm:col-span-2">
                 <dt className="text-xs text-ink-500">Address</dt>
-                <dd className="text-ink-900">{customer.address || '—'}</dd>
+                <dd className="text-ink-900">{customer.address || '-'}</dd>
               </div>
             </dl>
             {customer.notes && (
@@ -249,7 +249,7 @@ export function CustomerDetailPage() {
                         if (!reason) return
                         try {
                           await refundSale.mutateAsync({ saleId: sale.id, reason })
-                          showToast('Sale refunded — stock and points reversed.', 'success')
+                          showToast('Sale refunded, stock and points reversed.', 'success')
                         } catch (err) {
                           showToast(err instanceof SaleNotRefundableError ? err.message : 'Could not refund this sale.')
                         }
@@ -313,7 +313,7 @@ export function CustomerDetailPage() {
             </div>
             {customer.creditLimit === 0 && (
               <p className="rounded-md bg-warning-100/40 px-3 py-2 text-xs text-warning-700">
-                No credit limit has been approved for this customer yet — credit sales are blocked until one is.
+                No credit limit has been approved for this customer yet, credit sales are blocked until one is.
               </p>
             )}
           </Card>

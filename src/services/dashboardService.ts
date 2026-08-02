@@ -15,18 +15,18 @@ import type { DashboardSummary, LowStockItem, RecentSale, SyncStatus } from '../
 // transactional data, never manually maintained totals). Each function:
 //   1. Tries Supabase when configured and the browser is online.
 //   2. Falls back to the local IndexedDB cache when offline or on error.
-//   3. Falls back to REAL local computation (from Sales + Inventory —
+//   3. Falls back to REAL local computation (from Sales + Inventory,
 //      the same data those modules show) when Supabase isn't configured,
 //      never a business-specific mock dataset. A fresh install's
 //      Dashboard is therefore genuinely empty until real sales/products
 //      exist, matching every other module's empty states.
-// UI code (hooks/components) never branches on any of this — it only
+// UI code (hooks/components) never branches on any of this, it only
 // calls these functions and reacts to loading/error/data.
 // -----------------------------------------------------------------------
 
 async function withOfflineFallback<T>(cacheKey: string, fetcher: () => Promise<T>): Promise<T> {
   if (!navigator.onLine) {
-    // Genuinely offline — serve the last known good snapshot if we have
+    // Genuinely offline, serve the last known good snapshot if we have
     // one, otherwise attempt a local computation anyway (real local data
     // works fine offline; only Supabase calls would actually fail here).
     const cached = await cacheGet<T>(cacheKey)
@@ -36,7 +36,7 @@ async function withOfflineFallback<T>(cacheKey: string, fetcher: () => Promise<T
     return fresh
   }
 
-  // Online: always recompute fresh — whether that means a Supabase call
+  // Online: always recompute fresh, whether that means a Supabase call
   // or a local read from Sales/Inventory, both are fast and change over
   // time (new sales, new stock), so the cache must never be treated as
   // "good enough" just because it exists. It's a fallback for errors
@@ -75,7 +75,7 @@ export async function getDashboardSummary(branchId: string, reportingCurrency: S
     const todaysCompleted = completed.filter((s) => isToday(s.createdAt))
 
     // "Sales = Sum(Selling Price × Quantity Sold), COGS = Sum(Buying
-    // Price × Quantity Sold), Gross Profit = Sales − COGS" — computed
+    // Price × Quantity Sold), Gross Profit = Sales − COGS", computed
     // here from the branch-scoped set so the KPI respects the selected
     // branch; Cash in Hand and outstanding credit are business-wide
     // (one till, one accounting engine), not tracked per branch.
@@ -92,7 +92,7 @@ export async function getDashboardSummary(branchId: string, reportingCurrency: S
       .filter((e) => e.status === 'paid' && isToday(e.paidAt ?? e.expenseDate))
       .reduce((sum, e) => sum + e.amount, 0)
     // Net Profit = Gross Profit − Operating Expenses (IMC Accounting
-    // Engine Correction). Never subtract COGS again here — it's already
+    // Engine Correction). Never subtract COGS again here, it's already
     // inside Gross Profit above.
     const netProfitUgx = grossProfitUgx - todaysExpensesUgx
 
@@ -161,7 +161,7 @@ export async function getSyncStatus(): Promise<SyncStatus> {
     const cached = await cacheGet<SyncStatus>('sync-status')
     return { state: 'offline', lastSyncedAt: cached?.data.lastSyncedAt ?? null, pendingCount: cached?.data.pendingCount ?? 0 }
   }
-  const status = mockGetSyncStatus() // placeholder pending a real sync engine — see Settings → Synchronization
+  const status = mockGetSyncStatus() // placeholder pending a real sync engine, see Settings → Synchronization
   await cacheSet('sync-status', status)
   return status
 }

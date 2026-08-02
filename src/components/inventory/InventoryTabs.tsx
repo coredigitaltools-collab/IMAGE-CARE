@@ -13,7 +13,7 @@ export function InventoryTabs() {
   // Counts mirror what each destination page shows by default: active
   // products (archived ones are hidden until toggled), active
   // categories/brands/units, and every supplier (the Suppliers page has
-  // no archived filter — it always shows all statuses).
+  // no archived filter, it always shows all statuses).
   const counts: Record<string, number | undefined> = {
     '/inventory/products': productsQuery.data?.filter((p) => p.status === 'active').length,
     '/inventory/categories': categoriesQuery.data?.filter((c) => c.is_active).length,

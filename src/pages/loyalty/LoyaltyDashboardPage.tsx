@@ -73,35 +73,35 @@ export function LoyaltyDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           label="Points outstanding"
-          value={kpisQuery.data ? String(kpisQuery.data.totalPointsOutstanding) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.totalPointsOutstanding) : '-'}
           icon={Award}
           tone="blue"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Active members"
-          value={kpisQuery.data ? String(kpisQuery.data.activeMembers) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.activeMembers) : '-'}
           icon={Users}
           tone="neutral"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Earned this month"
-          value={kpisQuery.data ? String(kpisQuery.data.pointsEarnedThisMonth) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.pointsEarnedThisMonth) : '-'}
           icon={TrendingUp}
           tone="success"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Redeemed this month"
-          value={kpisQuery.data ? String(kpisQuery.data.pointsRedeemedThisMonth) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.pointsRedeemedThisMonth) : '-'}
           icon={Gift}
           tone="neutral"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Redemptions this month"
-          value={kpisQuery.data ? String(kpisQuery.data.redemptionsThisMonth) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.redemptionsThisMonth) : '-'}
           icon={Gift}
           tone="neutral"
           isLoading={kpisQuery.isLoading}

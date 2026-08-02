@@ -2,7 +2,7 @@ import { cacheGet, cacheSet } from '../lib/offlineDb'
 import { getSyncQueue, clearSyncQueue } from '../lib/localStore'
 import type { BackupRecord, SyncQueueItem } from '../types/settings'
 
-// Every key this backup covers — kept in one place so export/import and
+// Every key this backup covers, kept in one place so export/import and
 // future new settings sections stay in sync with each other.
 const BACKUP_KEYS = [
   'settings:business-profile',
@@ -102,7 +102,7 @@ export async function getLastSyncedAt(): Promise<string | null> {
 
 /** Simulates pushing every queued offline change to the backend and
  *  clearing the queue. There's no live Supabase project connected yet
- *  (see lib/supabaseClient.ts) — swap this for a real push loop once
+ *  (see lib/supabaseClient.ts), swap this for a real push loop once
  *  there is one; the queue shape (entityType/entityId/operation) is
  *  already what a real sync engine would need. */
 export async function runSync(): Promise<{ syncedCount: number }> {

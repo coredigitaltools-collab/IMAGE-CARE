@@ -50,7 +50,7 @@ export function RequisitionsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Requisitions</h1>
-          <p className="mt-0.5 text-sm text-ink-500">Internal requests to buy — approved ones become purchase orders.</p>
+          <p className="mt-0.5 text-sm text-ink-500">Internal requests to buy, approved ones become purchase orders.</p>
         </div>
         <Button onClick={() => setIsAddOpen(true)}>
           <Plus size={15} /> New requisition

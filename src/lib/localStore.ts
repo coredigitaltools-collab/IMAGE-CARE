@@ -3,7 +3,7 @@ import type { SyncQueueItem } from '../types/settings'
 
 // Guards against a real race: on a cold IndexedDB, two hooks can both call
 // a seeding function (e.g. listProducts) before either has finished
-// writing its seed — each would otherwise generate its own random IDs and
+// writing its seed, each would otherwise generate its own random IDs and
 // the loser's write clobbers the winner's, leaving stale references (e.g.
 // a list page linking to an ID the detail page can no longer find).
 // Concurrent callers for the same key now share a single in-flight promise.
@@ -19,14 +19,14 @@ export async function withSingleFlight<T>(key: string, fn: () => Promise<T>): Pr
 
 // Every write made while Supabase isn't configured lands here first. This
 // is intentionally the same storage the Dashboard already reads through
-// (see services/dashboardService.ts) — one offline-first data layer for
+// (see services/dashboardService.ts), one offline-first data layer for
 // the whole app, per IMC-004 §3.1 and IMC-005 §6.
 
 export async function getCollection<T>(key: string, seedFn: () => T[]): Promise<T[]> {
   const cached = await cacheGet<T[]>(key)
   if (cached) return cached.data
   return withSingleFlight(key, async () => {
-    // Re-check after acquiring the lock — another caller may have just seeded it.
+    // Re-check after acquiring the lock, another caller may have just seeded it.
     const recheck = await cacheGet<T[]>(key)
     if (recheck) return recheck.data
     const seeded = seedFn()
@@ -70,7 +70,7 @@ export async function enqueueSync(item: Omit<SyncQueueItem, 'id' | 'createdAt'>)
 
 /** Simulates pushing every queued offline change to the backend. Since
  *  there's no live Supabase project connected yet, this just clears the
- *  queue and stamps the affected records as synced — replace with a real
+ *  queue and stamps the affected records as synced, replace with a real
  *  push loop once Supabase is configured (see lib/supabaseClient.ts). */
 export async function clearSyncQueue(): Promise<void> {
   await cacheSet(SYNC_QUEUE_KEY, [])

@@ -77,7 +77,7 @@ export type SupplierInput = Pick<
 
 // ---------- Stock movements & adjustments ----------
 
-// IMP-003 §18: "transaction-based inventory" — currentStock is never edited
+// IMP-003 §18: "transaction-based inventory", currentStock is never edited
 // directly; every change to it is the result of a StockMovement record, so
 // stock levels can always be reconstructed/audited from movement history.
 export type StockMovementType = 'opening' | 'purchase' | 'purchase_return' | 'sale' | 'refund' | 'adjustment' | 'transfer'

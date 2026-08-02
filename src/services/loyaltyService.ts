@@ -10,7 +10,7 @@ const TRANSACTIONS_KEY = 'loyalty:transactions'
 
 export class InsufficientPointsError extends Error {
   constructor(available: number, needed: number) {
-    super(`Not enough points — ${available} available, ${needed} needed.`)
+    super(`Not enough points, ${available} available, ${needed} needed.`)
     this.name = 'InsufficientPointsError'
   }
 }
@@ -22,8 +22,8 @@ export class BelowMinimumRedemptionError extends Error {
 }
 
 // ---------- Settings (Points Engine configuration) ----------
-// A simple starter default — 1 point per 1,000 UGX, 1 point worth 100
-// UGX when redeemed, no minimum, points never expire — all editable, not
+// A simple starter default, 1 point per 1,000 UGX, 1 point worth 100
+// UGX when redeemed, no minimum, points never expire, all editable, not
 // hardcoded business logic, per "expiry rules configurable."
 
 function seedLoyaltySettings(): LoyaltySettings {
@@ -58,7 +58,7 @@ export async function listTransactions(customerId?: string): Promise<LoyaltyTran
 
 // ---------- Points Engine ----------
 // "Only registered customers earn points" / "Points awarded after
-// completed sales" — enforced by the caller (salesService only calls
+// completed sales", enforced by the caller (salesService only calls
 // this for a completed sale with a real customerId); this function
 // itself is the SOLE writer of Customer.loyaltyPoints, so the balance
 // and the transaction log can never drift apart.
@@ -81,7 +81,7 @@ export async function awardPoints(customerId: string, saleId: string, amountSpen
   return points
 }
 
-/** "Refunds reverse points" — finds the original earn transaction for
+/** "Refunds reverse points", finds the original earn transaction for
  *  the refunded sale and reverses exactly that many points (never more
  *  than was actually earned, even if settings changed since). */
 export async function reversePointsForSale(saleId: string, userId: string): Promise<void> {

@@ -24,7 +24,7 @@ export function BarcodeDisplay({ value, width = 2, height = 50 }: BarcodeDisplay
         lineColor: '#0F172A',
       })
     } catch {
-      // Invalid barcode value (e.g. mid-edit) — leave the SVG empty rather than crash.
+      // Invalid barcode value (e.g. mid-edit), leave the SVG empty rather than crash.
     }
   }, [value, width, height])
 

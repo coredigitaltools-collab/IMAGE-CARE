@@ -37,7 +37,7 @@ export class InvalidTransitionError extends Error {
 }
 export class OverReceiptError extends Error {
   constructor(productName: string, remaining: number) {
-    super(`Can't receive more ${productName} than ordered — ${remaining} remaining.`)
+    super(`Can't receive more ${productName} than ordered, ${remaining} remaining.`)
     this.name = 'OverReceiptError'
   }
 }
@@ -161,7 +161,7 @@ async function updatePurchaseOrder(id: string, patch: Partial<PurchaseOrder>, us
 }
 
 /** The approval gate: goods can never be received against a PO that
- *  hasn't been approved — this is what "Approval Workflow" actually
+ *  hasn't been approved, this is what "Approval Workflow" actually
  *  enforces, not just a status label. */
 export async function approvePurchaseOrder(id: string, approverName: string, userId: string): Promise<PurchaseOrder> {
   const order = await getPurchaseOrder(id)
@@ -195,7 +195,7 @@ export async function cancelPurchaseOrder(id: string, userId: string): Promise<P
 }
 
 // ---------- Goods Receipt ----------
-// "Receiving stock updates inventory automatically" — this is the one
+// "Receiving stock updates inventory automatically", this is the one
 // path that ever increases stock from a purchase; it reuses the exact
 // same recordMovement() the rest of Inventory relies on, so a goods
 // receipt is indistinguishable from any other audited stock movement.
@@ -241,7 +241,7 @@ export async function recordGoodsReceipt(
     notes,
   }
 
-  // Stock moves first, one product at a time — same integrity guarantee
+  // Stock moves first, one product at a time, same integrity guarantee
   // (no-negative-stock, permanent movement record) as every other path.
   for (const item of toReceive) {
     await recordMovement(

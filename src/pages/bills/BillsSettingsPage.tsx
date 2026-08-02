@@ -26,7 +26,7 @@ export function BillsSettingsPage() {
           <Link to="/purchasing/invoices" className="text-brand-blue-700 hover:underline">
             Purchasing → Invoices
           </Link>{' '}
-          — due dates and payment terms are set there, at the point a bill is created. This module tracks what's owed and manages payment,
+         , due dates and payment terms are set there, at the point a bill is created. This module tracks what's owed and manages payment,
           cancellation, and closing from the Finance side.
         </p>
       </Card>

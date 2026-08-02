@@ -77,25 +77,25 @@ export function PurchaseDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Open orders" value={kpisQuery.data ? String(kpisQuery.data.openOrders) : '—'} icon={ShoppingCart} tone="blue" isLoading={kpisQuery.isLoading} />
+        <KpiCard label="Open orders" value={kpisQuery.data ? String(kpisQuery.data.openOrders) : '-'} icon={ShoppingCart} tone="blue" isLoading={kpisQuery.isLoading} />
         <KpiCard
           label="Pending approval"
-          value={kpisQuery.data ? String(kpisQuery.data.pendingApproval) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.pendingApproval) : '-'}
           icon={ClipboardList}
           tone={kpisQuery.data && kpisQuery.data.pendingApproval > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
-        <KpiCard label="Pending receipt" value={kpisQuery.data ? String(kpisQuery.data.pendingReceipt) : '—'} icon={Package} tone="neutral" isLoading={kpisQuery.isLoading} />
+        <KpiCard label="Pending receipt" value={kpisQuery.data ? String(kpisQuery.data.pendingReceipt) : '-'} icon={Package} tone="neutral" isLoading={kpisQuery.isLoading} />
         <KpiCard
           label="Spend this month"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.spendThisMonthUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.spendThisMonthUgx, 'UGX') : '-'}
           icon={Wallet}
           tone="success"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Overdue deliveries"
-          value={kpisQuery.data ? String(kpisQuery.data.overdueDeliveries) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.overdueDeliveries) : '-'}
           icon={AlertTriangle}
           tone={kpisQuery.data && kpisQuery.data.overdueDeliveries > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}

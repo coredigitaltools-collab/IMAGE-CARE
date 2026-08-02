@@ -214,7 +214,7 @@ export function PurchaseOrderDetailPage() {
           onSubmit={async (items, notes) => {
             try {
               await recordReceipt.mutateAsync({ purchaseOrderId: order.id, items, notes })
-              showToast('Goods receipt recorded — inventory updated.', 'success')
+              showToast('Goods receipt recorded, inventory updated.', 'success')
               setIsReceiptOpen(false)
             } catch (err) {
               setReceiptError(err instanceof OverReceiptError ? err.message : 'Could not record this receipt.')

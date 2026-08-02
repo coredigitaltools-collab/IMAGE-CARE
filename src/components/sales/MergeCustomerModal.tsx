@@ -29,8 +29,8 @@ export function MergeCustomerModal({ source, candidates, onClose, onMerge }: Mer
     <Modal title={`Merge "${source.name}" into…`} onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-ink-500">
-          Choose the customer record to keep. Everything from "{source.name}" — purchase history, credit balance,
-          loyalty points, notes, and tags — moves onto the record you pick below. "{source.name}" is then archived,
+          Choose the customer record to keep. Everything from "{source.name}", purchase history, credit balance,
+          loyalty points, notes, and tags, moves onto the record you pick below. "{source.name}" is then archived,
           not deleted.
         </p>
 

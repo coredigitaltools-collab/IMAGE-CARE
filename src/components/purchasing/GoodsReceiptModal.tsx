@@ -38,7 +38,7 @@ export function GoodsReceiptModal({ order, onClose, onSubmit, submitError }: Goo
   }
 
   return (
-    <Modal title={`Receive goods — ${order.reference}`} onClose={onClose}>
+    <Modal title={`Receive goods, ${order.reference}`} onClose={onClose}>
       <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
         <div className="space-y-2">
           {remainingLines.map((line) => {

@@ -23,14 +23,14 @@ export function ProductStatisticsWidget({ stats, isLoading, currency, layout = '
           icon: Award,
           iconTone: 'bg-brand-blue-50 text-brand-blue-700',
           label: 'Most expensive',
-          value: stats.mostExpensive?.name ?? '—',
+          value: stats.mostExpensive?.name ?? '-',
           hint: stats.mostExpensive ? formatCurrency(stats.mostExpensive.sellingPrice, currency) : undefined,
         },
         {
           icon: Sparkles,
           iconTone: 'bg-success-100 text-success-700',
           label: 'Newest product',
-          value: stats.newest?.name ?? '—',
+          value: stats.newest?.name ?? '-',
           hint: undefined,
         },
         {

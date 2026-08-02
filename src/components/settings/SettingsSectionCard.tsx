@@ -15,7 +15,7 @@ export function SettingsSectionCard({ to, icon: Icon, title, description }: Sett
     <Link
       to={to}
       className="group block h-full rounded-card focus-visible:outline-none"
-      aria-label={`${title} — ${description}`}
+      aria-label={`${title}, ${description}`}
     >
       <Card
         className="flex h-full items-start gap-4 p-4 transition-all duration-[250ms] ease-out hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover group-focus-visible:-translate-y-0.5 group-focus-visible:border-brand-blue-500 group-focus-visible:shadow-card-hover group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-brand-blue-500 group-focus-visible:outline-offset-2"

@@ -66,7 +66,7 @@ export interface MovementRankRow {
 }
 /** Fast/slow moving ranks products by total units sold in the window.
  *  Until the Sales module exists there are no 'sale' movements yet, so
- *  every product legitimately shows 0 — that's accurate, not a bug. */
+ *  every product legitimately shows 0, that's accurate, not a bug. */
 export async function getFastSlowMovingReport(windowDays = 30): Promise<{ fast: MovementRankRow[]; slow: MovementRankRow[] }> {
   const [products, movements] = await Promise.all([listProducts(), listMovements()])
   const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000
@@ -112,13 +112,13 @@ export interface TrendPoint {
 }
 
 /** Reconstructs inventory value (at cost) over time from real stock
- *  movement history — nothing here is fabricated. Every product's stock
+ *  movement history, nothing here is fabricated. Every product's stock
  *  at a given moment is replayed from its movements up to that point
  *  (opening stock is itself a movement, so this covers a product's full
  *  life). For a fresh install this will legitimately look like a flat
- *  line that steps up once — that's accurate, not a bug; it fills in as
+ *  line that steps up once, that's accurate, not a bug; it fills in as
  *  more real activity accumulates. This recomputes on every call, which
- *  is fine at demo data volumes — a real deployment would want daily
+ *  is fine at demo data volumes, a real deployment would want daily
  *  valuation snapshots instead of replaying full history each time. */
 export async function getInventoryValueTrend(range: TrendRange, currency: SupportedCurrency): Promise<TrendPoint[]> {
   const [products, movements] = await Promise.all([listProducts(), listMovements()])

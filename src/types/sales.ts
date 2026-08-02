@@ -4,7 +4,7 @@ import type { AuditFields } from '../lib/audit'
 // "Sales is the primary entry point for identified customers. Every
 // customer created during a sale becomes part of the Customer Master and
 // is reused by CRM, Credit, Loyalty Programme, Quotes, Invoices, Receipts,
-// Reports, and Marketing." (IMP-004) — this type is deliberately the one
+// Reports, and Marketing." (IMP-004), this type is deliberately the one
 // future modules will import, not a Sales-only shape.
 
 export type CustomerStatus = 'active' | 'vip' | 'blacklisted'
@@ -21,9 +21,9 @@ export interface Customer extends AuditFields {
   email: string
   address: string
   notes: string
-  tags: string[] // free-text, business-defined segments (e.g. "Wholesale", "VIP") — never a preset industry list
-  status: CustomerStatus // business-set relationship status — distinct from is_active (archived or not)
-  dateOfBirth: string | null // optional, ISO date — for future birthday-based promotions/loyalty
+  tags: string[] // free-text, business-defined segments (e.g. "Wholesale", "VIP"), never a preset industry list
+  status: CustomerStatus // business-set relationship status, distinct from is_active (archived or not)
+  dateOfBirth: string | null // optional, ISO date, for future birthday-based promotions/loyalty
   preferredBranchId: string | null
   preferredPaymentMethod: PaymentMethod | null
   creditLimit: number // 0 = no explicit limit set; UGX
@@ -32,7 +32,7 @@ export interface Customer extends AuditFields {
   creditBalance: number // amount currently owed on credit, in UGX
 }
 
-// A dated, attributed log entry — separate from Customer.notes (a single
+// A dated, attributed log entry, separate from Customer.notes (a single
 // free-text field shown on the quick-add form). This is what the Notes
 // tab on a customer's profile actually shows: a real history of
 // interactions over time, each one accountable to whoever logged it.
@@ -50,7 +50,7 @@ export type CustomerInput = Pick<
 >
 
 // ---------- Credit Management (IMC-SRS-006) ----------
-// "One customer has one credit account" — that account IS
+// "One customer has one credit account", that account IS
 // Customer.creditLimit / Customer.creditBalance; there is deliberately
 // no separate CreditAccount entity duplicating those fields. These
 // three types are the transaction log behind that single account.
@@ -100,10 +100,10 @@ export type SaleStatus = 'completed' | 'parked' | 'refunded'
 
 export interface SaleLineItem {
   productId: string
-  productName: string // snapshot — survives later product edits/archival
+  productName: string // snapshot, survives later product edits/archival
   sku: string
   unitPrice: number // snapshot of sellingPrice at time of sale, UGX
-  unitCost: number // snapshot of buyingPrice at time of sale, UGX — the basis for COGS (IMC Accounting Engine Correction)
+  unitCost: number // snapshot of buyingPrice at time of sale, UGX, the basis for COGS (IMC Accounting Engine Correction)
   quantity: number
   lineTotal: number
 }
@@ -113,6 +113,7 @@ export interface Sale {
   reference: string
   branchId: string | null
   customerId: string | null // null = anonymous walk-in
+  salesPersonId: string | null // Staff Master id of whoever made the sale, optional
   items: SaleLineItem[]
   subtotal: number
   discountPercent: number
@@ -142,6 +143,7 @@ export interface CartItem {
 
 export interface CheckoutInput {
   customerId: string | null
+  salesPersonId: string | null
   items: CartItem[]
   discountPercent: number
   taxRateId: string | null

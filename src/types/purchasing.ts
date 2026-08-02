@@ -2,7 +2,7 @@ import type { AuditFields } from '../lib/audit'
 
 // ---------- Workflow: Requisition -> PO -> Approval -> Goods Receipt -> Invoice ----------
 // Every line item references a REAL product (Product Master) and every
-// order references a REAL supplier (Supplier Master) — no free-text
+// order references a REAL supplier (Supplier Master), no free-text
 // entry of either, matching "Suppliers from Supplier Master only" /
 // "Products from Product Master only".
 

@@ -32,7 +32,7 @@ export async function getPermissionMatrix(): Promise<PermissionMatrix> {
 
 export class OwnerPermissionsLockedError extends Error {
   constructor() {
-    super('Owner permissions cannot be changed — Owners always have unrestricted access.')
+    super('Owner permissions cannot be changed, Owners always have unrestricted access.')
     this.name = 'OwnerPermissionsLockedError'
   }
 }
@@ -50,7 +50,7 @@ export async function setPermission(
     [role]: { ...matrix[role], [permission]: granted },
   }
   await setSingleton(KEY, next)
-  // Permission changes apply immediately (IMP-002 business rule) — this
+  // Permission changes apply immediately (IMP-002 business rule), this
   // record isn't itself an audited entity, but the change is still queued
   // so a connected backend eventually receives it.
   await enqueueSync({ entityType: 'permission_matrix', entityId: role, operation: 'update' })

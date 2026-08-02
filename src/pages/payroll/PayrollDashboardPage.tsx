@@ -47,7 +47,7 @@ export function PayrollDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
           label="Employees on payroll"
-          value={kpisQuery.data ? String(kpisQuery.data.activeEmployeeCount) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.activeEmployeeCount) : '-'}
           icon={Users}
           tone="blue"
           isLoading={kpisQuery.isLoading}
@@ -61,14 +61,14 @@ export function PayrollDashboardPage() {
         />
         <KpiCard
           label="Pending approval"
-          value={kpisQuery.data ? String(kpisQuery.data.pendingApprovalCount) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.pendingApprovalCount) : '-'}
           icon={CheckCircle2}
           tone={kpisQuery.data && kpisQuery.data.pendingApprovalCount > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Last payroll paid"
-          value={kpisQuery.data?.lastPaidAt ? formatCurrency(kpisQuery.data.lastPaidAmountUgx, 'UGX') : '—'}
+          value={kpisQuery.data?.lastPaidAt ? formatCurrency(kpisQuery.data.lastPaidAmountUgx, 'UGX') : '-'}
           hint={kpisQuery.data?.lastPaidAt ? formatRelativeTime(kpisQuery.data.lastPaidAt) : 'No payroll paid yet'}
           icon={Wallet}
           tone="success"
@@ -76,7 +76,7 @@ export function PayrollDashboardPage() {
         />
         <KpiCard
           label="YTD payroll cost"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.ytdPayrollCostUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.ytdPayrollCostUgx, 'UGX') : '-'}
           icon={TrendingUp}
           tone="neutral"
           isLoading={kpisQuery.isLoading}

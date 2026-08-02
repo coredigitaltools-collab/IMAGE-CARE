@@ -36,7 +36,7 @@ export function PayComponentTypeFormModal({ kind, onClose, onSubmit }: PayCompon
           label="Name"
           {...register('name')}
           error={errors.name?.message}
-          placeholder={kind === 'allowance' ? 'Your own allowance — nothing preset' : 'Your own deduction — nothing preset'}
+          placeholder={kind === 'allowance' ? 'Your own allowance, nothing preset' : 'Your own deduction, nothing preset'}
         />
         <div>
           <label htmlFor="pc-type" className="mb-1.5 block text-sm font-medium text-ink-700">

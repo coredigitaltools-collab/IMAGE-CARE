@@ -50,7 +50,7 @@ export function useReactivateCustomer(userId: string) {
 }
 
 /** Merges sourceId into targetId across every place a customer record
- *  is referenced — Sales (purchase history), Notes, and the customer
+ *  is referenced, Sales (purchase history), Notes, and the customer
  *  record itself (points/spend/credit summed, tags unioned). No
  *  historical data is dropped; the source is archived, not deleted. */
 export function useMergeCustomers(userId: string) {
@@ -89,7 +89,7 @@ export function useAddCustomerNote(userId: string) {
   })
 }
 
-/** Active = purchased in the last 30 days — computed here (not in the
+/** Active = purchased in the last 30 days, computed here (not in the
  *  service layer) because it needs both Customers and Sales, and
  *  customerService can't import salesService without a circular
  *  dependency (salesService already imports customerService). */

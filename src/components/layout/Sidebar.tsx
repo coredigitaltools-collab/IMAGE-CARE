@@ -32,7 +32,7 @@ interface NavItem {
 }
 
 // Full IMC-000 approved module list. Dashboard (IMP-001) and Settings
-// (IMP-002) are implemented — the rest render as disabled entries so the
+// (IMP-002) are implemented; the rest render as disabled entries so the
 // approved scope stays visible without implying those modules exist yet.
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/' },
@@ -46,7 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Bills & Payables', icon: Receipt, to: '/bills' },
   { label: 'Payroll', icon: Wallet, to: '/payroll' },
   { label: 'Expenses', icon: FileMinus, to: '/expenses' },
-  { label: 'Sales Targets', icon: BarChart3 },
+  { label: 'Sales Targets', icon: BarChart3, to: '/sales-targets' },
   { label: 'Stock Summary', icon: Package },
   { label: 'Cash Flow', icon: Landmark },
   { label: 'Monthly Summary', icon: CalendarDays },
@@ -129,7 +129,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <li key={label}>
                   <button
                     disabled
-                    title={`${label} — coming in a future implementation pack`}
+                    title={`${label}, coming in a future implementation pack`}
                     className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/30"
                   >
                     <Icon size={16} strokeWidth={1.75} aria-hidden="true" />

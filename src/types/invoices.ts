@@ -1,7 +1,7 @@
 import type { PaymentMethod } from './sales'
 
 // ---------- Invoices (IMC-SRS-009) ----------
-// An Invoice is deliberately NOT a re-implementation of Sale — it's a
+// An Invoice is deliberately NOT a re-implementation of Sale, it's a
 // thin, trackable document layer that REFERENCES a completed Sale
 // (saleId) and snapshots its line items/totals at generation time. The
 // Sale is the transaction record; the Invoice is the formal document a
@@ -9,7 +9,7 @@ import type { PaymentMethod } from './sales'
 // can move independently of the underlying sale. "Sale reference"
 // (INV-xxxxx, assigned at checkout) and "Invoice number" (IVC-xxxxx,
 // assigned when formally invoiced) are deliberately different numbers
-// for this reason — conflating them would blur "when was this sold"
+// for this reason, conflating them would blur "when was this sold"
 // with "when was this formally invoiced," which don't have to be the
 // same moment.
 

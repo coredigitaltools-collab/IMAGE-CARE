@@ -33,7 +33,7 @@ interface SettingsCategory {
 
 // Adding a new settings section later is a two-line change: add it to the
 // relevant category's `sections` array (or a new category object) below.
-// Nothing else on this page needs to change — search and layout both work
+// Nothing else on this page needs to change, search and layout both work
 // off this data.
 const CATEGORIES: SettingsCategory[] = [
   {

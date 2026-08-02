@@ -26,11 +26,11 @@ export function CrmDashboardPage() {
 
   const activeCustomers = (customersQuery.data ?? []).filter((c) => c.is_active)
 
-  // "Who are our best customers?" — a real decision-support question
+  // "Who are our best customers?", a real decision-support question
   // (who deserves priority service, a loyalty perk, a personal call).
   const topCustomers = [...activeCustomers].sort((a, b) => b.lifetimePurchases - a.lifetimePurchases).slice(0, 5)
 
-  // "Who owes us money, and how much?" — directly actionable (follow up
+  // "Who owes us money, and how much?", directly actionable (follow up
   // on collections), not a vanity metric.
   const customersWithCredit = [...activeCustomers]
     .filter((c) => c.creditBalance > 0)
@@ -116,21 +116,21 @@ export function CrmDashboardPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <KpiCard
               label="Total customers"
-              value={kpisQuery.data ? String(kpisQuery.data.totalCustomers) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.totalCustomers) : '-'}
               icon={Users}
               tone="blue"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="New (30 days)"
-              value={kpisQuery.data ? String(kpisQuery.data.newCustomers30d) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.newCustomers30d) : '-'}
               icon={UserPlus}
               tone="neutral"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Active (30 days)"
-              value={kpisQuery.data ? String(kpisQuery.data.activeCustomers30d) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.activeCustomers30d) : '-'}
               hint="Purchased in the last 30 days"
               icon={TrendingUp}
               tone="success"
@@ -138,21 +138,21 @@ export function CrmDashboardPage() {
             />
             <KpiCard
               label="Lifetime value"
-              value={kpisQuery.data ? formatCurrency(kpisQuery.data.lifetimeValueUgx, 'UGX') : '—'}
+              value={kpisQuery.data ? formatCurrency(kpisQuery.data.lifetimeValueUgx, 'UGX') : '-'}
               icon={Wallet}
               tone="success"
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Outstanding credit"
-              value={kpisQuery.data ? formatCurrency(kpisQuery.data.outstandingCreditUgx, 'UGX') : '—'}
+              value={kpisQuery.data ? formatCurrency(kpisQuery.data.outstandingCreditUgx, 'UGX') : '-'}
               icon={CreditCard}
               tone={kpisQuery.data && kpisQuery.data.outstandingCreditUgx > 0 ? 'red' : 'neutral'}
               isLoading={kpisQuery.isLoading}
             />
             <KpiCard
               label="Loyalty members"
-              value={kpisQuery.data ? String(kpisQuery.data.loyaltyMembers) : '—'}
+              value={kpisQuery.data ? String(kpisQuery.data.loyaltyMembers) : '-'}
               icon={Award}
               tone="neutral"
               isLoading={kpisQuery.isLoading}

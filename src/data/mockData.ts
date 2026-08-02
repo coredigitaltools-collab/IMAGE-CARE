@@ -1,6 +1,6 @@
 import type { Branch, SyncStatus } from '../types/domain'
 
-// ImageCare's actual branch locations — legitimate real data for this
+// ImageCare's actual branch locations, legitimate real data for this
 // specific business (see README "Rebranding" for how a different
 // business would replace this), not an industry assumption. Contrast
 // with the old contents of this file (removed): fabricated sales/stock
@@ -17,7 +17,7 @@ function minutesAgo(mins: number): string {
 }
 
 // Synchronization is still simulated pending a real connected backend
-// (see Settings → Synchronization) — this isn't business-specific, just
+// (see Settings → Synchronization), this isn't business-specific, just
 // a placeholder for "last successful sync," used regardless of what the
 // business sells.
 export function mockGetSyncStatus(): SyncStatus {

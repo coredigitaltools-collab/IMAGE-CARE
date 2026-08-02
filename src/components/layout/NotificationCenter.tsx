@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, AlertOctagon, PackageX, CheckCircle2, FileMinus } from 'lucide-react'
+import { Bell, AlertOctagon, PackageX, CheckCircle2, FileMinus, Trophy } from 'lucide-react'
 import { useLowStockReport, useOutOfStockReport } from '../../features/inventory/hooks/useInventoryData'
 import { useExpenses } from '../../features/expenses/hooks/useExpensesData'
+import { useTargetsNearingCompletion } from '../../features/salesTargets/hooks/useSalesTargetsData'
 
 export function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false)
@@ -11,11 +12,13 @@ export function NotificationCenter() {
   const lowStockQuery = useLowStockReport()
   const outOfStockQuery = useOutOfStockReport()
   const expensesQuery = useExpenses()
+  const nearingTargetsQuery = useTargetsNearingCompletion()
 
   const lowStock = lowStockQuery.data ?? []
   const outOfStock = outOfStockQuery.data ?? []
   const pendingExpenses = (expensesQuery.data ?? []).filter((e) => e.status === 'pending_approval')
-  const totalAlerts = lowStock.length + outOfStock.length + pendingExpenses.length
+  const nearingTargets = nearingTargetsQuery.data ?? []
+  const totalAlerts = lowStock.length + outOfStock.length + pendingExpenses.length + nearingTargets.length
 
   return (
     <div className="relative" ref={containerRef}>
@@ -24,7 +27,7 @@ export function NotificationCenter() {
         onBlur={(e) => {
           if (!containerRef.current?.contains(e.relatedTarget as Node)) setIsOpen(false)
         }}
-        aria-label={`Notifications${totalAlerts > 0 ? ` — ${totalAlerts} unread` : ''}`}
+        aria-label={`Notifications${totalAlerts > 0 ? `, ${totalAlerts} unread` : ''}`}
         aria-expanded={isOpen}
         className="relative flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900"
       >
@@ -46,10 +49,25 @@ export function NotificationCenter() {
             {totalAlerts === 0 ? (
               <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                 <CheckCircle2 size={22} className="text-success-500" />
-                <p className="text-xs text-ink-500">You're all caught up — nothing needs attention.</p>
+                <p className="text-xs text-ink-500">You're all caught up, nothing needs attention.</p>
               </div>
             ) : (
               <ul className="divide-y divide-ink-100">
+                {nearingTargets.slice(0, 4).map((t) => (
+                  <li key={t.targetId}>
+                    <Link
+                      to="/sales-targets"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-ink-50"
+                    >
+                      <Trophy size={14} className="shrink-0 text-success-500" />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium text-ink-900">{t.label}</p>
+                        <p className="text-xs text-success-700">{t.achievementPercent}% achieved</p>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
                 {pendingExpenses.slice(0, 4).map((e) => (
                   <li key={e.id}>
                     <Link
@@ -103,7 +121,13 @@ export function NotificationCenter() {
 
           {totalAlerts > 0 && (
             <Link
-              to={lowStock.length + outOfStock.length > 0 ? '/inventory/reports' : '/expenses/register'}
+              to={
+                lowStock.length + outOfStock.length > 0
+                  ? '/inventory/reports'
+                  : pendingExpenses.length > 0
+                    ? '/expenses/register'
+                    : '/sales-targets'
+              }
               onClick={() => setIsOpen(false)}
               className="block border-t border-ink-100 px-4 py-2.5 text-center text-xs font-medium text-brand-blue-700 hover:bg-brand-blue-50"
             >

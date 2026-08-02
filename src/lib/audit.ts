@@ -31,7 +31,7 @@ export function stampNew(userId: string, branchId: string | null = null): AuditF
     updated_by: userId,
     branch_id: branchId,
     is_active: true,
-    // Nothing has round-tripped to a live backend yet — every new local
+    // Nothing has round-tripped to a live backend yet, every new local
     // record starts as a pending offline change (IMC-002 §8, IMC-005 §6).
     sync_status: 'pending',
     last_synced_at: null,

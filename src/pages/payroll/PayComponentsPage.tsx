@@ -33,7 +33,7 @@ function ComponentList({ kind, title }: { kind: 'allowance' | 'deduction'; title
       {typesQuery.isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : activeTypes.length === 0 ? (
-        <EmptyState icon={SlidersHorizontal} title={`No ${kind}s yet`} description={`Define your own ${kind} types — nothing preset.`} />
+        <EmptyState icon={SlidersHorizontal} title={`No ${kind}s yet`} description={`Define your own ${kind} types, nothing preset.`} />
       ) : (
         <ul className="divide-y divide-ink-100">
           {activeTypes.map((t) => (
@@ -79,7 +79,7 @@ export function PayComponentsPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Allowances & Deductions</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Your own pay components — fixed amounts or a percentage of base salary.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Your own pay components, fixed amounts or a percentage of base salary.</p>
       </div>
 
       <div className="space-y-4">

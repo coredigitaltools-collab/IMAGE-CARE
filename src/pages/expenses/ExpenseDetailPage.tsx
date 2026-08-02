@@ -154,7 +154,7 @@ export function ExpenseDetailPage() {
         <dl className="space-y-3 text-sm">
           <div>
             <dt className="text-xs text-ink-500">Description</dt>
-            <dd className="text-ink-900">{expense.description || '—'}</dd>
+            <dd className="text-ink-900">{expense.description || '-'}</dd>
           </div>
           <div>
             <dt className="text-xs text-ink-500">Amount</dt>

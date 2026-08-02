@@ -30,7 +30,7 @@ export function AssignComponentModal({ kind, availableTypes, onClose, onSubmit }
   return (
     <Modal title={`Assign ${kind}`} onClose={onClose}>
       {availableTypes.length === 0 ? (
-        <p className="text-sm text-ink-500">No {kind} types yet — create one under Allowances & Deductions first.</p>
+        <p className="text-sm text-ink-500">No {kind} types yet, create one under Allowances & Deductions first.</p>
       ) : (
         <div className="space-y-4">
           <div>

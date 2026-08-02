@@ -56,28 +56,28 @@ export function ExpenseDashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="This month"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.totalThisMonthUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.totalThisMonthUgx, 'UGX') : '-'}
           icon={TrendingDown}
           tone="blue"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Pending approval"
-          value={kpisQuery.data ? String(kpisQuery.data.pendingApprovalCount) : '—'}
+          value={kpisQuery.data ? String(kpisQuery.data.pendingApprovalCount) : '-'}
           icon={Clock}
           tone={kpisQuery.data && kpisQuery.data.pendingApprovalCount > 0 ? 'red' : 'neutral'}
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Approved, unpaid"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.approvedUnpaidUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.approvedUnpaidUgx, 'UGX') : '-'}
           icon={Wallet}
           tone="neutral"
           isLoading={kpisQuery.isLoading}
         />
         <KpiCard
           label="Paid this month"
-          value={kpisQuery.data ? formatCurrency(kpisQuery.data.paidThisMonthUgx, 'UGX') : '—'}
+          value={kpisQuery.data ? formatCurrency(kpisQuery.data.paidThisMonthUgx, 'UGX') : '-'}
           icon={CheckCircle2}
           tone="success"
           isLoading={kpisQuery.isLoading}

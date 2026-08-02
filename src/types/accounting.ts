@@ -9,7 +9,7 @@
 //                  − Business Expenses Paid − Supplier Payments
 //                  − Bank Deposits − Owner Withdrawals ± Cash Adjustments
 // "Never subtract COGS when calculating Cash in Hand. COGS affects
-// profit, not cash." — COGS never appears in the Cash in Hand formula
+// profit, not cash.", COGS never appears in the Cash in Hand formula
 // below; it exists only in getFinancialSummary().
 
 export type CashMovementType = 'bank_deposit' | 'owner_withdrawal' | 'adjustment'

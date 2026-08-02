@@ -19,7 +19,7 @@ export function ExpenseReportsPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Expense Reports</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Spend by category — excludes cancelled and rejected expenses.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Spend by category, excludes cancelled and rejected expenses.</p>
       </div>
 
       <Card className="p-5">

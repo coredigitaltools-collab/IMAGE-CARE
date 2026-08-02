@@ -15,7 +15,7 @@ const EXPENSES_KEY = 'expenses:expenses'
 const RECURRING_KEY = 'expenses:recurring'
 const SETTINGS_KEY = 'expenses:settings'
 
-export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024 // 3MB — generous for a receipt photo, bounded so it doesn't bloat the offline cache
+export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024 // 3MB, generous for a receipt photo, bounded so it doesn't bloat the offline cache
 
 export class InvalidExpenseTransitionError extends Error {
   constructor(message: string) {
@@ -56,7 +56,7 @@ export async function saveExpenseSettings(input: ExpenseSettings): Promise<Expen
   return input
 }
 
-// ---------- Categories ("Configurable categories" — nothing preset) ----------
+// ---------- Categories ("Configurable categories", nothing preset) ----------
 
 export async function listCategories(): Promise<ExpenseCategory[]> {
   return getCollection<ExpenseCategory>(CATEGORIES_KEY, () => [])
@@ -172,7 +172,7 @@ export async function markExpensePaid(id: string, userId: string): Promise<Expen
   return updateExpense(id, { status: 'paid', paidAt: new Date().toISOString() }, userId)
 }
 
-/** "Approved expenses cannot be deleted" — and this app never hard-deletes
+/** "Approved expenses cannot be deleted", and this app never hard-deletes
  *  anything anyway, so cancellation is the only removal path, and it's
  *  blocked outright once an expense is approved or paid. */
 export async function cancelExpense(id: string, reason: string, userId: string): Promise<Expense> {
@@ -225,7 +225,7 @@ export async function generateDueRecurringExpenses(userId: string): Promise<{ ge
   for (const template of templates) {
     let nextDue = template.nextDueDate
     // A template can be overdue by more than one cycle (e.g. app unused
-    // for two months) — generate every occurrence that's actually due,
+    // for two months), generate every occurrence that's actually due,
     // not just one, so history stays accurate.
     while (nextDue <= today) {
       await createExpense(

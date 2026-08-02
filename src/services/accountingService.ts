@@ -25,7 +25,7 @@ export async function saveAccountingSettings(input: AccountingSettings): Promise
 
 // ---------- Cash Movements (Bank Deposits / Owner Withdrawals / Adjustments) ----------
 // The three inputs to Cash in Hand that no other module tracks. Every
-// one is a deliberate, reasoned, audited entry — never inferred.
+// one is a deliberate, reasoned, audited entry, never inferred.
 
 export async function listCashMovements(): Promise<CashMovement[]> {
   const movements = await getCollection<CashMovement>(MOVEMENTS_KEY, () => [])
@@ -55,7 +55,7 @@ function isSameDay(iso: string, ref: Date): boolean {
 
 function computeCogs(sales: Sale[]): number {
   // A sale created before unitCost was tracked has no cost saved on its
-  // line items — treat that as 0 rather than letting undefined * qty
+  // line items, treat that as 0 rather than letting undefined * qty
   // produce NaN and poison every figure derived from it (Gross Profit,
   // Net Profit). This only affects historical data from before the fix;
   // every sale going forward always has a real cost snapshot.
@@ -82,7 +82,7 @@ export async function getFinancialSummary(sameDayAs?: Date): Promise<FinancialSu
 
 // ---------- Cash in Hand ----------
 // "Never subtract COGS when calculating Cash in Hand. COGS affects
-// profit, not cash." — deliberately absent from this function.
+// profit, not cash.", deliberately absent from this function.
 
 export async function getCashInHandBreakdown(): Promise<CashInHandBreakdown> {
   const [settings, sales, creditPayments, supplierPayments, expenses, movements] = await Promise.all([

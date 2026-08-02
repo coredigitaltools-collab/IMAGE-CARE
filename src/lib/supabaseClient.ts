@@ -8,7 +8,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undef
  * in .env (see .env.example). Every service in src/services checks
  * `isSupabaseConfigured` first and transparently falls back to local mock
  * data + IndexedDB, so the Dashboard module runs standalone today and
- * switches to live data the moment real credentials are added — no UI
+ * switches to live data the moment real credentials are added, no UI
  * or hook code changes required.
  */
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)

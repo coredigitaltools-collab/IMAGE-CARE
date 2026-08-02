@@ -3,7 +3,7 @@ import type { AuditFields } from '../lib/audit'
 // ---------- Loyalty Programme (IMC-SRS-008) ----------
 // Workflow: Completed Sale -> Points Awarded -> Customer Balance Updated
 // -> Redeem Points -> Loyalty Balance Updated. Every step here writes a
-// LoyaltyTransaction — "audit every loyalty transaction" is enforced by
+// LoyaltyTransaction, "audit every loyalty transaction" is enforced by
 // having exactly one function (loyaltyService) ever touch
 // Customer.loyaltyPoints, and it never does so without also logging one.
 

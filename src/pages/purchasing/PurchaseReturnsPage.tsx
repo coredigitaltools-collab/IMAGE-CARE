@@ -35,7 +35,7 @@ export function PurchaseReturnsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Purchase Returns</h1>
-          <p className="mt-0.5 text-sm text-ink-500">Goods sent back to suppliers — reduces stock immediately.</p>
+          <p className="mt-0.5 text-sm text-ink-500">Goods sent back to suppliers, reduces stock immediately.</p>
         </div>
         <Button onClick={() => setIsAddOpen(true)}>
           <Plus size={15} /> New return
@@ -67,7 +67,7 @@ export function PurchaseReturnsPage() {
                     <span className="text-sm font-semibold text-brand-red-700">-{formatCurrency(total, 'UGX')}</span>
                   </div>
                   <p className="mt-1 text-xs text-ink-500">
-                    {ret.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')} — {ret.reason}
+                    {ret.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}, {ret.reason}
                   </p>
                 </li>
               )
@@ -83,7 +83,7 @@ export function PurchaseReturnsPage() {
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
             await createReturn.mutateAsync({ ...input, purchaseOrderId: null })
-            showToast('Return recorded — stock updated.', 'success')
+            showToast('Return recorded, stock updated.', 'success')
             setIsAddOpen(false)
           }}
         />

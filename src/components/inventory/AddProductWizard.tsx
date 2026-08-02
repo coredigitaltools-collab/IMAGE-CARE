@@ -82,9 +82,9 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
   }, [generatedSku, setValue])
 
   const values = watch()
-  const categoryName = categories.find((c) => c.id === values.categoryId)?.name ?? '—'
+  const categoryName = categories.find((c) => c.id === values.categoryId)?.name ?? '-'
   const brandName = brands.find((b) => b.id === values.brandId)?.name ?? 'None'
-  const unitName = units.find((u) => u.id === values.unitId)?.name ?? '—'
+  const unitName = units.find((u) => u.id === values.unitId)?.name ?? '-'
   const supplierName = suppliers.find((s) => s.id === values.supplierId)?.name ?? 'None'
 
   const handleImageChange = (file: File | undefined) => {
@@ -234,7 +234,7 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
               <div><dt className="text-xs text-ink-500">Opening stock</dt><dd className="text-ink-900">{values.openingStock} {unitName}</dd></div>
               <div><dt className="text-xs text-ink-500">Reorder level</dt><dd className="text-ink-900">{values.reorderLevel}</dd></div>
               <div><dt className="text-xs text-ink-500">Supplier</dt><dd className="text-ink-900">{supplierName}</dd></div>
-              <div><dt className="text-xs text-ink-500">Barcode</dt><dd className="text-ink-900">{values.barcode || '—'}</dd></div>
+              <div><dt className="text-xs text-ink-500">Barcode</dt><dd className="text-ink-900">{values.barcode || '-'}</dd></div>
             </dl>
             {values.description && <p className="text-xs text-ink-500">{values.description}</p>}
           </div>

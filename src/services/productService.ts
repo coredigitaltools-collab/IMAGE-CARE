@@ -35,7 +35,7 @@ export async function listProducts(): Promise<Product[]> {
   const cached = await getCollection<Product>(KEY, () => [])
   if (cached.length > 0) return cached
   return withSingleFlight(`${KEY}:dependent-seed`, async () => {
-    // Re-check — another concurrent caller may have just finished seeding.
+    // Re-check, another concurrent caller may have just finished seeding.
     const recheck = await getCollection<Product>(KEY, () => [])
     if (recheck.length > 0) return recheck
     // Products depend on categories/brands/units/suppliers existing first.
@@ -82,7 +82,7 @@ export async function generateSku(): Promise<string> {
 }
 
 export function generateBarcode(): string {
-  // 12 random digits + a simple checksum-free 13th digit — good enough for
+  // 12 random digits + a simple checksum-free 13th digit, good enough for
   // internal use and Code128/EAN rendering; not a registered GS1 prefix.
   let digits = ''
   for (let i = 0; i < 13; i++) digits += Math.floor(Math.random() * 10)
@@ -95,7 +95,7 @@ export async function createProduct(input: ProductInput, userId: string): Promis
   const product: Product = {
     ...stampNew(userId, input.branch_id),
     ...input,
-    // Starts at 0, not input.openingStock — the "opening" movement below
+    // Starts at 0, not input.openingStock, the "opening" movement below
     // is the SOLE thing that brings currentStock up to the opening
     // count. Setting it here too would double it (a real bug this
     // comment now documents rather than repeats).
@@ -107,7 +107,7 @@ export async function createProduct(input: ProductInput, userId: string): Promis
   await enqueueSync({ entityType: 'product', entityId: product.id, operation: 'create' })
 
   // Opening stock is itself a movement, per IMP-003 §11 ("permanent audit
-  // trail for every inventory movement") — even the very first stock count.
+  // trail for every inventory movement"), even the very first stock count.
   if (input.openingStock !== 0) {
     await recordMovement(
       { productId: product.id, type: 'opening', quantityChange: input.openingStock, reason: 'Opening stock' },
@@ -123,7 +123,7 @@ export async function updateProduct(id: string, input: ProductInput, userId: str
   let updated: Product | null = null
   const next = products.map((p) => {
     if (p.id !== id) return p
-    // Stock is transaction-based (IMP-003 §18) — editing the product form
+    // Stock is transaction-based (IMP-003 §18), editing the product form
     // never changes currentStock directly; openingStock is historical only
     // once the product exists. Adjustments/movements are the only path.
     updated = stampUpdated({ ...p, ...input, currentStock: p.currentStock }, userId)
@@ -179,7 +179,7 @@ export async function duplicateProduct(id: string, userId: string): Promise<Prod
   return product
 }
 
-/** Internal — called only by stockService after a movement is recorded. */
+/** Internal, called only by stockService after a movement is recorded. */
 export async function _internalSetCurrentStock(id: string, newStock: number, userId: string): Promise<Product> {
   const products = await listProducts()
   let updated: Product | null = null
@@ -193,7 +193,7 @@ export async function _internalSetCurrentStock(id: string, newStock: number, use
   return updated
 }
 
-/** Used by Category "Merge" (IMP-003 §7) — reassigns every product on
+/** Used by Category "Merge" (IMP-003 §7), reassigns every product on
  *  sourceCategoryId to targetCategoryId. */
 export async function reassignProductCategory(sourceCategoryId: string, targetCategoryId: string, userId: string): Promise<void> {
   const products = await listProducts()

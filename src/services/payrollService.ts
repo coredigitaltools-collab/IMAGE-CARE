@@ -25,7 +25,7 @@ export class OverlappingPeriodError extends Error {
 }
 export class PayrollLockedError extends Error {
   constructor() {
-    super('This payroll period is approved and locked — it can no longer be recalculated.')
+    super('This payroll period is approved and locked, it can no longer be recalculated.')
     this.name = 'PayrollLockedError'
   }
 }
@@ -153,7 +153,7 @@ export async function getPeriod(id: string): Promise<PayrollPeriod | null> {
   return periods.find((p) => p.id === id) ?? null
 }
 
-/** "Payroll periods cannot overlap" — checked against every
+/** "Payroll periods cannot overlap", checked against every
  *  non-archived period (an archived one is historical and can no
  *  longer conflict with anything going forward). */
 export async function createPeriod(startDate: string, endDate: string, userId: string): Promise<PayrollPeriod> {
@@ -208,7 +208,7 @@ export async function listPayslips(periodId?: string): Promise<PayslipLine[]> {
   return periodId ? payslips.filter((p) => p.periodId === periodId) : payslips
 }
 
-/** "Processed payroll is locked after approval" — calculation is only
+/** "Processed payroll is locked after approval", calculation is only
  *  allowed while a period is still 'draft' or 'calculated' (so it can
  *  be re-run to fix a mistake before approving), never once 'approved'.
  *  Re-running fully replaces that period's payslip lines rather than

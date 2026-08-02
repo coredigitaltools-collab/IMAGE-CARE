@@ -64,7 +64,7 @@ export async function getInvoiceForSale(saleId: string): Promise<Invoice | null>
   return invoices.find((i) => i.saleId === saleId) ?? null
 }
 
-/** "Invoices are generated from completed sales only" — enforced here,
+/** "Invoices are generated from completed sales only", enforced here,
  *  not just documented. One invoice per sale (checked before creating
  *  another). Cash/mobile money/card sales are marked paid immediately
  *  (the money already changed hands at checkout); credit sales start
@@ -147,13 +147,13 @@ export async function cancelInvoice(id: string, reason: string): Promise<Invoice
   if (!reason.trim()) throw new Error('A reason is required to cancel an invoice.')
   const invoice = await getInvoice(id)
   if (!invoice) throw new Error('Invoice not found.')
-  if (invoice.status === 'paid') throw new InvalidInvoiceTransitionError('A paid invoice cannot be cancelled — issue a refund on the sale instead.')
-  // "Cancelled invoices remain in audit history" — status flip only,
+  if (invoice.status === 'paid') throw new InvalidInvoiceTransitionError('A paid invoice cannot be cancelled, issue a refund on the sale instead.')
+  // "Cancelled invoices remain in audit history", status flip only,
   // never removed from the collection.
   return updateInvoice(id, { status: 'cancelled', cancelledAt: new Date().toISOString(), cancelReason: reason.trim() })
 }
 
-/** Overdue is derived, not stored — an invoice becomes "overdue" purely
+/** Overdue is derived, not stored, an invoice becomes "overdue" purely
  *  by virtue of its due date passing while still unpaid, so the status
  *  can never go stale just because nobody opened the app that day. */
 export function isOverdue(invoice: Invoice): boolean {

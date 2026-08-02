@@ -1,6 +1,6 @@
 // Core domain types for ImageCare.
 // Kept independent of any data source (mock or Supabase) so the UI layer
-// never depends on how data is fetched — only on these shapes.
+// never depends on how data is fetched, only on these shapes.
 
 export type UserRole = 'owner' | 'manager' | 'staff'
 
@@ -26,7 +26,7 @@ export interface DashboardSummary {
   netProfit: number
   cashInHand: number
   outstandingCredit: number
-  /** The currency these figures are expressed in (display/reporting currency — user-selectable). */
+  /** The currency these figures are expressed in (display/reporting currency, user-selectable). */
   currency: string
   asOf: string // ISO timestamp
 }

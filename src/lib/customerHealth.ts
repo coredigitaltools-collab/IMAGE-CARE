@@ -12,7 +12,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
  *  - Inactive: never purchased, or nothing in 90+ days.
  *  - Needs Attention: nothing in 30-90 days, OR any outstanding credit.
  *  - Excellent: purchased within 30 days AND no outstanding credit.
- *  Every reason shown is a fact derived from real data — never a guess. */
+ *  Every reason shown is a fact derived from real data, never a guess. */
 export function getCustomerHealth(params: { lastPurchaseAt: string | null; creditBalance: number }): CustomerHealth {
   const { lastPurchaseAt, creditBalance } = params
   const daysSinceLastPurchase = lastPurchaseAt ? Math.floor((Date.now() - new Date(lastPurchaseAt).getTime()) / DAY_MS) : null

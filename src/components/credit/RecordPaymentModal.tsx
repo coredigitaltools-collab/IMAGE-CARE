@@ -38,7 +38,7 @@ export function RecordPaymentModal({ customerName, outstandingBalance, onClose, 
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { amount: outstandingBalance, method: 'cash', reference: '' } })
 
   return (
-    <Modal title={`Record payment — ${customerName}`} onClose={onClose}>
+    <Modal title={`Record payment, ${customerName}`} onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <p className="rounded-md bg-ink-50 px-3 py-2 text-xs text-ink-500">
           Outstanding balance: <span className="font-medium text-ink-900">{formatCurrency(outstandingBalance, 'UGX')}</span>

@@ -15,7 +15,7 @@ interface CategoryQuickSelectProps {
 
 /** A normal category dropdown, plus an always-available "+ Add new
  *  category" option so a business is never limited to whatever
- *  categories happen to exist yet — including zero, on a fresh install.
+ *  categories happen to exist yet, including zero, on a fresh install.
  *  Typing a name and confirming creates the category for real (via the
  *  same service Settings → Categories uses) and selects it immediately. */
 export function CategoryQuickSelect({ id, categories, value, onChange, userId, error }: CategoryQuickSelectProps) {

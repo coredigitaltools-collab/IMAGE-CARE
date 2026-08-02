@@ -57,7 +57,7 @@ export function DashboardPage() {
       navigate('/expenses')
       return
     }
-    showToast(`${MODULE_LABELS[target]} isn't built yet — coming in a future implementation pack.`)
+    showToast(`${MODULE_LABELS[target]} isn't built yet, coming in a future implementation pack.`)
   }
 
   return (

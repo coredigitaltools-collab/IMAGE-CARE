@@ -6,7 +6,7 @@ import type { SupplierInvoice, SupplierInvoicePayment } from '../types/purchasin
 // -----------------------------------------------------------------------
 // Bills & Payables (IMC-SRS-010). "Bills originate from supplier
 // invoices" is implemented literally: a Bill IS a SupplierInvoice
-// (recorded in the Purchasing module, IMC-SRS-007) — there is no
+// (recorded in the Purchasing module, IMC-SRS-007), there is no
 // separate Bill entity duplicating amount/status/payments. This module
 // adds the Finance-side lifecycle (cancel, close), Dashboard, Aging
 // Analysis, and Supplier Statements on top of that same data, reusing
@@ -61,9 +61,9 @@ async function updateBill(id: string, patch: Partial<SupplierInvoice>): Promise<
   return updated
 }
 
-/** "Cancelled bills remain in history" — status flip with a mandatory
+/** "Cancelled bills remain in history", status flip with a mandatory
  *  reason, never a deletion. A bill that's already been paid can't be
- *  cancelled (reverse the payment or write it off instead — cancelling
+ *  cancelled (reverse the payment or write it off instead, cancelling
  *  a paid bill would silently make money already sent look like it was
  *  never owed). */
 export async function cancelBill(id: string, reason: string): Promise<SupplierInvoice> {
@@ -76,7 +76,7 @@ export async function cancelBill(id: string, reason: string): Promise<SupplierIn
   return updateBill(id, { status: 'cancelled', cancelledAt: new Date().toISOString(), cancelReason: reason.trim() })
 }
 
-/** The explicit final "Closed" step in the spec's workflow — separate
+/** The explicit final "Closed" step in the spec's workflow, separate
  *  from "Paid" so a fully-settled bill can be marked as reconciled and
  *  done, not just financially at zero. */
 export async function closeBill(id: string): Promise<SupplierInvoice> {
@@ -89,7 +89,7 @@ export async function closeBill(id: string): Promise<SupplierInvoice> {
 // ---------- Aging Analysis ----------
 // Mirrors the same bucket structure as Credit Management's aging report
 // (Current / 31-60 / 61-90 / 90+) for a consistent mental model across
-// both sides of the business — money owed TO the business vs money the
+// both sides of the business, money owed TO the business vs money the
 // business owes.
 
 export interface BillAgingRow {
@@ -171,7 +171,7 @@ export async function getBillsDashboardKpis(): Promise<BillsDashboardKpis> {
 
 // ---------- Supplier Statement ----------
 // A chronological, running-balance view of one supplier's bills and
-// payments — the printable document a supplier would ask for to
+// payments, the printable document a supplier would ask for to
 // reconcile what they believe is owed against what's on record here.
 
 export interface StatementLine {
@@ -191,7 +191,7 @@ export async function getSupplierStatement(supplierId: string): Promise<Statemen
   const events: RawEvent[] = [
     ...supplierBills.map((b) => ({
       date: b.createdAt,
-      description: `Bill ${b.reference} (#${b.supplierInvoiceNumber || '—'})`,
+      description: `Bill ${b.reference} (#${b.supplierInvoiceNumber || '-'})`,
       debit: b.amount,
       credit: 0,
     })),
@@ -199,7 +199,7 @@ export async function getSupplierStatement(supplierId: string): Promise<Statemen
       const bill = supplierBills.find((b) => b.id === p.supplierInvoiceId)
       return {
         date: p.createdAt,
-        description: `Payment${bill ? ` — ${bill.reference}` : ''}${p.reference ? ` (${p.reference})` : ''}`,
+        description: `Payment${bill ? `, ${bill.reference}` : ''}${p.reference ? ` (${p.reference})` : ''}`,
         debit: 0,
         credit: p.amount,
       }

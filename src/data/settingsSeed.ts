@@ -17,7 +17,7 @@ import type {
 const SEED_USER = 'system-seed'
 
 export function seedBusinessProfile(): BusinessProfile {
-  // First-run default only — shown until someone edits it via Settings →
+  // First-run default only, shown until someone edits it via Settings →
   // Business Profile, which is how this actually gets renamed day to day.
   return {
     ...stampNew(SEED_USER),
@@ -51,10 +51,10 @@ export function seedStaff(branches: BranchRecord[]): StaffMember[] {
   ]
 }
 
-// The starting role catalogue — Owner's id is fixed (everything from
+// The starting role catalogue, Owner's id is fixed (everything from
 // permissions to staff.role='owner' depends on that exact id being
 // stable). Manager/Cashier/Accountant are just the starting examples,
-// no different from any role added later — a business can rename or
+// no different from any role added later, a business can rename or
 // archive them, and add "Social Media Manager" or anything else right
 // alongside them.
 export function seedRoles(): RoleDefinition[] {

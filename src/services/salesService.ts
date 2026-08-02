@@ -86,7 +86,7 @@ function generateReference(existing: Sale[]): string {
 }
 
 /** The single path for both "Complete Sale" and "Park Sale" (IMP-004 POS
- *  Workflow). Parked sales skip stock movements entirely — stock only
+ *  Workflow). Parked sales skip stock movements entirely; stock only
  *  actually moves once a sale is completed, whether that happens now or
  *  later when a parked sale is resumed and completed. */
 export async function checkout(input: CheckoutInput, userId: string): Promise<Sale> {
@@ -136,7 +136,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
   const existing = await listSales()
   const reference = generateReference(existing)
 
-  // Payment details are only validated when actually completing a sale —
+  // Payment details are only validated when actually completing a sale,
   // a parked cart doesn't need a finalized payment method or amount yet.
   let changeDue: number | null = null
   if (input.status === 'completed') {
@@ -149,7 +149,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
     } else if (input.paymentMethod === 'card') {
       if (!input.paymentReference?.trim()) throw new PaymentReferenceRequiredError('card transaction ID')
     } else if (input.paymentMethod === 'credit' && input.customerId) {
-      // "Credit limits enforced through approvals" (IMC-SRS-006) — a
+      // "Credit limits enforced through approvals" (IMC-SRS-006), a
       // limit of 0 means nobody has approved credit for this customer
       // yet; that's the enforcement mechanism, not just a display field.
       const customer = await getCustomer(input.customerId)
@@ -165,6 +165,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
     reference,
     branchId: null,
     customerId: input.customerId,
+    salesPersonId: input.salesPersonId,
     items: input.items.map((i) => ({
       productId: i.productId,
       productName: i.productName,
@@ -211,13 +212,13 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
   return sale
 }
 
-/** "Refunds reverse points" (IMC-SRS-008) — and reverse everything else
+/** "Refunds reverse points" (IMC-SRS-008), and reverse everything else
  *  the original sale did: stock comes back (a real, audited 'refund'
- *  movement — never a silent edit to currentStock), lifetime spend and
+ *  movement, never a silent edit to currentStock), lifetime spend and
  *  any credit balance the sale created are backed out, and loyalty
  *  points earned on it are reversed via the same Points Engine that
  *  awarded them. Nothing here is a parallel accounting of what the sale
- *  did — it's the same functions run in reverse. */
+ *  did, it's the same functions run in reverse. */
 export async function refundSale(saleId: string, reason: string, userId: string): Promise<Sale> {
   const sale = await getSale(saleId)
   if (!sale) throw new Error('Sale not found.')
@@ -233,7 +234,7 @@ export async function refundSale(saleId: string, reason: string, userId: string)
     if (sale.paymentMethod === 'credit') {
       // Reduce the credit balance this sale created. Written directly
       // here (not via creditService) because creditService already
-      // imports listSales from this file — importing creditService here
+      // imports listSales from this file; importing creditService here
       // too would create a circular dependency between the two.
       const customers = await getCollection<import('../types/sales').Customer>('sales:customers', () => [])
       const next = customers.map((c) =>
@@ -275,7 +276,7 @@ export async function deleteParkedSale(id: string): Promise<void> {
   )
 }
 
-/** Used by Customer Merge (IMP-005 refinement) — reassigns every sale
+/** Used by Customer Merge (IMP-005 refinement); reassigns every sale
  *  pointing at sourceCustomerId to targetCustomerId, so purchase history
  *  isn't lost when two duplicate customer records are combined. */
 export async function reassignCustomerSales(sourceCustomerId: string, targetCustomerId: string): Promise<number> {

@@ -2,7 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 
 // Generic "last known good" cache for read models (dashboard summary, recent
 // sales, low stock, etc). Business rule IMC-002 #8 requires offline data to
-// sync safely without duplicates — this store is read-cache only (keyed by
+// sync safely without duplicates, this store is read-cache only (keyed by
 // a stable string key, last write wins), the write path for offline
 // mutations belongs to a future module (Sales/Inventory), not the Dashboard.
 
