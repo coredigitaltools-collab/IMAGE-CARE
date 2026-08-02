@@ -337,6 +337,15 @@ The spec required reports that reconcile with Monthly and Daily summaries. That'
 - Year over Year Comparison is honest about a real edge case rather than papering over it: when a metric's prior year was zero and this year has real activity, the page says "No baseline" instead of manufacturing a percentage that would be meaningless (dividing by zero). Verified both sides directly: two years with no data at all correctly show a genuine 0% (nothing changed), while a jump from zero to real revenue correctly shows "No baseline" instead of a fabricated percent.
 - Export and Print both work the same proven way Monthly Summary's do: a real downloadable CSV (verified by triggering an actual file download) and the browser's native print with a print-friendly layout.
 
+## Daily Summary (IMC-SRS-018), the same engine, scoped to a single day
+
+This spec was deliberately smaller than Monthly and Annual Summary, no Branch Comparison, no Year over Year, no Export, just a real-time daily view. Built proportionally to that, not padded out to match the bigger modules for the sake of symmetry.
+
+- Reconciliation is guaranteed the same way as Monthly and Annual: every figure calls the exact same accountingService functions the main Dashboard already uses, day-scoped instead of month or year-scoped. Verified directly: sold a product with a known cost and price, then confirmed the main Dashboard's Today figures and Daily Summary's figures for today matched exactly, including Cash in Hand.
+- Cash in Hand is deliberately kept visible on its own, labeled "independent of profit, as of now," on both the Dashboard and the Cash Summary page, honoring the spec's business rule directly in the UI rather than just in the calculation.
+- A date picker lets an owner review any past day, not just today, the same historical browsing pattern as Monthly and Annual Summary.
+- Inventory Summary is honest that stock has no daily total, the same as Monthly and Annual Summary's equivalent pages: it shows the current position, clearly labeled as of now, not a fabricated daily figure.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded, it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

@@ -8,10 +8,10 @@ const IMPLEMENTED = [
   'CRM (IMP-005)', 'Credit Management (IMC-SRS-006)', 'Purchasing & Procurement (IMC-SRS-007)',
   'Loyalty Programme (IMC-SRS-008)', 'Invoices (IMC-SRS-009)', 'Bills & Payables (IMC-SRS-010)',
   'Payroll (IMC-SRS-011)', 'Expenses (IMC-SRS-012)', 'Sales Targets (IMC-SRS-013)', 'Stock Summary (IMC-SRS-014)',
-  'Cash Flow (IMC-SRS-015)', 'Monthly Summary (IMC-SRS-016)', 'Annual Summary (IMC-SRS-017)',
+  'Cash Flow (IMC-SRS-015)', 'Monthly Summary (IMC-SRS-016)', 'Annual Summary (IMC-SRS-017)', 'Daily Summary (IMC-SRS-018)',
 ]
 const PLANNED = [
-  'Daily Summary', 'Bank Reconciliation', 'Branch Overview', 'Offline',
+  'Bank Reconciliation', 'Branch Overview', 'Offline',
 ]
 
 export function AboutPage() {

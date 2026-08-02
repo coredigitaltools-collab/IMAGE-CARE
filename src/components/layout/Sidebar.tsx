@@ -51,7 +51,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Cash Flow', icon: Landmark, to: '/cash-flow' },
   { label: 'Monthly Summary', icon: CalendarDays, to: '/monthly-summary' },
   { label: 'Annual Summary', icon: Calendar, to: '/annual-summary' },
-  { label: 'Daily Summary', icon: Calendar },
+  { label: 'Daily Summary', icon: Calendar, to: '/daily-summary' },
   { label: 'Bank Reconciliation', icon: Banknote },
   { label: 'Branch Overview', icon: Building2 },
   { label: 'Offline', icon: CloudOff },

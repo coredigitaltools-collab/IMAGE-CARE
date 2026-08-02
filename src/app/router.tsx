@@ -47,6 +47,12 @@ const AnnualCashFlowSummaryPage = lazy(() => import('../pages/annualSummary/Annu
 const AnnualBranchPerformancePage = lazy(() => import('../pages/annualSummary/AnnualBranchPerformancePage').then((m) => ({ default: m.AnnualBranchPerformancePage })))
 const YearOverYearPage = lazy(() => import('../pages/annualSummary/YearOverYearPage').then((m) => ({ default: m.YearOverYearPage })))
 const AnnualReportPage = lazy(() => import('../pages/annualSummary/AnnualReportPage').then((m) => ({ default: m.AnnualReportPage })))
+
+const DailyDashboardPage = lazy(() => import('../pages/dailySummary/DailyDashboardPage').then((m) => ({ default: m.DailyDashboardPage })))
+const DailySalesSummaryPage = lazy(() => import('../pages/dailySummary/DailySalesSummaryPage').then((m) => ({ default: m.DailySalesSummaryPage })))
+const DailyInventorySummaryPage = lazy(() => import('../pages/dailySummary/DailyInventorySummaryPage').then((m) => ({ default: m.DailyInventorySummaryPage })))
+const DailyCashSummaryPage = lazy(() => import('../pages/dailySummary/DailyCashSummaryPage').then((m) => ({ default: m.DailyCashSummaryPage })))
+const DailyReportPage = lazy(() => import('../pages/dailySummary/DailyReportPage').then((m) => ({ default: m.DailyReportPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -198,6 +204,11 @@ export const router = createBrowserRouter(
         { path: 'annual-summary/branches', element: withSuspense(<AnnualBranchPerformancePage />) },
         { path: 'annual-summary/year-over-year', element: withSuspense(<YearOverYearPage />) },
         { path: 'annual-summary/report', element: withSuspense(<AnnualReportPage />) },
+        { path: 'daily-summary', element: withSuspense(<DailyDashboardPage />) },
+        { path: 'daily-summary/sales', element: withSuspense(<DailySalesSummaryPage />) },
+        { path: 'daily-summary/inventory', element: withSuspense(<DailyInventorySummaryPage />) },
+        { path: 'daily-summary/cash', element: withSuspense(<DailyCashSummaryPage />) },
+        { path: 'daily-summary/report', element: withSuspense(<DailyReportPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
