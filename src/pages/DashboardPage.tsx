@@ -9,10 +9,9 @@ import { LowStockAlert } from '../components/dashboard/LowStockAlert'
 import { RecentSalesList } from '../components/dashboard/RecentSalesList'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../components/ui/Toast'
-import { BRANCHES } from '../data/mockData'
 import type { SupportedCurrency } from '../lib/currency'
 import { useDashboardSummary, useLowStockItems, useRecentSales } from '../features/dashboard/hooks/useDashboardData'
-import { useBusinessProfile } from '../features/settings/hooks/useSettingsData'
+import { useBranches, useBusinessProfile } from '../features/settings/hooks/useSettingsData'
 
 const MODULE_LABELS: Record<'sale' | 'purchase' | 'expense' | 'reports', string> = {
   sale: 'Sales',
@@ -24,15 +23,22 @@ const MODULE_LABELS: Record<'sale' | 'purchase' | 'expense' | 'reports', string>
 export function DashboardPage() {
   const { user } = useAuth()
   const businessProfileQuery = useBusinessProfile()
+  const branchesQuery = useBranches()
   const { showToast } = useToast()
   const navigate = useNavigate()
 
   // Business rule (IMP-001 §7): branch users see only branches they're
-  // permitted to view. Owners/managers get every branch plus "All branches".
-  const visibleBranches = useMemo(
-    () => BRANCHES.filter((b) => user.allowedBranchIds.includes(b.id)),
-    [user.allowedBranchIds],
-  )
+  // permitted to view. Owners/managers get every branch plus "All
+  // branches". Owners always have unrestricted access (IMP-002), so
+  // that's applied directly here rather than through allowedBranchIds,
+  // which only exists on the single stub-auth user this app currently
+  // has and was never wired to real, dynamically-created branch IDs. A
+  // real multi-user permission system would filter here instead.
+  const visibleBranches = useMemo(() => {
+    const active = (branchesQuery.data ?? []).filter((b) => b.is_active)
+    if (user.role === 'owner') return active
+    return active.filter((b) => user.allowedBranchIds.includes(b.id))
+  }, [branchesQuery.data, user.role, user.allowedBranchIds])
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all')
   const [reportingCurrency, setReportingCurrency] = useState<SupportedCurrency>('UGX')
 

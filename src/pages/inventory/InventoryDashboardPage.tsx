@@ -31,7 +31,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
-import { BRANCHES } from '../../data/mockData'
+import { useBranches } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'
 import type { SupportedCurrency } from '../../lib/currency'
 import type { TrendRange } from '../../services/inventoryReportsService'
@@ -68,10 +68,17 @@ export function InventoryDashboardPage() {
   const statsQuery = useProductStatistics()
   const trendQuery = useInventoryValueTrend(trendRange, currency)
 
-  const visibleBranches = useMemo(
-    () => BRANCHES.filter((b) => user.allowedBranchIds.includes(b.id)),
-    [user.allowedBranchIds],
-  )
+  const branchesQuery = useBranches()
+
+  // Same fix as the main Dashboard: real branch data instead of the
+  // stale mock array, with Owner's unrestricted access (IMP-002)
+  // applied directly since allowedBranchIds was never wired to real,
+  // dynamically-created branch IDs.
+  const visibleBranches = useMemo(() => {
+    const active = (branchesQuery.data ?? []).filter((b) => b.is_active)
+    if (user.role === 'owner') return active
+    return active.filter((b) => user.allowedBranchIds.includes(b.id))
+  }, [branchesQuery.data, user.role, user.allowedBranchIds])
 
   const passesFilters = (p: { categoryId: string; supplierId: string | null; brandId: string | null; status: string; branch_id: string | null }) => {
     if (filters.categoryId !== 'all' && p.categoryId !== filters.categoryId) return false

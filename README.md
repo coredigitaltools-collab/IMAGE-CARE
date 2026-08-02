@@ -356,6 +356,16 @@ This spec was deliberately smaller than Monthly and Annual Summary, no Branch Co
 - Archiving an account is blocked while it still has statement lines recorded against it, verified by trying it both ways: an unused account archived cleanly, an in-use one was correctly refused.
 - The existing "Record Cash Movement" flow in Cash Flow now includes a bank account picker for deposits, so new deposits going forward are attributable to a specific account and can actually be reconciled.
 
+## Branch Overview (IMC-SRS-020), and a real bug it surfaced
+
+Checking "Respect user permissions" before building anything led to a genuine, previously undiscovered bug that predates this module entirely: the main Dashboard and Inventory Dashboard's branch selectors read from a hardcoded mock branch list with fake IDs, completely separate from the real branches every other module (Sales, Stock Summary, Bank Reconciliation) uses. Selecting a specific branch on the main Dashboard would have silently shown zero sales for it, always, since the IDs never matched anything real.
+
+- Verified the bug directly before fixing it: sold something at a real branch, filtered the main Dashboard to that branch, confirmed it showed zero. Fixed at the root, both pages now read real branch data, the dead mock export is removed entirely rather than left behind as a trap for later, and Owner's unrestricted access (a stated business rule) is applied honestly rather than through a permission field that was never wired to real, dynamically created branch IDs.
+- Verified the fix the same way: same scenario, same branch filter, now correctly shows the sale.
+- Branch Overview itself, Dashboard, Performance Comparison, Inventory by Branch, Sales by Branch, and Reports, reuses the exact same sales and stock movement data every other branch aware module already reads. "Branch data aggregates automatically" holds because nothing here is a second calculation.
+- Verified end to end with a real sale at a specific branch: it correctly became the best performing branch on the Dashboard, ranked first on Performance Comparison, correctly attributed on Sales by Branch, and correctly reflected in the combined Reports table, all from the same one transaction.
+- Inventory by Branch stays honest about the same limitation Stock Summary already discloses: stock on hand is one business-wide number in this app, not split per branch, so it shows movement activity rather than a fabricated per-branch stock count.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded, it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

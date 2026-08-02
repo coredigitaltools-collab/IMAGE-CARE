@@ -9,10 +9,10 @@ const IMPLEMENTED = [
   'Loyalty Programme (IMC-SRS-008)', 'Invoices (IMC-SRS-009)', 'Bills & Payables (IMC-SRS-010)',
   'Payroll (IMC-SRS-011)', 'Expenses (IMC-SRS-012)', 'Sales Targets (IMC-SRS-013)', 'Stock Summary (IMC-SRS-014)',
   'Cash Flow (IMC-SRS-015)', 'Monthly Summary (IMC-SRS-016)', 'Annual Summary (IMC-SRS-017)', 'Daily Summary (IMC-SRS-018)',
-  'Bank Reconciliation (IMC-SRS-019)',
+  'Bank Reconciliation (IMC-SRS-019)', 'Branch Overview (IMC-SRS-020)',
 ]
 const PLANNED = [
-  'Branch Overview', 'Offline',
+  'Offline',
 ]
 
 export function AboutPage() {

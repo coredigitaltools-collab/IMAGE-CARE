@@ -59,6 +59,12 @@ const BankAccountsPage = lazy(() => import('../pages/bankReconciliation/BankAcco
 const ReconciliationPage = lazy(() => import('../pages/bankReconciliation/ReconciliationPage').then((m) => ({ default: m.ReconciliationPage })))
 const UnmatchedTransactionsPage = lazy(() => import('../pages/bankReconciliation/UnmatchedTransactionsPage').then((m) => ({ default: m.UnmatchedTransactionsPage })))
 const BankReportsPage = lazy(() => import('../pages/bankReconciliation/BankReportsPage').then((m) => ({ default: m.BankReportsPage })))
+
+const BranchOverviewDashboardPage = lazy(() => import('../pages/branchOverview/BranchOverviewDashboardPage').then((m) => ({ default: m.BranchOverviewDashboardPage })))
+const PerformanceComparisonPage = lazy(() => import('../pages/branchOverview/PerformanceComparisonPage').then((m) => ({ default: m.PerformanceComparisonPage })))
+const InventoryByBranchPage = lazy(() => import('../pages/branchOverview/InventoryByBranchPage').then((m) => ({ default: m.InventoryByBranchPage })))
+const SalesByBranchPage = lazy(() => import('../pages/branchOverview/SalesByBranchPage').then((m) => ({ default: m.SalesByBranchPage })))
+const BranchReportsPage = lazy(() => import('../pages/branchOverview/BranchReportsPage').then((m) => ({ default: m.BranchReportsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -220,6 +226,11 @@ export const router = createBrowserRouter(
         { path: 'bank-reconciliation/reconcile', element: withSuspense(<ReconciliationPage />) },
         { path: 'bank-reconciliation/unmatched', element: withSuspense(<UnmatchedTransactionsPage />) },
         { path: 'bank-reconciliation/reports', element: withSuspense(<BankReportsPage />) },
+        { path: 'branch-overview', element: withSuspense(<BranchOverviewDashboardPage />) },
+        { path: 'branch-overview/performance', element: withSuspense(<PerformanceComparisonPage />) },
+        { path: 'branch-overview/inventory', element: withSuspense(<InventoryByBranchPage />) },
+        { path: 'branch-overview/sales', element: withSuspense(<SalesByBranchPage />) },
+        { path: 'branch-overview/reports', element: withSuspense(<BranchReportsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },

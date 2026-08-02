@@ -53,7 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Annual Summary', icon: Calendar, to: '/annual-summary' },
   { label: 'Daily Summary', icon: Calendar, to: '/daily-summary' },
   { label: 'Bank Reconciliation', icon: Banknote, to: '/bank-reconciliation' },
-  { label: 'Branch Overview', icon: Building2 },
+  { label: 'Branch Overview', icon: Building2, to: '/branch-overview' },
   { label: 'Offline', icon: CloudOff },
   { label: 'Settings', icon: Settings, to: '/settings' },
 ]
