@@ -21,6 +21,11 @@ const TargetsListPage = lazy(() => import('../pages/salesTargets/TargetsListPage
 const LeaderboardPage = lazy(() => import('../pages/salesTargets/LeaderboardPage').then((m) => ({ default: m.LeaderboardPage })))
 const TargetReportsPage = lazy(() => import('../pages/salesTargets/TargetReportsPage').then((m) => ({ default: m.TargetReportsPage })))
 const TargetSettingsPage = lazy(() => import('../pages/salesTargets/TargetSettingsPage').then((m) => ({ default: m.TargetSettingsPage })))
+
+const StockSummaryDashboardPage = lazy(() => import('../pages/stockSummary/StockSummaryDashboardPage').then((m) => ({ default: m.StockSummaryDashboardPage })))
+const CurrentStockPage = lazy(() => import('../pages/stockSummary/CurrentStockPage').then((m) => ({ default: m.CurrentStockPage })))
+const BranchComparisonPage = lazy(() => import('../pages/stockSummary/BranchComparisonPage').then((m) => ({ default: m.BranchComparisonPage })))
+const StockReportsPage = lazy(() => import('../pages/stockSummary/StockReportsPage').then((m) => ({ default: m.StockReportsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -150,6 +155,10 @@ export const router = createBrowserRouter(
         { path: 'sales-targets/leaderboard', element: withSuspense(<LeaderboardPage />) },
         { path: 'sales-targets/reports', element: withSuspense(<TargetReportsPage />) },
         { path: 'sales-targets/settings', element: withSuspense(<TargetSettingsPage />) },
+        { path: 'stock-summary', element: withSuspense(<StockSummaryDashboardPage />) },
+        { path: 'stock-summary/current-stock', element: withSuspense(<CurrentStockPage />) },
+        { path: 'stock-summary/branch-comparison', element: withSuspense(<BranchComparisonPage />) },
+        { path: 'stock-summary/reports', element: withSuspense(<StockReportsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },

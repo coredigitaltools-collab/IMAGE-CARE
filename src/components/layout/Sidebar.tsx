@@ -47,7 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Payroll', icon: Wallet, to: '/payroll' },
   { label: 'Expenses', icon: FileMinus, to: '/expenses' },
   { label: 'Sales Targets', icon: BarChart3, to: '/sales-targets' },
-  { label: 'Stock Summary', icon: Package },
+  { label: 'Stock Summary', icon: Package, to: '/stock-summary' },
   { label: 'Cash Flow', icon: Landmark },
   { label: 'Monthly Summary', icon: CalendarDays },
   { label: 'Annual Summary', icon: Calendar },

@@ -144,6 +144,7 @@ export interface CartItem {
 export interface CheckoutInput {
   customerId: string | null
   salesPersonId: string | null
+  branchId: string | null
   items: CartItem[]
   discountPercent: number
   taxRateId: string | null

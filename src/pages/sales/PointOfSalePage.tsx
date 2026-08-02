@@ -9,7 +9,7 @@ import { ReceiptModal } from '../../components/sales/ReceiptModal'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../hooks/useAuth'
 import { useCategories, useProducts } from '../../features/inventory/hooks/useInventoryData'
-import { useTaxRates, useStaff } from '../../features/settings/hooks/useSettingsData'
+import { useTaxRates, useStaff, useBranches } from '../../features/settings/hooks/useSettingsData'
 import { useReceiptSettings, useSalesSettings } from '../../features/settings/hooks/useSettingsData'
 import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
 import {
@@ -60,6 +60,15 @@ export function PointOfSalePage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [salesPersonId, setSalesPersonId] = useState<string | null>(null)
   const staffQuery = useStaff()
+  const branchesQuery = useBranches()
+  const [branchId, setBranchId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (branchId === null) {
+      const firstActive = (branchesQuery.data ?? []).find((b) => b.is_active)
+      if (firstActive) setBranchId(firstActive.id)
+    }
+  }, [branchesQuery.data, branchId])
   const [discountPercent, setDiscountPercent] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -158,6 +167,7 @@ export function PointOfSalePage() {
       const sale = await checkout.mutateAsync({
         customerId: selectedCustomer?.id ?? null,
         salesPersonId,
+        branchId,
         items: cart,
         discountPercent,
         taxRateId,
@@ -177,6 +187,7 @@ export function PointOfSalePage() {
       await checkout.mutateAsync({
         customerId: selectedCustomer?.id ?? null,
         salesPersonId,
+        branchId,
         items: cart,
         discountPercent,
         taxRateId,
@@ -270,6 +281,25 @@ export function PointOfSalePage() {
             onSelect={setSelectedCustomer}
             onAddNew={() => setIsCustomerModalOpen(true)}
           />
+          <div>
+            <label htmlFor="pos-branch" className="mb-1 block text-xs font-medium text-ink-500">
+              Branch
+            </label>
+            <select
+              id="pos-branch"
+              value={branchId ?? ''}
+              onChange={(e) => setBranchId(e.target.value || null)}
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            >
+              {(branchesQuery.data ?? [])
+                .filter((b) => b.is_active)
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+            </select>
+          </div>
           <div>
             <label htmlFor="pos-sold-by" className="mb-1 block text-xs font-medium text-ink-500">
               Sold by (optional)

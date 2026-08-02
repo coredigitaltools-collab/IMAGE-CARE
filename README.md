@@ -297,6 +297,16 @@ The "Add staff member" Role field was a hardcoded 4-item list (Owner/Manager/Cas
 - **Settings and Notifications were built deliberately, not skipped.** A configurable percent threshold decides when a target shows up as an alert in the bell icon Notification Center, verified end to end: set the threshold, made a sale that crossed it, and confirmed both the unread count and the actual alert content were correct.
 - **All six required Dashboard KPIs** (Target, Sales Achieved, Remaining Target, Achievement percent, Top Performer, Best Branch) are wired to real data, verified against an actual sale rather than just reviewed in code.
 
+## Stock Summary (IMC-SRS-014), a business-wide lens, not a parallel stock system
+
+The spec explicitly required using the shared inventory engine, so this module reads the exact same Product records and StockMovement log that Inventory (IMP-003) already owns. It never recomputes stock levels or valuation on its own.
+
+- Dashboard has all 6 required KPIs (Total Inventory Value, Stock Items, Low Stock, Out of Stock, Today's Stock In, Today's Stock Out), verified against real data: a 5 unit product at a 10,000 buying price correctly showed 50,000 total value and correctly triggered a low stock flag against its reorder level.
+- Current Stock is a condensed, read only summary, deliberately distinct in purpose from Inventory's Product Master list, which is where products actually get created and edited.
+- Stock Reports is an index that links directly into the 7 existing, detailed Inventory Reports and the Stock Movements audit trail rather than rebuilding parallel pages for data that already has a perfectly good home.
+- Branch Comparison surfaced a real, pre-existing bug that predates this pack: `Sale.branchId` was hardcoded to null at checkout, and stock movements were never told which branch a transaction happened at either, so Branch Comparison would have shown zero activity forever, not because the feature was wrong, but because the underlying data was never actually being captured anywhere in the app. Fixed properly: added a Branch selector to the POS (a physical point of sale is always at some branch), wired it through checkout and through the stock movement it creates, and did the same for the refund path. Verified directly: sold an item at a specific branch, and Branch Comparison correctly showed that branch's activity while the other branches correctly stayed at zero.
+- Branch Comparison is honest about what it can't show yet: current stock quantity is tracked business-wide in this version of the app, not split per branch, so the page compares movement activity (what moved in and out at each branch) rather than pretending to show a per-branch stock count that doesn't exist. That limitation is stated directly on the page itself, not hidden.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded, it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

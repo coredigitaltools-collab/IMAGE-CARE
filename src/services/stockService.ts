@@ -23,6 +23,7 @@ interface RecordMovementInput {
   type: StockMovementType
   quantityChange: number
   reason?: string | null
+  branchId?: string | null
 }
 
 /** The single path by which currentStock ever changes (IMP-003 §18
@@ -41,7 +42,7 @@ export async function recordMovement(input: RecordMovementInput, userId: string)
   const movement: StockMovement = {
     id: crypto.randomUUID(),
     productId: input.productId,
-    branchId: product.branch_id,
+    branchId: input.branchId ?? product.branch_id,
     type: input.type,
     quantityChange: input.quantityChange,
     quantityAfter,

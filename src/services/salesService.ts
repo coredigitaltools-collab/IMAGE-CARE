@@ -163,7 +163,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
   const sale: Sale = {
     id: crypto.randomUUID(),
     reference,
-    branchId: null,
+    branchId: input.branchId,
     customerId: input.customerId,
     salesPersonId: input.salesPersonId,
     items: input.items.map((i) => ({
@@ -195,7 +195,7 @@ export async function checkout(input: CheckoutInput, userId: string): Promise<Sa
   if (input.status === 'completed') {
     for (const item of input.items) {
       await recordMovement(
-        { productId: item.productId, type: 'sale', quantityChange: -item.quantity, reason: `Sale ${reference}` },
+        { productId: item.productId, type: 'sale', quantityChange: -item.quantity, reason: `Sale ${reference}`, branchId: input.branchId },
         userId,
       )
     }
@@ -226,7 +226,10 @@ export async function refundSale(saleId: string, reason: string, userId: string)
   if (!reason.trim()) throw new Error('A reason is required to refund a sale.')
 
   for (const item of sale.items) {
-    await recordMovement({ productId: item.productId, type: 'refund', quantityChange: item.quantity, reason: `Refund ${sale.reference}` }, userId)
+    await recordMovement(
+      { productId: item.productId, type: 'refund', quantityChange: item.quantity, reason: `Refund ${sale.reference}`, branchId: sale.branchId },
+      userId,
+    )
   }
 
   if (sale.customerId) {
