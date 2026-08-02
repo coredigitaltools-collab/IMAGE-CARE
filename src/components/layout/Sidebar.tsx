@@ -50,7 +50,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Stock Summary', icon: Package, to: '/stock-summary' },
   { label: 'Cash Flow', icon: Landmark, to: '/cash-flow' },
   { label: 'Monthly Summary', icon: CalendarDays, to: '/monthly-summary' },
-  { label: 'Annual Summary', icon: Calendar },
+  { label: 'Annual Summary', icon: Calendar, to: '/annual-summary' },
   { label: 'Daily Summary', icon: Calendar },
   { label: 'Bank Reconciliation', icon: Banknote },
   { label: 'Branch Overview', icon: Building2 },

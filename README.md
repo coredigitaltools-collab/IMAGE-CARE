@@ -328,6 +328,15 @@ The spec's own discipline rule, reports must reconcile across modules, shaped th
 - A month picker (synced to the URL, so it survives navigating between tabs) lets an owner review any past month, not just the current one, satisfying Monthly Reports as historical browsing rather than a separate, disconnected page.
 - Export & Print are both real. Print uses the browser's native print with a print-friendly layout; Export produces an actual downloadable CSV containing every figure on the report, verified by triggering a real file download and confirming its name and extension.
 
+## Annual Summary (IMC-SRS-017), the same engine, a year-wide lens
+
+The spec required reports that reconcile with Monthly and Daily summaries. That's true by construction, not by careful bookkeeping: Annual Summary calls the exact same accountingService functions Monthly Summary and the main Dashboard already call (getFinancialSummaryForRange, getCashLedger, listSales, listBranches), just with a year-wide range instead of a month or a day. There is one COGS calculation in the entire app, used everywhere.
+
+- Verified directly: sold a product with a known cost and price, then confirmed Annual Summary's Revenue, COGS, Gross Profit, and Cash in Hand all matched Monthly Summary's figures for the same transaction, exactly.
+- All 10 required Dashboard KPIs are present, including Top Selling Product and Best Performing Branch, both genuinely derived from real sales data (top of the annual sales-by-product and sales-by-branch rankings), not placeholders.
+- Year over Year Comparison is honest about a real edge case rather than papering over it: when a metric's prior year was zero and this year has real activity, the page says "No baseline" instead of manufacturing a percentage that would be meaningless (dividing by zero). Verified both sides directly: two years with no data at all correctly show a genuine 0% (nothing changed), while a jump from zero to real revenue correctly shows "No baseline" instead of a fabricated percent.
+- Export and Print both work the same proven way Monthly Summary's do: a real downloadable CSV (verified by triggering an actual file download) and the browser's native print with a print-friendly layout.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded, it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

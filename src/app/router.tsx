@@ -40,6 +40,13 @@ const MonthlyInventorySummaryPage = lazy(() => import('../pages/monthlySummary/M
 const MonthlyCashFlowSummaryPage = lazy(() => import('../pages/monthlySummary/MonthlyCashFlowSummaryPage').then((m) => ({ default: m.MonthlyCashFlowSummaryPage })))
 const MonthlyBranchComparisonPage = lazy(() => import('../pages/monthlySummary/MonthlyBranchComparisonPage').then((m) => ({ default: m.MonthlyBranchComparisonPage })))
 const MonthlyReportPage = lazy(() => import('../pages/monthlySummary/MonthlyReportPage').then((m) => ({ default: m.MonthlyReportPage })))
+
+const AnnualDashboardPage = lazy(() => import('../pages/annualSummary/AnnualDashboardPage').then((m) => ({ default: m.AnnualDashboardPage })))
+const AnnualSalesSummaryPage = lazy(() => import('../pages/annualSummary/AnnualSalesSummaryPage').then((m) => ({ default: m.AnnualSalesSummaryPage })))
+const AnnualCashFlowSummaryPage = lazy(() => import('../pages/annualSummary/AnnualCashFlowSummaryPage').then((m) => ({ default: m.AnnualCashFlowSummaryPage })))
+const AnnualBranchPerformancePage = lazy(() => import('../pages/annualSummary/AnnualBranchPerformancePage').then((m) => ({ default: m.AnnualBranchPerformancePage })))
+const YearOverYearPage = lazy(() => import('../pages/annualSummary/YearOverYearPage').then((m) => ({ default: m.YearOverYearPage })))
+const AnnualReportPage = lazy(() => import('../pages/annualSummary/AnnualReportPage').then((m) => ({ default: m.AnnualReportPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -185,6 +192,12 @@ export const router = createBrowserRouter(
         { path: 'monthly-summary/cash-flow', element: withSuspense(<MonthlyCashFlowSummaryPage />) },
         { path: 'monthly-summary/branches', element: withSuspense(<MonthlyBranchComparisonPage />) },
         { path: 'monthly-summary/report', element: withSuspense(<MonthlyReportPage />) },
+        { path: 'annual-summary', element: withSuspense(<AnnualDashboardPage />) },
+        { path: 'annual-summary/sales', element: withSuspense(<AnnualSalesSummaryPage />) },
+        { path: 'annual-summary/cash-flow', element: withSuspense(<AnnualCashFlowSummaryPage />) },
+        { path: 'annual-summary/branches', element: withSuspense(<AnnualBranchPerformancePage />) },
+        { path: 'annual-summary/year-over-year', element: withSuspense(<YearOverYearPage />) },
+        { path: 'annual-summary/report', element: withSuspense(<AnnualReportPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
