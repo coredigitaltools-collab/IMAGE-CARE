@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Wallet, Plus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { RecordCashMovementModal } from '../../components/accounting/RecordCashMovementModal'
@@ -41,6 +42,14 @@ export function CashMovementsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Cash Movements' }]} />
+
+      <div className="mb-4 rounded-md bg-brand-blue-50 px-3 py-2.5 text-xs text-brand-blue-700">
+        Looking for forecasting, reconciliation, or the full cash ledger? See{' '}
+        <Link to="/cash-flow" className="font-medium underline">
+          Cash Flow
+        </Link>
+        . This page still works for a quick opening balance edit or movement entry.
+      </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -119,7 +128,7 @@ export function CashMovementsPage() {
           <Button
             variant="secondary"
             onClick={async () => {
-              await saveSettings.mutateAsync({ openingCashUgx: openingCash })
+              await saveSettings.mutateAsync({ openingCashUgx: openingCash, openingBankBalanceUgx: settingsQuery.data?.openingBankBalanceUgx ?? 0 })
               showToast('Opening cash saved.', 'success')
             }}
           >

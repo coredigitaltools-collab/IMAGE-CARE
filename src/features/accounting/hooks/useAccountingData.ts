@@ -35,3 +35,35 @@ export function useSaveAccountingSettings() {
     onSuccess: () => invalidateAll(qc),
   })
 }
+
+export function useBankBalance() {
+  return useQuery({ queryKey: ['accounting', 'bank-balance'], queryFn: accountingService.getBankBalance })
+}
+
+export function useCashFlowDashboardKpis() {
+  return useQuery({ queryKey: ['accounting', 'cash-flow-kpis'], queryFn: accountingService.getCashFlowDashboardKpis })
+}
+
+export function useCashLedger() {
+  return useQuery({ queryKey: ['accounting', 'cash-ledger'], queryFn: accountingService.getCashLedger })
+}
+
+export function useCashForecast(windowDays?: number, forecastDays?: number) {
+  return useQuery({
+    queryKey: ['accounting', 'cash-forecast', windowDays, forecastDays],
+    queryFn: () => accountingService.getCashForecast(windowDays, forecastDays),
+  })
+}
+
+export function useReconciliations() {
+  return useQuery({ queryKey: ['accounting', 'reconciliations'], queryFn: accountingService.listReconciliations })
+}
+
+export function useRecordReconciliation(userId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ countedAmountUgx, notes }: { countedAmountUgx: number; notes: string }) =>
+      accountingService.recordReconciliation(countedAmountUgx, notes, userId),
+    onSuccess: () => invalidateAll(qc),
+  })
+}

@@ -50,7 +50,7 @@ export function DashboardPage() {
       return
     }
     if (target === 'cash') {
-      navigate('/cash-movements')
+      navigate('/cash-flow')
       return
     }
     if (target === 'expense') {

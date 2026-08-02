@@ -26,6 +26,13 @@ const StockSummaryDashboardPage = lazy(() => import('../pages/stockSummary/Stock
 const CurrentStockPage = lazy(() => import('../pages/stockSummary/CurrentStockPage').then((m) => ({ default: m.CurrentStockPage })))
 const BranchComparisonPage = lazy(() => import('../pages/stockSummary/BranchComparisonPage').then((m) => ({ default: m.BranchComparisonPage })))
 const StockReportsPage = lazy(() => import('../pages/stockSummary/StockReportsPage').then((m) => ({ default: m.StockReportsPage })))
+
+const CashFlowDashboardPage = lazy(() => import('../pages/cashFlow/CashFlowDashboardPage').then((m) => ({ default: m.CashFlowDashboardPage })))
+const CashLedgerPage = lazy(() => import('../pages/cashFlow/CashLedgerPage').then((m) => ({ default: m.CashLedgerPage })))
+const CashForecastPage = lazy(() => import('../pages/cashFlow/CashForecastPage').then((m) => ({ default: m.CashForecastPage })))
+const CashReconciliationPage = lazy(() => import('../pages/cashFlow/CashReconciliationPage').then((m) => ({ default: m.CashReconciliationPage })))
+const CashFlowReportsPage = lazy(() => import('../pages/cashFlow/CashFlowReportsPage').then((m) => ({ default: m.CashFlowReportsPage })))
+const CashFlowSettingsPage = lazy(() => import('../pages/cashFlow/CashFlowSettingsPage').then((m) => ({ default: m.CashFlowSettingsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -159,6 +166,12 @@ export const router = createBrowserRouter(
         { path: 'stock-summary/current-stock', element: withSuspense(<CurrentStockPage />) },
         { path: 'stock-summary/branch-comparison', element: withSuspense(<BranchComparisonPage />) },
         { path: 'stock-summary/reports', element: withSuspense(<StockReportsPage />) },
+        { path: 'cash-flow', element: withSuspense(<CashFlowDashboardPage />) },
+        { path: 'cash-flow/ledger', element: withSuspense(<CashLedgerPage />) },
+        { path: 'cash-flow/forecast', element: withSuspense(<CashForecastPage />) },
+        { path: 'cash-flow/reconciliation', element: withSuspense(<CashReconciliationPage />) },
+        { path: 'cash-flow/reports', element: withSuspense(<CashFlowReportsPage />) },
+        { path: 'cash-flow/settings', element: withSuspense(<CashFlowSettingsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
