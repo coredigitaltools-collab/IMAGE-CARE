@@ -49,7 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Sales Targets', icon: BarChart3, to: '/sales-targets' },
   { label: 'Stock Summary', icon: Package, to: '/stock-summary' },
   { label: 'Cash Flow', icon: Landmark, to: '/cash-flow' },
-  { label: 'Monthly Summary', icon: CalendarDays },
+  { label: 'Monthly Summary', icon: CalendarDays, to: '/monthly-summary' },
   { label: 'Annual Summary', icon: Calendar },
   { label: 'Daily Summary', icon: Calendar },
   { label: 'Bank Reconciliation', icon: Banknote },

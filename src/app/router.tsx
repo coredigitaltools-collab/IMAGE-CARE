@@ -33,6 +33,13 @@ const CashForecastPage = lazy(() => import('../pages/cashFlow/CashForecastPage')
 const CashReconciliationPage = lazy(() => import('../pages/cashFlow/CashReconciliationPage').then((m) => ({ default: m.CashReconciliationPage })))
 const CashFlowReportsPage = lazy(() => import('../pages/cashFlow/CashFlowReportsPage').then((m) => ({ default: m.CashFlowReportsPage })))
 const CashFlowSettingsPage = lazy(() => import('../pages/cashFlow/CashFlowSettingsPage').then((m) => ({ default: m.CashFlowSettingsPage })))
+
+const MonthlyDashboardPage = lazy(() => import('../pages/monthlySummary/MonthlyDashboardPage').then((m) => ({ default: m.MonthlyDashboardPage })))
+const MonthlySalesSummaryPage = lazy(() => import('../pages/monthlySummary/MonthlySalesSummaryPage').then((m) => ({ default: m.MonthlySalesSummaryPage })))
+const MonthlyInventorySummaryPage = lazy(() => import('../pages/monthlySummary/MonthlyInventorySummaryPage').then((m) => ({ default: m.MonthlyInventorySummaryPage })))
+const MonthlyCashFlowSummaryPage = lazy(() => import('../pages/monthlySummary/MonthlyCashFlowSummaryPage').then((m) => ({ default: m.MonthlyCashFlowSummaryPage })))
+const MonthlyBranchComparisonPage = lazy(() => import('../pages/monthlySummary/MonthlyBranchComparisonPage').then((m) => ({ default: m.MonthlyBranchComparisonPage })))
+const MonthlyReportPage = lazy(() => import('../pages/monthlySummary/MonthlyReportPage').then((m) => ({ default: m.MonthlyReportPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -172,6 +179,12 @@ export const router = createBrowserRouter(
         { path: 'cash-flow/reconciliation', element: withSuspense(<CashReconciliationPage />) },
         { path: 'cash-flow/reports', element: withSuspense(<CashFlowReportsPage />) },
         { path: 'cash-flow/settings', element: withSuspense(<CashFlowSettingsPage />) },
+        { path: 'monthly-summary', element: withSuspense(<MonthlyDashboardPage />) },
+        { path: 'monthly-summary/sales', element: withSuspense(<MonthlySalesSummaryPage />) },
+        { path: 'monthly-summary/inventory', element: withSuspense(<MonthlyInventorySummaryPage />) },
+        { path: 'monthly-summary/cash-flow', element: withSuspense(<MonthlyCashFlowSummaryPage />) },
+        { path: 'monthly-summary/branches', element: withSuspense(<MonthlyBranchComparisonPage />) },
+        { path: 'monthly-summary/report', element: withSuspense(<MonthlyReportPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },

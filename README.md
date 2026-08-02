@@ -318,6 +318,16 @@ The spec required using the shared accounting engine and the IMC Accounting Engi
 - Cash Forecast is deliberately simple and says so on the page: today's cash in hand, projected forward by the average daily net cash flow of the trailing 30 days. No hidden model, no fabricated trend.
 - The existing Cash Movements page (built during the Accounting Engine Correction) still works exactly as before and now signposts to this fuller module; nothing was removed, and the Dashboard's Cash Movement quick action now opens Cash Flow directly.
 
+## Monthly Summary (IMC-SRS-016), an executive roll-up that cannot drift from its sources
+
+The spec's own discipline rule, reports must reconcile across modules, shaped the whole approach. Rather than let this module compute its own version of monthly figures, the underlying accounting engine itself was refactored: `getFinancialSummary` (used by the main Dashboard's Today's figures) is now a thin wrapper over a new `getFinancialSummaryForRange`, and Monthly Summary calls that same range based function for the whole month. There is exactly one COGS and Gross Profit calculation in the entire app, not two that happen to agree today and risk drifting apart later.
+
+- Verified directly, not just by code review: sold a product with a known cost and price, then confirmed the main Dashboard's Today's figures and Monthly Summary's figures for the current month showed the exact same Sales, COGS, and Gross Profit, and the exact same Cash in Hand figure down to the shilling.
+- All 8 required Dashboard KPIs are present, with an honest distinction drawn between the 5 that are genuinely month scoped (Monthly Sales, COGS, Gross Profit, Operating Expenses, Net Profit) and the 3 that are running balances, not monthly totals (Cash in Hand, Outstanding Credit, Inventory Value). Those three are labeled "As of now" rather than pretending to belong to whichever month is selected, since that's what they actually are everywhere else in the app too.
+- Sales Summary, Cash Flow Summary, and Branch Comparison all reuse the real sale, ledger, and branch data already built for Sales, Cash Flow, and the branch attribution fix from Stock Summary, filtered to the selected month, not reconstructed from scratch.
+- A month picker (synced to the URL, so it survives navigating between tabs) lets an owner review any past month, not just the current one, satisfying Monthly Reports as historical browsing rather than a separate, disconnected page.
+- Export & Print are both real. Print uses the browser's native print with a print-friendly layout; Export produces an actual downloadable CSV containing every figure on the report, verified by triggering a real file download and confirming its name and extension.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded, it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

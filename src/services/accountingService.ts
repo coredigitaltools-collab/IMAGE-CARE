@@ -64,11 +64,6 @@ export async function recordCashMovement(type: CashMovementType, amount: number,
 
 // ---------- COGS / Gross Profit / Net Profit ----------
 
-function isSameDay(iso: string, ref: Date): boolean {
-  const d = new Date(iso)
-  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate()
-}
-
 function computeCogs(sales: Sale[]): number {
   // A sale created before unitCost was tracked has no cost saved on its
   // line items, treat that as 0 rather than letting undefined * qty
@@ -80,12 +75,21 @@ function computeCogs(sales: Sale[]): number {
 
 /** "Sales = Sum(Selling Price × Quantity Sold), COGS = Sum(Buying Price
  *  × Quantity Sold), Gross Profit = Sales − COGS, Net Profit = Gross
- *  Profit − Operating Expenses." Pass `sameDayAs` to scope to a single
- *  day (Dashboard's "Today's..." KPIs); omit it for an all-time summary. */
-export async function getFinancialSummary(sameDayAs?: Date): Promise<FinancialSummary> {
+ *  Profit − Operating Expenses." Pass a start/end range to scope it
+ *  (Monthly Summary's whole-month figures); omit both for an all-time
+ *  summary. This is the one place that logic lives; every other date
+ *  scoped summary in the app (daily, monthly) calls through here so
+ *  they can never quietly drift apart from each other. */
+export async function getFinancialSummaryForRange(start?: Date, end?: Date): Promise<FinancialSummary> {
   const [allSales, allExpenses] = await Promise.all([listSales(), listExpenses()])
-  const completedSales = allSales.filter((s) => s.status === 'completed' && (!sameDayAs || isSameDay(s.createdAt, sameDayAs)))
-  const paidExpenses = allExpenses.filter((e) => e.status === 'paid' && (!sameDayAs || isSameDay(e.paidAt ?? e.expenseDate, sameDayAs)))
+  const inRange = (iso: string) => {
+    const t = new Date(iso).getTime()
+    if (start && t < start.getTime()) return false
+    if (end && t > end.getTime()) return false
+    return true
+  }
+  const completedSales = allSales.filter((s) => s.status === 'completed' && inRange(s.createdAt))
+  const paidExpenses = allExpenses.filter((e) => e.status === 'paid' && inRange(e.paidAt ?? e.expenseDate))
 
   const salesUgx = completedSales.reduce((sum, s) => sum + s.totalAmount, 0)
   const cogsUgx = computeCogs(completedSales)
@@ -94,6 +98,17 @@ export async function getFinancialSummary(sameDayAs?: Date): Promise<FinancialSu
   const netProfitUgx = grossProfitUgx - expensesUgx
 
   return { salesUgx, cogsUgx, grossProfitUgx, expensesUgx, netProfitUgx }
+}
+
+/** Today's KPIs on the main Dashboard, expressed as the same range
+ *  based summary above, scoped to just today. */
+export async function getFinancialSummary(sameDayAs?: Date): Promise<FinancialSummary> {
+  if (!sameDayAs) return getFinancialSummaryForRange()
+  const start = new Date(sameDayAs)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(sameDayAs)
+  end.setHours(23, 59, 59, 999)
+  return getFinancialSummaryForRange(start, end)
 }
 
 // ---------- Cash in Hand ----------
