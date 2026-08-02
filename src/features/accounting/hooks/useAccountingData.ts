@@ -14,8 +14,8 @@ export function useCashMovements() {
 export function useRecordCashMovement(userId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ type, amount, reason }: { type: CashMovementType; amount: number; reason: string }) =>
-      accountingService.recordCashMovement(type, amount, reason, userId),
+    mutationFn: ({ type, amount, reason, bankAccountId }: { type: CashMovementType; amount: number; reason: string; bankAccountId?: string | null }) =>
+      accountingService.recordCashMovement(type, amount, reason, userId, bankAccountId ?? null),
     onSuccess: () => invalidateAll(qc),
   })
 }

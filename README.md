@@ -346,6 +346,16 @@ This spec was deliberately smaller than Monthly and Annual Summary, no Branch Co
 - A date picker lets an owner review any past day, not just today, the same historical browsing pattern as Monthly and Annual Summary.
 - Inventory Summary is honest that stock has no daily total, the same as Monthly and Annual Summary's equivalent pages: it shows the current position, clearly labeled as of now, not a fabricated daily figure.
 
+## Bank Reconciliation (IMC-SRS-019), balances that come from reconciled transactions, not recorded ones
+
+- Real multi-account support, not the single implicit bank concept Cash Flow used. Each account is business-defined, with its own name, account number, and opening balance, matched against "no hard coded data" the same way every other catalogue in this app is.
+- "Bank balances come from reconciled transactions" is enforced, not just described. A recorded deposit does not move an account's reconciled balance at all until it is actually matched against a real bank statement line. Verified directly: recorded a deposit, confirmed the balance stayed at the opening figure, matched it, then confirmed the balance updated by exactly the deposit amount, no sooner.
+- Matching validates the amount, it does not just link two records blindly. Tried matching a statement line against a deposit with a different amount and it was correctly rejected with a clear error, then a correct-amount line matched successfully right after.
+- "Do not alter historical transactions" holds structurally: matching only sets a link and a flag on the statement line. The underlying CashMovement is never edited, and unmatching (to fix a mistake) clears that link rather than deleting anything, so reconciliation history stays permanent.
+- Since no bank API or file-import integration exists in this app, statement lines are entered manually from the business's real paper or PDF statement, the same honest approach used everywhere else a real external data source isn't available to connect to.
+- Archiving an account is blocked while it still has statement lines recorded against it, verified by trying it both ways: an unused account archived cleanly, an in-use one was correctly refused.
+- The existing "Record Cash Movement" flow in Cash Flow now includes a bank account picker for deposits, so new deposits going forward are attributable to a specific account and can actually be reconciled.
+
 ## Rebranding this app for a different business
 
 This started as ImageCare's app, but the business name is no longer hardcoded, it's designed so this codebase can be reused as a template for a different business later, without a full rebuild.

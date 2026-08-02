@@ -27,6 +27,10 @@ export interface CashMovement {
   // cash, − found a shortfall) since a reconciliation can go either way.
   amount: number
   reason: string
+  // Which bank account a deposit went to, for Bank Reconciliation
+  // (IMC-SRS-019). Optional and null for owner withdrawals, adjustments,
+  // and any deposit recorded before bank accounts existed.
+  bankAccountId: string | null
   createdAt: string
   createdBy: string
 }

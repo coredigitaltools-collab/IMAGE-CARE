@@ -53,6 +53,12 @@ const DailySalesSummaryPage = lazy(() => import('../pages/dailySummary/DailySale
 const DailyInventorySummaryPage = lazy(() => import('../pages/dailySummary/DailyInventorySummaryPage').then((m) => ({ default: m.DailyInventorySummaryPage })))
 const DailyCashSummaryPage = lazy(() => import('../pages/dailySummary/DailyCashSummaryPage').then((m) => ({ default: m.DailyCashSummaryPage })))
 const DailyReportPage = lazy(() => import('../pages/dailySummary/DailyReportPage').then((m) => ({ default: m.DailyReportPage })))
+
+const BankDashboardPage = lazy(() => import('../pages/bankReconciliation/BankDashboardPage').then((m) => ({ default: m.BankDashboardPage })))
+const BankAccountsPage = lazy(() => import('../pages/bankReconciliation/BankAccountsPage').then((m) => ({ default: m.BankAccountsPage })))
+const ReconciliationPage = lazy(() => import('../pages/bankReconciliation/ReconciliationPage').then((m) => ({ default: m.ReconciliationPage })))
+const UnmatchedTransactionsPage = lazy(() => import('../pages/bankReconciliation/UnmatchedTransactionsPage').then((m) => ({ default: m.UnmatchedTransactionsPage })))
+const BankReportsPage = lazy(() => import('../pages/bankReconciliation/BankReportsPage').then((m) => ({ default: m.BankReportsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -209,6 +215,11 @@ export const router = createBrowserRouter(
         { path: 'daily-summary/inventory', element: withSuspense(<DailyInventorySummaryPage />) },
         { path: 'daily-summary/cash', element: withSuspense(<DailyCashSummaryPage />) },
         { path: 'daily-summary/report', element: withSuspense(<DailyReportPage />) },
+        { path: 'bank-reconciliation', element: withSuspense(<BankDashboardPage />) },
+        { path: 'bank-reconciliation/accounts', element: withSuspense(<BankAccountsPage />) },
+        { path: 'bank-reconciliation/reconcile', element: withSuspense(<ReconciliationPage />) },
+        { path: 'bank-reconciliation/unmatched', element: withSuspense(<UnmatchedTransactionsPage />) },
+        { path: 'bank-reconciliation/reports', element: withSuspense(<BankReportsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },

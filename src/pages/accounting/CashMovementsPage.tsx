@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Wallet, Plus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { RecordCashMovementModal } from '../../components/accounting/RecordCashMovementModal'
+import { useBankAccounts } from '../../features/bankReconciliation/hooks/useBankReconciliationData'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { FormField } from '../../components/settings/FormField'
@@ -26,6 +27,7 @@ export function CashMovementsPage() {
   const breakdownQuery = useCashInHandBreakdown()
   const movementsQuery = useCashMovements()
   const settingsQuery = useAccountingSettings()
+  const bankAccountsQuery = useBankAccounts()
   const recordMovement = useRecordCashMovement(user.id)
   const saveSettings = useSaveAccountingSettings()
 
@@ -164,11 +166,12 @@ export function CashMovementsPage() {
 
       {isRecordOpen && (
         <RecordCashMovementModal
+          bankAccounts={(bankAccountsQuery.data ?? []).filter((a) => a.is_active)}
           submitError={recordError}
           onClose={() => setIsRecordOpen(false)}
-          onSubmit={async (type, amount, reason) => {
+          onSubmit={async (type, amount, reason, bankAccountId) => {
             try {
-              await recordMovement.mutateAsync({ type, amount, reason })
+              await recordMovement.mutateAsync({ type, amount, reason, bankAccountId })
               showToast('Cash movement recorded.', 'success')
               setIsRecordOpen(false)
             } catch (err) {

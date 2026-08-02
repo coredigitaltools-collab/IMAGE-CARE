@@ -48,7 +48,13 @@ export async function listCashMovements(): Promise<CashMovement[]> {
   return [...movements].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
-export async function recordCashMovement(type: CashMovementType, amount: number, reason: string, userId: string): Promise<CashMovement> {
+export async function recordCashMovement(
+  type: CashMovementType,
+  amount: number,
+  reason: string,
+  userId: string,
+  bankAccountId: string | null = null,
+): Promise<CashMovement> {
   if (!reason.trim()) throw new Error('A reason is required for every cash movement.')
   if (type === 'adjustment') {
     if (amount === 0) throw new Error('Enter a non-zero adjustment amount.')
@@ -56,7 +62,15 @@ export async function recordCashMovement(type: CashMovementType, amount: number,
     throw new Error('Enter an amount greater than 0.')
   }
   const movements = await getCollection<CashMovement>(MOVEMENTS_KEY, () => [])
-  const movement: CashMovement = { id: crypto.randomUUID(), type, amount, reason: reason.trim(), createdAt: new Date().toISOString(), createdBy: userId }
+  const movement: CashMovement = {
+    id: crypto.randomUUID(),
+    type,
+    amount,
+    reason: reason.trim(),
+    bankAccountId: type === 'bank_deposit' ? bankAccountId : null,
+    createdAt: new Date().toISOString(),
+    createdBy: userId,
+  }
   await setCollection(MOVEMENTS_KEY, [...movements, movement])
   await enqueueSync({ entityType: 'cash_movement', entityId: movement.id, operation: 'create' })
   return movement

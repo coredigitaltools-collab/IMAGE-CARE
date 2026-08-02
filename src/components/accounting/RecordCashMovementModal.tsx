@@ -3,23 +3,26 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { FormField } from '../settings/FormField'
 import type { CashMovementType } from '../../types/accounting'
+import type { BankAccount } from '../../types/bankReconciliation'
 
 interface RecordCashMovementModalProps {
+  bankAccounts: BankAccount[]
   onClose: () => void
-  onSubmit: (type: CashMovementType, amount: number, reason: string) => Promise<void>
+  onSubmit: (type: CashMovementType, amount: number, reason: string, bankAccountId: string | null) => Promise<void>
   submitError?: string
 }
 
-export function RecordCashMovementModal({ onClose, onSubmit, submitError }: RecordCashMovementModalProps) {
+export function RecordCashMovementModal({ bankAccounts, onClose, onSubmit, submitError }: RecordCashMovementModalProps) {
   const [type, setType] = useState<CashMovementType>('bank_deposit')
   const [amount, setAmount] = useState(0)
   const [reason, setReason] = useState('')
+  const [bankAccountId, setBankAccountId] = useState<string>(bankAccounts[0]?.id ?? '')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
     try {
-      await onSubmit(type, amount, reason)
+      await onSubmit(type, amount, reason, type === 'bank_deposit' ? bankAccountId || null : null)
     } finally {
       setIsSubmitting(false)
     }
@@ -43,6 +46,31 @@ export function RecordCashMovementModal({ onClose, onSubmit, submitError }: Reco
             <option value="adjustment">Cash Adjustment (reconciliation correction, + or −)</option>
           </select>
         </div>
+        {type === 'bank_deposit' && (
+          <div>
+            <label htmlFor="cm-bank-account" className="mb-1.5 block text-sm font-medium text-ink-700">
+              Bank account
+            </label>
+            {bankAccounts.length === 0 ? (
+              <p className="text-xs text-ink-500">
+                No bank accounts yet. This deposit will still be recorded, but won't be matchable in Bank Reconciliation until an account exists.
+              </p>
+            ) : (
+              <select
+                id="cm-bank-account"
+                value={bankAccountId}
+                onChange={(e) => setBankAccountId(e.target.value)}
+                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              >
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
         <FormField
           id="cm-amount"
           label={type === 'adjustment' ? 'Amount (UGX, negative for a shortfall)' : 'Amount (UGX)'}
