@@ -9,11 +9,9 @@ const IMPLEMENTED = [
   'Loyalty Programme (IMC-SRS-008)', 'Invoices (IMC-SRS-009)', 'Bills & Payables (IMC-SRS-010)',
   'Payroll (IMC-SRS-011)', 'Expenses (IMC-SRS-012)', 'Sales Targets (IMC-SRS-013)', 'Stock Summary (IMC-SRS-014)',
   'Cash Flow (IMC-SRS-015)', 'Monthly Summary (IMC-SRS-016)', 'Annual Summary (IMC-SRS-017)', 'Daily Summary (IMC-SRS-018)',
-  'Bank Reconciliation (IMC-SRS-019)', 'Branch Overview (IMC-SRS-020)',
+  'Bank Reconciliation (IMC-SRS-019)', 'Branch Overview (IMC-SRS-020)', 'Offline Mode (IMC-SRS-021)',
 ]
-const PLANNED = [
-  'Offline',
-]
+const PLANNED: string[] = []
 
 export function AboutPage() {
   const businessProfileQuery = useBusinessProfile()
@@ -39,16 +37,23 @@ export function AboutPage() {
         </div>
       </Card>
 
-      <Card className="mt-6 p-5">
-        <h2 className="mb-3 text-sm font-semibold text-ink-900">Planned modules</h2>
-        <div className="flex flex-wrap gap-2">
-          {PLANNED.map((m) => (
-            <Badge key={m} tone="neutral">
-              {m}
-            </Badge>
-          ))}
-        </div>
-      </Card>
+      {PLANNED.length > 0 && (
+        <Card className="mt-6 p-5">
+          <h2 className="mb-3 text-sm font-semibold text-ink-900">Planned modules</h2>
+          <div className="flex flex-wrap gap-2">
+            {PLANNED.map((m) => (
+              <Badge key={m} tone="neutral">
+                {m}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+      )}
+      {PLANNED.length === 0 && (
+        <Card className="mt-6 p-5">
+          <p className="text-sm text-ink-700">Every module in the original specification is implemented. No modules are currently planned.</p>
+        </Card>
+      )}
     </div>
   )
 }

@@ -54,7 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Daily Summary', icon: Calendar, to: '/daily-summary' },
   { label: 'Bank Reconciliation', icon: Banknote, to: '/bank-reconciliation' },
   { label: 'Branch Overview', icon: Building2, to: '/branch-overview' },
-  { label: 'Offline', icon: CloudOff },
+  { label: 'Offline', icon: CloudOff, to: '/offline-mode' },
   { label: 'Settings', icon: Settings, to: '/settings' },
 ]
 

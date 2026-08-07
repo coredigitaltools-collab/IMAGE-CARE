@@ -65,6 +65,12 @@ const PerformanceComparisonPage = lazy(() => import('../pages/branchOverview/Per
 const InventoryByBranchPage = lazy(() => import('../pages/branchOverview/InventoryByBranchPage').then((m) => ({ default: m.InventoryByBranchPage })))
 const SalesByBranchPage = lazy(() => import('../pages/branchOverview/SalesByBranchPage').then((m) => ({ default: m.SalesByBranchPage })))
 const BranchReportsPage = lazy(() => import('../pages/branchOverview/BranchReportsPage').then((m) => ({ default: m.BranchReportsPage })))
+
+const OfflineStatusDashboardPage = lazy(() => import('../pages/offlineMode/OfflineStatusDashboardPage').then((m) => ({ default: m.OfflineStatusDashboardPage })))
+const PendingSyncQueuePage = lazy(() => import('../pages/offlineMode/PendingSyncQueuePage').then((m) => ({ default: m.PendingSyncQueuePage })))
+const ConflictResolutionPage = lazy(() => import('../pages/offlineMode/ConflictResolutionPage').then((m) => ({ default: m.ConflictResolutionPage })))
+const SyncHistoryPage = lazy(() => import('../pages/offlineMode/SyncHistoryPage').then((m) => ({ default: m.SyncHistoryPage })))
+const OfflineSettingsPage = lazy(() => import('../pages/offlineMode/OfflineSettingsPage').then((m) => ({ default: m.OfflineSettingsPage })))
 const SettingsLandingPage = lazy(() => import('../pages/settings/SettingsLandingPage').then((m) => ({ default: m.SettingsLandingPage })))
 const BusinessProfilePage = lazy(() => import('../pages/settings/BusinessProfilePage').then((m) => ({ default: m.BusinessProfilePage })))
 const PeopleAccessPage = lazy(() => import('../pages/settings/PeopleAccessPage').then((m) => ({ default: m.PeopleAccessPage })))
@@ -231,6 +237,11 @@ export const router = createBrowserRouter(
         { path: 'branch-overview/inventory', element: withSuspense(<InventoryByBranchPage />) },
         { path: 'branch-overview/sales', element: withSuspense(<SalesByBranchPage />) },
         { path: 'branch-overview/reports', element: withSuspense(<BranchReportsPage />) },
+        { path: 'offline-mode', element: withSuspense(<OfflineStatusDashboardPage />) },
+        { path: 'offline-mode/queue', element: withSuspense(<PendingSyncQueuePage />) },
+        { path: 'offline-mode/conflicts', element: withSuspense(<ConflictResolutionPage />) },
+        { path: 'offline-mode/history', element: withSuspense(<SyncHistoryPage />) },
+        { path: 'offline-mode/settings', element: withSuspense(<OfflineSettingsPage />) },
         { path: 'expenses/:id', element: withSuspense(<ExpenseDetailPage />) },
         { path: 'customers', element: withSuspense(<CrmDashboardPage />) },
         { path: 'customers/directory', element: withSuspense(<CustomerDirectoryPage />) },
