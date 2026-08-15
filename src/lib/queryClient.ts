@@ -146,7 +146,7 @@ export const invalidateAfter = {
   },
 
   // After a purchase is created
-  purchase: (businessId: string, branchId?: string) => {
+  purchase: (businessId: string, _branchId?: string) => {
     queryClient.invalidateQueries({ queryKey: ['purchases', businessId] });
     queryClient.invalidateQueries({ queryKey: ['inventory', businessId] });
     queryClient.invalidateQueries({ queryKey: ['report', 'stock', businessId] });
@@ -173,7 +173,7 @@ export const invalidateAfter = {
   },
 
   // After payroll is processed
-  payroll: (businessId: string) => {
+  payroll: (businessId: string, _branchId?: string) => {
     queryClient.invalidateQueries({ queryKey: ['payroll', businessId] });
     queryClient.invalidateQueries({ queryKey: ['cash', 'balance', businessId] });
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'kpis', businessId] });

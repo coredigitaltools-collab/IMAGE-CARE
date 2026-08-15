@@ -390,6 +390,20 @@ export interface CurrentStock {
 
 // ---- Accounting ---------------------------------------------
 
+export interface JournalLine {
+  id: UUID;
+  journal_entry_id: UUID;
+  business_id: UUID;
+  account_code: string;
+  account_name: string;
+  account_type: AccountType;
+  account_id: UUID | null;
+  debit_amount: number;
+  credit_amount: number;
+  description: string | null;
+  created_at: Timestamptz;
+}
+
 export interface JournalEntry {
   id: UUID;
   business_id: UUID;
@@ -410,6 +424,7 @@ export interface JournalEntry {
   notes: string | null;
   created_at: Timestamptz;
   updated_at: Timestamptz;
+  journal_lines?: JournalLine[];
 }
 
 // ---- Credit and Invoices ------------------------------------
@@ -550,35 +565,39 @@ export interface StockSummaryRow {
 
 // ---- Database type map (for createClient generic) -----------
 
+// AnyRow: allows insert/update operations without requiring
+// a fully generated Supabase types file.
+type AnyRow<R> = { Row: R; Insert: Partial<R> & Record<string, unknown>; Update: Partial<R> & Record<string, unknown> };
+
 export interface Database {
   imagecare: {
     Tables: {
-      businesses:          { Row: Business };
-      branches:            { Row: Branch };
-      users:               { Row: User };
-      permission_groups:   { Row: PermissionGroup };
-      group_permissions:   { Row: GroupPermission };
-      customers:           { Row: Customer };
-      suppliers:           { Row: Supplier };
-      product_categories:  { Row: ProductCategory };
-      units:               { Row: Unit };
-      products:            { Row: Product };
-      sales:               { Row: Sale };
-      sale_items:          { Row: SaleItem };
-      purchases:           { Row: Purchase };
-      purchase_items:      { Row: PurchaseItem };
-      expenses:            { Row: Expense };
-      payroll:             { Row: PayrollRecord };
-      inventory_movements: { Row: InventoryMovement };
-      cash_transactions:   { Row: CashTransaction };
-      invoices:            { Row: Invoice };
-      bills:               { Row: Bill };
-      sync_queue:          { Row: SyncQueueEntry };
-      settings:            { Row: Setting };
+      businesses:          AnyRow<Business>;
+      branches:            AnyRow<Branch>;
+      users:               AnyRow<User>;
+      permission_groups:   AnyRow<PermissionGroup>;
+      group_permissions:   AnyRow<GroupPermission>;
+      customers:           AnyRow<Customer>;
+      suppliers:           AnyRow<Supplier>;
+      product_categories:  AnyRow<ProductCategory>;
+      units:               AnyRow<Unit>;
+      products:            AnyRow<Product>;
+      sales:               AnyRow<Sale>;
+      sale_items:          AnyRow<SaleItem>;
+      purchases:           AnyRow<Purchase>;
+      purchase_items:      AnyRow<PurchaseItem>;
+      expenses:            AnyRow<Expense>;
+      payroll:             AnyRow<PayrollRecord>;
+      inventory_movements: AnyRow<InventoryMovement>;
+      cash_transactions:   AnyRow<CashTransaction>;
+      invoices:            AnyRow<Invoice>;
+      bills:               AnyRow<Bill>;
+      sync_queue:          AnyRow<SyncQueueEntry>;
+      settings:            AnyRow<Setting>;
     };
     Views: {
-      current_stock:            { Row: CurrentStock };
-      vw_stock_summary:         { Row: StockSummaryRow };
+      current_stock:            AnyRow<CurrentStock>;
+      vw_stock_summary:         AnyRow<StockSummaryRow>;
     };
     Functions: {
       fn_get_dashboard_kpis: {
@@ -587,4 +606,86 @@ export interface Database {
       };
     };
   };
+}
+
+// ============================================================
+// Stage 2 additional table interfaces
+// ============================================================
+
+export interface Account {
+  id: UUID; business_id: UUID; account_code: string; account_name: string;
+  account_type: AccountType; parent_account_id: UUID | null; description: string | null;
+  is_system: boolean; is_active: boolean; created_at: Timestamptz; updated_at: Timestamptz;
+}
+
+export interface CreditAccount {
+  id: UUID; business_id: UUID; branch_id: UUID; customer_id: UUID | null;
+  supplier_id: UUID | null; credit_limit: number; current_balance: number;
+  due_date: Timestamptz | null; is_active: boolean; notes: string | null;
+  created_at: Timestamptz; updated_at: Timestamptz; deleted_at: Timestamptz | null;
+}
+
+export interface CreditTransaction {
+  id: UUID; business_id: UUID; branch_id: UUID; credit_account_id: UUID;
+  sale_id: UUID | null; purchase_id: UUID | null;
+  transaction_type: 'charge' | 'payment'; amount: number;
+  payment_method: PaymentMethod | null; reference_number: string | null;
+  notes: string | null; transaction_date: Timestamptz; created_at: Timestamptz;
+}
+
+export interface AuditLog {
+  id: UUID; business_id: UUID; branch_id: UUID | null; user_id: UUID | null;
+  table_name: string; record_id: UUID; action: AuditAction;
+  previous_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  changed_fields: string[] | null; ip_address: string | null;
+  user_agent: string | null; session_id: string | null; created_at: Timestamptz;
+}
+
+export interface BankAccount {
+  id: UUID; business_id: UUID; branch_id: UUID | null; bank_name: string;
+  account_name: string; account_number: string; account_type: string;
+  currency: string; opening_balance: number; current_balance: number;
+  is_active: boolean; created_at: Timestamptz; updated_at: Timestamptz;
+  deleted_at: Timestamptz | null;
+}
+
+export interface Notification {
+  id: UUID; business_id: UUID; branch_id: UUID | null; user_id: UUID;
+  type: string; title: string; body: string | null;
+  reference_type: string | null; reference_id: UUID | null;
+  is_read: boolean; is_actioned: boolean; expires_at: Timestamptz | null;
+  created_at: Timestamptz; updated_at: Timestamptz;
+}
+
+export interface LoyaltyAccount {
+  id: UUID; business_id: UUID; customer_id: UUID; points_balance: number;
+  tier: string; enrolled_at: Timestamptz; last_activity: Timestamptz | null;
+  is_active: boolean; created_at: Timestamptz; updated_at: Timestamptz;
+}
+
+export interface LoyaltyTransaction {
+  id: UUID; business_id: UUID; loyalty_account_id: UUID; sale_id: UUID | null;
+  transaction_type: 'earn' | 'redeem'; points: number; description: string | null;
+  transaction_date: Timestamptz; created_at: Timestamptz;
+}
+
+export interface SalesTarget {
+  id: UUID; business_id: UUID; branch_id: UUID | null; user_id: UUID | null;
+  period_start: string; period_end: string; target_amount: number;
+  target_type: string; notes: string | null; created_at: Timestamptz; updated_at: Timestamptz;
+}
+
+export interface StorageMetadata {
+  id: UUID; business_id: UUID; branch_id: UUID | null; bucket_name: string;
+  storage_path: string; file_name: string; mime_type: string | null;
+  file_size_bytes: number | null; reference_type: string | null;
+  reference_id: UUID | null; is_public: boolean; created_at: Timestamptz;
+}
+
+export interface VwStockSummaryRow {
+  business_id: UUID; branch_id: UUID; product_id: UUID; product_name: string;
+  sku: string | null; reorder_level: number; product_active: boolean;
+  quantity_on_hand: number; stock_value: number;
+  stock_status: 'in_stock' | 'low_stock' | 'out_of_stock';
 }

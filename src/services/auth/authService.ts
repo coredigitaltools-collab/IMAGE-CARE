@@ -1,9 +1,17 @@
 // ============================================================
-// IMC-BLD-001 | ImageCare ERP Application Architecture v1.0
+// ImageCare ERP - Authentication Service
 // File: src/services/auth/authService.ts
-// Purpose: Authentication service.
-//          All auth operations go through this service.
-//          Never call supabase.auth directly from UI components.
+// Purpose: Authentication and user context loading.
+//
+// Authentication establishes IDENTITY only.
+// Authorization (what the user can do) comes from:
+//   - imagecare.users.is_owner (explicit DB field)
+//   - permission_group_members (group-based permissions)
+//   - user_permissions (direct permission grants)
+//
+// The user's role field is a display label. It is loaded
+// into context for display purposes only and is never
+// checked for authorization.
 // ============================================================
 
 import { supabase } from '../../lib/supabase';
@@ -14,8 +22,8 @@ import type { UUID } from '../../types/database';
 // ---- Login -------------------------------------------------
 
 export interface LoginCredentials {
-  email: string;
-  password: string;
+  email:       string;
+  password:    string;
   business_id: UUID;
 }
 
@@ -26,9 +34,9 @@ export interface LoginResult {
 
 export async function login(credentials: LoginCredentials): Promise<ApiResult<LoginResult>> {
   try {
-    // 1. Authenticate with Supabase Auth
+    // 1. Authenticate with Supabase Auth (establishes identity)
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: credentials.email,
+      email:    credentials.email,
       password: credentials.password,
     });
 
@@ -36,7 +44,7 @@ export async function login(credentials: LoginCredentials): Promise<ApiResult<Lo
       return fail({ code: 'AUTH_INVALID', message: 'Incorrect email or password.' });
     }
 
-    // 2. Load user context (permissions, branches) from database
+    // 2. Load full user context (identity + permissions + is_owner)
     const context = await loadUserContext(credentials.business_id);
     if (!context) {
       await supabase.auth.signOut();
@@ -47,9 +55,6 @@ export async function login(credentials: LoginCredentials): Promise<ApiResult<Lo
       await supabase.auth.signOut();
       return fail({ code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' });
     }
-
-    // 3. Log the auth event
-    await logAuthEvent('login_success', true, credentials.email, context.user_id, credentials.business_id);
 
     return ok({
       session: {
@@ -66,14 +71,10 @@ export async function login(credentials: LoginCredentials): Promise<ApiResult<Lo
 
 // ---- Logout ------------------------------------------------
 
-export async function logout(userId?: UUID, businessId?: UUID): Promise<void> {
+export async function logout(): Promise<void> {
   try {
-    if (userId && businessId) {
-      await logAuthEvent('logout', true, undefined, userId, businessId);
-    }
     await supabase.auth.signOut();
   } catch {
-    // Always complete logout even if logging fails
     await supabase.auth.signOut().catch(() => null);
   }
 }
@@ -92,10 +93,63 @@ export async function refreshSession() {
   return data.session;
 }
 
-// ---- User context ------------------------------------------
+// ---- User Context ------------------------------------------
+// Calls imagecare.fn_get_user_context() which:
+//   - Returns is_owner from imagecare.users.is_owner (explicit DB field)
+//   - Merges group permissions (owner-managed collections)
+//   - Merges direct user permissions
+//   - Returns role as a display label only
+//   - Returns authorized branches
 
 export async function loadUserContext(businessId: UUID): Promise<UserContext | null> {
-  // Get the linked imagecare.users record via auth_user_id
+  try {
+    // Use the database function that correctly builds the permission context
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('fn_get_user_context', {
+      p_business_id: businessId,
+    });
+
+    if (error || !data) return null;
+
+    const raw = data as {
+      user_id:     string;
+      business_id: string;
+      branch_id:   string | null;
+      email:       string;
+      first_name:  string;
+      last_name:   string;
+      role:        string;
+      is_owner:    boolean;   // explicit DB field - never inferred
+      is_active:   boolean;
+      permissions: Record<string, {
+        view: boolean; create: boolean; edit: boolean;
+        delete: boolean; approve: boolean; export: boolean;
+        sync: boolean; branch_scope: 'assigned' | 'all';
+      }>;
+      branches: Array<{ branch_id: string; can_transact: boolean }>;
+    };
+
+    return {
+      user_id:     raw.user_id,
+      business_id: raw.business_id,
+      branch_id:   raw.branch_id,
+      email:       raw.email,
+      first_name:  raw.first_name,
+      last_name:   raw.last_name,
+      role:        raw.role,
+      is_owner:    raw.is_owner,  // read directly from DB, never derived
+      is_active:   raw.is_active,
+      permissions: raw.permissions ?? {},
+      branches:    raw.branches   ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Fallback: load context directly from tables when fn_get_user_context
+// is not yet available (e.g. first run before Stage 1 migration)
+export async function loadUserContextFallback(businessId: UUID): Promise<UserContext | null> {
   const { data: authUser } = await supabase.auth.getUser();
   if (!authUser.user) return null;
 
@@ -104,7 +158,7 @@ export async function loadUserContext(businessId: UUID): Promise<UserContext | n
     .from('users')
     .select(`
       id, business_id, branch_id, first_name, last_name,
-      email, role, is_active,
+      email, role, is_owner, is_active,
       permission_group_members (
         permission_groups (
           id, name, is_active,
@@ -113,6 +167,10 @@ export async function loadUserContext(businessId: UUID): Promise<UserContext | n
             can_delete, can_approve, can_export, can_sync, branch_scope
           )
         )
+      ),
+      user_permissions (
+        module, can_view, can_create, can_edit,
+        can_delete, can_approve, can_export, can_sync, branch_scope
       )
     `)
     .eq('auth_user_id', authUser.user.id)
@@ -123,41 +181,53 @@ export async function loadUserContext(businessId: UUID): Promise<UserContext | n
 
   if (error || !user) return null;
 
-  // Build permissions map: most permissive across all groups
+  // The select returns a joined shape - use unknown cast for nested access
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const u = user as Record<string, any>;
   const permissions: UserContext['permissions'] = {};
 
-  const groups = (user as any).permission_group_members ?? [];
-  for (const membership of groups) {
+  // Merge group permissions
+  for (const membership of u.permission_group_members ?? []) {
     const group = membership?.permission_groups;
     if (!group?.is_active) continue;
     for (const perm of group.group_permissions ?? []) {
-      const existing = permissions[perm.module];
-      if (!existing) {
-        permissions[perm.module] = {
-          view:         perm.can_view,
-          create:       perm.can_create,
-          edit:         perm.can_edit,
-          delete:       perm.can_delete,
-          approve:      perm.can_approve,
-          export:       perm.can_export,
-          sync:         perm.can_sync,
-          branch_scope: perm.branch_scope,
-        };
-      } else {
-        // Most permissive wins
-        permissions[perm.module] = {
-          view:         existing.view         || perm.can_view,
-          create:       existing.create       || perm.can_create,
-          edit:         existing.edit         || perm.can_edit,
-          delete:       existing.delete       || perm.can_delete,
-          approve:      existing.approve      || perm.can_approve,
-          export:       existing.export       || perm.can_export,
-          sync:         existing.sync         || perm.can_sync,
-          branch_scope: existing.branch_scope === 'all' || perm.branch_scope === 'all'
-                          ? 'all' : 'assigned',
-        };
-      }
+      const ex = permissions[perm.module];
+      permissions[perm.module] = ex ? {
+        view:         ex.view         || perm.can_view,
+        create:       ex.create       || perm.can_create,
+        edit:         ex.edit         || perm.can_edit,
+        delete:       ex.delete       || perm.can_delete,
+        approve:      ex.approve      || perm.can_approve,
+        export:       ex.export       || perm.can_export,
+        sync:         ex.sync         || perm.can_sync,
+        branch_scope: ex.branch_scope === 'all' || perm.branch_scope === 'all' ? 'all' : 'assigned',
+      } : {
+        view:   perm.can_view,   create:  perm.can_create,
+        edit:   perm.can_edit,   delete:  perm.can_delete,
+        approve: perm.can_approve, export: perm.can_export,
+        sync:   perm.can_sync,  branch_scope: perm.branch_scope,
+      };
     }
+  }
+
+  // Merge direct user permissions (most permissive wins)
+  for (const perm of u.user_permissions ?? []) {
+    const ex = permissions[perm.module];
+    permissions[perm.module] = ex ? {
+      view:         ex.view         || perm.can_view,
+      create:       ex.create       || perm.can_create,
+      edit:         ex.edit         || perm.can_edit,
+      delete:       ex.delete       || perm.can_delete,
+      approve:      ex.approve      || perm.can_approve,
+      export:       ex.export       || perm.can_export,
+      sync:         ex.sync         || perm.can_sync,
+      branch_scope: ex.branch_scope === 'all' || perm.branch_scope === 'all' ? 'all' : 'assigned',
+    } : {
+      view:   perm.can_view,   create:  perm.can_create,
+      edit:   perm.can_edit,   delete:  perm.can_delete,
+      approve: perm.can_approve, export: perm.can_export,
+      sync:   perm.can_sync,  branch_scope: perm.branch_scope,
+    };
   }
 
   // Load branch access
@@ -165,40 +235,21 @@ export async function loadUserContext(businessId: UUID): Promise<UserContext | n
     .schema('imagecare')
     .from('user_branch_access')
     .select('branch_id, can_transact')
-    .eq('user_id', user.id);
+    .eq('user_id', u.id);
 
   return {
-    user_id:     user.id,
-    business_id: user.business_id,
-    branch_id:   user.branch_id,
-    email:       user.email,
-    first_name:  user.first_name,
-    last_name:   user.last_name,
-    role:        user.role,
-    is_active:   user.is_active,
+    user_id:     u.id,
+    business_id: u.business_id,
+    branch_id:   u.branch_id,
+    email:       u.email,
+    first_name:  u.first_name,
+    last_name:   u.last_name,
+    role:        u.role,
+    is_owner:    u.is_owner,   // explicit DB field - never inferred
+    is_active:   u.is_active,
     permissions,
     branches:    branchAccess ?? [],
   };
-}
-
-// ---- Auth event logging ------------------------------------
-
-async function logAuthEvent(
-  eventType: string,
-  success: boolean,
-  email?: string,
-  userId?: UUID,
-  businessId?: UUID,
-  failureReason?: string
-) {
-  await supabase.rpc('fn_log_auth_event', {
-    p_event_type:     eventType,
-    p_success:        success,
-    p_email:          email ?? null,
-    p_user_id:        userId ?? null,
-    p_business_id:    businessId ?? null,
-    p_failure_reason: failureReason ?? null,
-  }).catch(() => null); // Non-blocking - auth must never fail because of logging
 }
 
 // ---- Auth state listener -----------------------------------

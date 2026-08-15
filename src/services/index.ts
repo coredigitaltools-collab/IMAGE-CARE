@@ -1,166 +1,33 @@
 // ============================================================
-// IMC-BLD-003 | ImageCare ERP API & Service Contract v1.0
+// ImageCare ERP - Service Index
 // File: src/services/index.ts
-// Purpose: Complete service index.
-//          Import ALL services from this file.
-//          Never import directly from individual service files in pages.
-//
-// Usage:
-//   import { createSale, listProducts, getDashboardKPIs } from '@/services';
+// Purpose: Single export point for all services.
+//          Stage 1: Auth service is active.
+//          All other services are architectural stubs
+//          ready to be implemented in later build stages.
 // ============================================================
 
-// ---- Auth --------------------------------------------------
-export {
-  login,
-  logout,
-  getActiveSession,
-  refreshSession,
-  loadUserContext,
-  onAuthStateChange,
-} from './auth/authService';
+// ---- ACTIVE (Stage 1) --------------------------------------
+export * from './auth/authService';
+export * from '../services/masterData/masterDataService';
+export * from '../services/settings/settingsService';
 
-// ---- Business Engine (internal - use named services below) -
-export {
-  createAndPostSale,
-  createAndPostPurchase,
-  createAndPostExpense,
-  processCreditRepayment,
-  processPayroll,
-} from './business/businessEngine';
+// ---- ARCHITECTURAL STUBS (Stage 4+) -------------------------
+// These are defined in the BLD-003 contract and will be implemented
+// fully in Build Stage 4: Core Services.
+// Importing from these files will work but functions return
+// PERMISSION_DENIED until their implementation stage begins.
 
-// ---- Sales -------------------------------------------------
-export {
-  createSale,
-  getSale,
-  listSales,
-  cancelSale,
-  getSaleReceipt,
-} from './sales/salesService';
-
-// ---- Purchasing --------------------------------------------
-export {
-  createPurchase,
-  getPurchase,
-  listPurchases,
-  recordSupplierPayment,
-} from './purchasing/purchasingService';
-
-// ---- Inventory ---------------------------------------------
-export {
-  getStock,
-  listInventory,
-  getInventoryMovements,
-  createStockAdjustment,
-  createStockTransfer,
-  receiveStockTransfer,
-} from './inventory/inventoryService';
-
-// ---- Credit ------------------------------------------------
-export {
-  getCustomerCredit,
-  getOutstandingCredit,
-  recordCreditPayment,
-} from './credit/creditService';
-
-// ---- Invoices ----------------------------------------------
-export {
-  getInvoice,
-  listInvoices,
-  recordInvoicePayment,
-} from './credit/creditService';
-
-// ---- Payables (Bills) --------------------------------------
-export {
-  getBill,
-  listBills,
-} from './credit/creditService';
-
-// ---- Expenses ----------------------------------------------
-export {
-  createExpense,
-  listExpenses,
-} from './financial/financialServices';
-
-// ---- Payroll -----------------------------------------------
-export {
-  getPayroll,
-  listPayroll,
-  approvePayroll,
-  processPayrollPayment,
-} from './financial/financialServices';
-
-// ---- Cash --------------------------------------------------
-export {
-  getCashBalance,
-  listCashTransactions,
-} from './financial/financialServices';
-
-// ---- Accounting --------------------------------------------
-export {
-  listJournalEntries,
-  getAccountBalance,
-} from './financial/financialServices';
-
-// ---- Audit -------------------------------------------------
-export {
-  listAuditLogs,
-} from './financial/financialServices';
-
-// ---- Master Data -------------------------------------------
-export {
-  listProducts,
-  getProduct,
-  createProduct,
-  updateProduct,
-  softDeleteProduct,
-  listCategories,
-  listUnits,
-  listCustomers,
-  getCustomer,
-  createCustomer,
-  updateCustomer,
-  listSuppliers,
-  getSupplier,
-  createSupplier,
-} from './masterData/masterDataService';
-
-// ---- Settings ----------------------------------------------
-export {
-  getSetting,
-  getSettingsByCategory,
-  updateSetting,
-  getChartOfAccounts,
-  getBusinessCurrency,
-  getVatRate,
-  allowNegativeStock,
-  getReceiptPrefix,
-} from './settings/settingsService';
-
-// ---- Reporting ---------------------------------------------
-export {
-  getDashboardKPIs,
-  getSalesByPeriod,
-  getTopProducts,
-  getStockSummary,
-  getCashPosition,
-  getOutstandingCredit as getOutstandingCreditSummary,
-  getExpenseBreakdown,
-} from './reporting/reportingService';
-
-// ---- Storage -----------------------------------------------
-export {
-  uploadFile,
-  getSignedFileUrl,
-  deleteFile,
-  listFiles,
-} from './storage/storageService';
-
-// ---- Sync --------------------------------------------------
-export {
-  registerDevice,
-  getInitialSyncPayload,
-  pullChanges,
-  pushQueuedOperations,
-  enqueueOperation,
-  runSyncSession,
-} from './sync/syncService';
+export const salesService      = { __stage: 4 };
+export const purchasingService = { __stage: 4 };
+export const inventoryService  = { __stage: 4 };
+export const creditService     = { __stage: 4 };
+export const expenseService    = { __stage: 4 };
+export const payrollService    = { __stage: 4 };
+export const cashService       = { __stage: 4 };
+export const bankingService    = { __stage: 4 };
+export const accountingService = { __stage: 4 };
+export const reportingService  = { __stage: 7 };
+export const storageService    = { __stage: 4 };
+export const auditService      = { __stage: 4 };
+export const syncService       = { __stage: 6 };

@@ -116,5 +116,5 @@ export function useAsyncData<T, TArgs extends unknown[]>(
 
   const refetch = useCallback(() => setTrigger(t => t + 1), []);
 
-  return { ...state, execute, reset, setData, refetch };
+  return { ...state, execute, reset, setData, refetch } as ServiceCallState<T> & ServiceCallActions<T, TArgs> & { refetch: () => void };
 }

@@ -196,7 +196,7 @@ export const rules = {
 
   phone: (): ValidationRule<string> =>
     (value) => {
-      if (value && !/^[\d\s\+\-\(\)]{7,15}$/.test(value)) {
+      if (value && !/^[\d\s+\-()]{7,15}$/.test(value)) {
         return 'Please enter a valid phone number.';
       }
       return null;

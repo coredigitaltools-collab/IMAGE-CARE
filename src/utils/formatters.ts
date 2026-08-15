@@ -56,11 +56,12 @@ export function formatDate(
     const d = typeof date === 'string' ? new Date(date) : date;
     if (isNaN(d.getTime())) return '-';
 
-    const options: Intl.DateTimeFormatOptions = {
+    const optionsMap: Record<string, Intl.DateTimeFormatOptions> = {
       short:  { day: '2-digit', month: 'short', year: 'numeric' },
       medium: { day: '2-digit', month: 'short', year: 'numeric' },
       long:   { day: '2-digit', month: 'long',  year: 'numeric' },
-    }[style];
+    };
+    const options = optionsMap[style];
 
     return new Intl.DateTimeFormat('en-UG', options).format(d);
   } catch {

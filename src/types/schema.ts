@@ -8,7 +8,7 @@
 
 import type {
   UUID, Timestamptz, PaymentMethod, TransactionStatus,
-  MovementType, AccountType, SyncStatus, AuditAction
+  AccountType, AuditAction
 } from './database';
 
 // ---- Payment Methods (configurable) ------------------------

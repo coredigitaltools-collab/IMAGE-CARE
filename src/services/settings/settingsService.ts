@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { ok, fail, parseError } from '../../types/app';
 import type { ApiResult, UserContext } from '../../types/app';
 import type { UUID } from '../../types/database';
-import type { BusinessSetting, Account } from '../../types/schema';
+import type { Account } from '../../types/schema';
 
 // ---- Settings access ---------------------------------------
 

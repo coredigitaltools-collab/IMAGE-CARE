@@ -1,9 +1,13 @@
 // ============================================================
-// IMC-BLD-001 | ImageCare ERP Application Architecture v1.0
+// ImageCare ERP - Permission Hook
 // File: src/hooks/usePermission.ts
-// Purpose: React hook for centralized permission checks.
-//          All permission guards in the UI use this hook.
-//          Never check permissions inline in component JSX.
+// Purpose: React hook for permission checks.
+//
+// ARCHITECTURE:
+// - can(module, action): checks the permissions map loaded from DB
+// - isOwner: reads ctx.is_owner which is an explicit DB field
+//   (imagecare.users.is_owner). NEVER inferred from permissions.
+// - role is never checked here - it is a display label only.
 // ============================================================
 
 import { useCallback } from 'react';
@@ -11,22 +15,20 @@ import { canDo, getModulePermission } from '../types/app';
 import type { UserContext, ModulePermissions } from '../types/app';
 import type { ModuleName } from '../config/env';
 
-// Usage in components:
-//   const { can, modulePerms } = usePermission(userContext);
-//   if (!can('sales', 'create')) return <AccessDenied />;
-
 interface UsePermissionReturn {
-  // Check a specific action on a module
+  // Check a specific action on a module (uses permissions map)
   can: (module: ModuleName | string, action: keyof Omit<ModulePermissions, 'branch_scope'>) => boolean;
   // Get all permissions for a module
   modulePerms: (module: ModuleName | string) => ModulePermissions;
-  // Whether the user has any access to a module
+  // Whether user has any access to a module
   hasAnyAccess: (module: ModuleName | string) => boolean;
-  // Whether the user can access all branches (not just assigned)
+  // Whether user can access all branches on this module
   canAccessAllBranches: (module: ModuleName | string) => boolean;
-  // Whether the user can access a specific branch
+  // Whether user can access a specific branch
   canAccessBranch: (branchId: string) => boolean;
-  // Whether the user is the owner (has all permissions)
+  // is_owner: explicit database field. TRUE means this user is the business owner.
+  // Owners can manage permissions, groups, and branch access.
+  // This is read directly from ctx.is_owner - NEVER derived from permission combinations.
   isOwner: boolean;
 }
 
@@ -67,20 +69,17 @@ export function usePermission(ctx: UserContext | null): UsePermissionReturn {
   const canAccessBranch = useCallback(
     (branchId: string): boolean => {
       if (!ctx) return false;
-      // User's home branch is always accessible
       if (ctx.branch_id === branchId) return true;
-      // Check explicit branch access grants
+      if (ctx.is_owner) return true;
       return ctx.branches.some(b => b.branch_id === branchId);
     },
     [ctx]
   );
 
-  // Owner has view + create + edit + delete on all modules
-  const isOwner = ctx
-    ? Object.values(ctx.permissions).some(
-        p => p.view && p.create && p.edit && p.delete && p.branch_scope === 'all'
-      )
-    : false;
+  // is_owner: read directly from the user context which loaded it from
+  // imagecare.users.is_owner via fn_get_user_context().
+  // This is an explicit database column - NOT derived from permissions.
+  const isOwner = ctx?.is_owner ?? false;
 
   return { can, modulePerms, hasAnyAccess, canAccessAllBranches, canAccessBranch, isOwner };
 }
