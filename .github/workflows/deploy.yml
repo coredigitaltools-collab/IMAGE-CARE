@@ -1,8 +1,5 @@
 name: Deploy to GitHub Pages
 
-# Runs automatically every time changes are pushed to main, including
-# edits made directly on github.com (e.g. "Upload files" / the web editor).
-# No local npm/terminal steps are required once this is set up.
 on:
   push:
     branches: [main]
@@ -35,6 +32,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Upload build output
         uses: actions/upload-pages-artifact@v3
