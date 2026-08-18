@@ -15,6 +15,7 @@
 // ============================================================
 
 import type { UUID } from './database';
+import { mapErrorCode, serviceFail, serviceOk, type ServiceResponse } from './contracts';
 
 // ---- Permissions -------------------------------------------
 
@@ -168,17 +169,19 @@ export function parseError(err: unknown): AppError {
 
 // ---- API result shape --------------------------------------
 
-export interface ApiResult<T> {
-  data:  T | null;
-  error: AppError | null;
-}
+/** @deprecated Kept as a source-compatible alias while legacy services migrate.
+ * ServiceResponse is the single service contract. */
+export type ApiResult<T> = ServiceResponse<T>;
 
 export function ok<T>(data: T): ApiResult<T> {
-  return { data, error: null };
+  return serviceOk(data);
 }
 
 export function fail<T>(error: AppError): ApiResult<T> {
-  return { data: null, error };
+  return serviceFail(mapErrorCode(error.code), error.message, {
+    field: error.field,
+    detail: error.detail,
+  });
 }
 
 // ---- Pagination --------------------------------------------

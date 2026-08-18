@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import {

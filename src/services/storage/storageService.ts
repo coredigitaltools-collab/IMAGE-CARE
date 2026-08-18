@@ -5,7 +5,7 @@
 //          signed URLs. Every operation validates business ownership.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { canDo } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, PaginationRequest } from '../../types/contracts';
@@ -63,7 +63,7 @@ export async function uploadFile(
 
   try {
     // Register in file_metadata first to get file_id and path
-    const { data: regData, error: regError } = await supabase.rpc('fn_register_upload', {
+    const { data: regData, error: regError } = await rpc('fn_register_upload', {
       p_business_id:   ctx.business_id,
       p_branch_id:     input.branch_id ?? null,
       p_uploaded_by:   ctx.user_id,
@@ -145,12 +145,12 @@ export async function getSignedFileUrl(
     }
 
     // Log access
-    await supabase.rpc('fn_log_file_access', {
+    await rpc('fn_log_file_access', {
       p_file_id:   fileId,
       p_user_id:   ctx.user_id,
       p_action:    'download',
       p_success:   true,
-    }).catch(() => null);
+    });
 
     return serviceOk(signedData.signedUrl, requestId);
   } catch (err) {
@@ -167,7 +167,7 @@ export async function deleteFile(
   const requestId = makeRequestId();
 
   try {
-    const { error } = await supabase.rpc('fn_soft_delete_file', {
+    const { error } = await rpc('fn_soft_delete_file', {
       p_file_id: fileId,
       p_user_id: ctx.user_id,
       p_reason:  'User deleted',

@@ -6,9 +6,9 @@
 //          Pages must never post sales directly to Supabase tables.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { parseError, canDo } from '../../types/app';
-import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
+import { mapErrorCode, serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Sale, SaleItem, PaymentMethod, UUID } from '../../types/database';
@@ -46,12 +46,7 @@ export async function createSale(
   } as any);
 
   if (result.error) {
-    const { code, message } = result.error;
-    const svcCode = code === 'INSUFFICIENT_STOCK' ? 'BUSINESS_RULE_VIOLATION'
-                  : code === 'PERMISSION_DENIED'  ? 'PERMISSION_DENIED'
-                  : code === 'DUPLICATE_TRANSACTION' ? 'DUPLICATE_OPERATION'
-                  : 'INTERNAL_ERROR';
-    return serviceFail(svcCode, message, { requestId });
+    return serviceFail(mapErrorCode(result.error.code), result.error.message, { requestId });
   }
 
   const { data } = await supabase
@@ -147,7 +142,7 @@ export async function listSales(
       APP_CONSTANTS.MAX_PAGE_SIZE
     );
 
-    const { data, error } = await supabase.rpc('fn_list_sales_cursor', {
+    const { data, error } = await rpc('fn_list_sales_cursor', {
       p_business_id:  ctx.business_id,
       p_branch_id:    filter.branch_id   ?? null,
       p_status:       filter.status      ?? null,
@@ -221,7 +216,7 @@ export async function cancelSale(
         .select('product_id, quantity')
         .eq('sale_id', saleId);
 
-      const { error } = await supabase.rpc('engine_return_sale', {
+      const { error } = await rpc('engine_return_sale', {
         p_sale_id:  saleId,
         p_user_id:  ctx.user_id,
         p_reason:   reason,

@@ -12,12 +12,12 @@ export function BarcodeManagementPage() {
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
-  const products = productsQuery.data ?? []
+  const products = productsQuery.data
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return products.filter((p) => p.status === 'active')
-    return products.filter(
+    if (!q) return (products ?? []).filter((p) => p.status === 'active')
+    return (products ?? []).filter(
       (p) => p.status === 'active' && (p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q)),
     )
   }, [products, query])
@@ -26,7 +26,7 @@ export function BarcodeManagementPage() {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  const selectedProducts = products.filter((p) => selectedIds.includes(p.id))
+  const selectedProducts = (products ?? []).filter((p) => selectedIds.includes(p.id))
 
   return (
     <div className="mx-auto max-w-4xl">

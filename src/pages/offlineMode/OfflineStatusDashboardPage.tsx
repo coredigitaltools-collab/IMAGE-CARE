@@ -16,7 +16,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { OfflineModeTabs } from '../../components/offlineMode/OfflineModeTabs'
 import { KpiCard } from '../../components/dashboard/KpiCard'
 import { Button } from '../../components/ui/Button'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import { useOfflineDashboardKpis, usePerformManualSync } from '../../features/offlineMode/hooks/useOfflineModeData'
 

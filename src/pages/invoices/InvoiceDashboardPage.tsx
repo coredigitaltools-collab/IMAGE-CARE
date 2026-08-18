@@ -9,7 +9,7 @@ import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
 import {

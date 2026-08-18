@@ -601,9 +601,37 @@ export interface Database {
     };
     Functions: {
       fn_get_dashboard_kpis: {
-        Args: { p_business_id: UUID; p_branch_id?: UUID; p_from_date?: string; p_to_date?: string };
+        Args: { p_business_id: UUID; p_branch_id: UUID | null; p_from_date: string; p_to_date: string };
         Returns: DashboardKPIs;
       };
+      fn_list_sales_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_status: string | null; p_customer_id: UUID | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
+      engine_return_sale: { Args: { p_sale_id: UUID; p_user_id: UUID; p_reason: string; p_items: string; p_idempotency_key: string }; Returns: unknown };
+      fn_list_purchases_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_supplier_id: UUID | null; p_status: string | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
+      engine_process_supplier_payment: { Args: { p_business_id: UUID; p_branch_id: UUID; p_supplier_id: UUID; p_amount: number; p_payment_method: string; p_user_id: UUID; p_reference_notes: string | null; p_idempotency_key: string }; Returns: unknown };
+      fn_list_inventory_movements_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID; p_product_id: UUID | null; p_type: MovementType | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
+      engine_stock_adjustment: { Args: { p_business_id: UUID; p_branch_id: UUID; p_product_id: UUID; p_quantity: number; p_reason: string; p_user_id: UUID; p_notes: string | null; p_idempotency_key: string }; Returns: unknown };
+      engine_dispatch_transfer: { Args: { p_transfer_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
+      engine_receive_transfer: { Args: { p_transfer_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
+      fn_list_expenses_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_category: string | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
+      fn_get_cash_position: { Args: { p_business_id: UUID; p_branch_id: UUID | null }; Returns: unknown };
+      fn_get_account_balance: { Args: { p_business_id: UUID; p_account_code: string; p_year: number | null; p_month: number | null; p_branch_id: UUID | null }; Returns: number };
+      fn_list_audit_logs_cursor: { Args: { p_business_id: UUID; p_table_name: string | null; p_user_id: UUID | null; p_action: string | null; p_from_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
+      fn_get_sales_by_period: { Args: { p_business_id: UUID; p_from_date: string; p_to_date: string; p_group_by: 'day' | 'week' | 'month'; p_branch_id: UUID | null }; Returns: unknown[] };
+      fn_get_top_products: { Args: { p_business_id: UUID; p_from_date: string; p_to_date: string; p_limit: number; p_order_by: 'revenue' | 'quantity' | 'profit'; p_branch_id: UUID | null }; Returns: unknown[] };
+      fn_get_outstanding_credit_summary: { Args: { p_business_id: UUID; p_branch_id: UUID | null }; Returns: unknown[] };
+      fn_get_expense_breakdown: { Args: { p_business_id: UUID; p_from_date: string; p_to_date: string; p_branch_id: UUID | null }; Returns: unknown[] };
+      fn_register_device: { Args: { p_business_id: UUID; p_user_id: UUID; p_device_id: string; p_device_name: string | null; p_device_type: string | null; p_platform: string | null; p_app_version: string | null }; Returns: UUID };
+      fn_get_initial_sync_payload: { Args: { p_business_id: UUID; p_user_id: UUID; p_branch_id: UUID | null }; Returns: unknown };
+      fn_get_changes_since: { Args: { p_business_id: UUID; p_user_id: UUID; p_device_id: string; p_since_cursor: number; p_branch_id: UUID | null; p_batch_size: number }; Returns: unknown };
+      fn_process_sync_batch: { Args: { p_business_id: UUID; p_user_id: UUID; p_device_id: string; p_batch_id: UUID }; Returns: unknown };
+      fn_register_upload: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_uploaded_by: UUID; p_bucket_name: string; p_entity_type: string; p_entity_id: UUID; p_original_name: string; p_mime_type: string; p_file_size: number; p_category: string; p_checksum: string | null; p_expires_hours: number | null }; Returns: unknown };
+      fn_log_file_access: { Args: { p_file_id: UUID; p_user_id: UUID; p_action: string; p_success: boolean }; Returns: unknown };
+      fn_soft_delete_file: { Args: { p_file_id: UUID; p_user_id: UUID; p_reason: string }; Returns: unknown };
+      engine_post_sale: { Args: { p_sale_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
+      engine_post_purchase: { Args: { p_purchase_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
+      engine_post_expense: { Args: { p_expense_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
+      engine_process_credit_repayment: { Args: { p_business_id: UUID; p_branch_id: UUID; p_customer_id: UUID; p_amount: number; p_payment_method: string; p_user_id: UUID; p_reference_notes: string | null; p_idempotency_key: string }; Returns: unknown };
+      engine_process_payroll: { Args: { p_payroll_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
     };
   };
 }

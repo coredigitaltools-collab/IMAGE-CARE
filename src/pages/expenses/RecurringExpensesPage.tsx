@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
 import {

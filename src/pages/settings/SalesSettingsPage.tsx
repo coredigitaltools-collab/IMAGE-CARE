@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { ToggleRow } from '../../components/settings/ToggleRow'
 import { FormField } from '../../components/settings/FormField'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useSalesSettings, useSaveSalesSettings } from '../../features/settings/hooks/useSettingsData'
 

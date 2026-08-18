@@ -10,9 +10,7 @@
 import {
   useQuery,
   useMutation,
-  useQueryClient,
-  type UseQueryOptions,
-  type UseMutationOptions,
+  QueryClient,
 } from '@tanstack/react-query';
 import { queryKeys, invalidateAfter } from '../../lib/queryClient';
 import type { ServiceResponse, PagedResponse } from '../../types/contracts';
@@ -492,4 +490,4 @@ export function useExpenseBreakdownQuery(
 }
 
 // Bare queryClient reference for invalidation helpers
-const queryClient = new (require('@tanstack/react-query').QueryClient)();
+const queryClient = new QueryClient();

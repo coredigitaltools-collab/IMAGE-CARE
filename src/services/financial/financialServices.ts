@@ -5,7 +5,7 @@
 //          audit services - all financial service boundaries.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { canDo, parseError } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -43,7 +43,7 @@ export async function listExpenses(
   }
   try {
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await supabase.rpc('fn_list_expenses_cursor', {
+    const { data, error } = await rpc('fn_list_expenses_cursor', {
       p_business_id: ctx.business_id,
       p_branch_id:   filter.branch_id ?? null,
       p_category:    filter.category  ?? null,
@@ -149,7 +149,7 @@ export async function getCashBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view cash data.', { requestId });
   }
   try {
-    const { data, error } = await supabase.rpc('fn_get_cash_position', {
+    const { data, error } = await rpc('fn_get_cash_position', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId,
     });
@@ -218,7 +218,7 @@ export async function getAccountBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view account balances.', { requestId });
   }
   try {
-    const { data, error } = await supabase.rpc('fn_get_account_balance', {
+    const { data, error } = await rpc('fn_get_account_balance', {
       p_business_id:  ctx.business_id,
       p_account_code: accountCode,
       p_year:         filter?.year   ?? null,
@@ -245,7 +245,7 @@ export async function listAuditLogs(
   }
   try {
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await supabase.rpc('fn_list_audit_logs_cursor', {
+    const { data, error } = await rpc('fn_list_audit_logs_cursor', {
       p_business_id: ctx.business_id,
       p_table_name:  filter.table_name ?? null,
       p_user_id:     filter.user_id   ?? null,

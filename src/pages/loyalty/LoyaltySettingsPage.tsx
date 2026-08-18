@@ -6,7 +6,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { FormField } from '../../components/settings/FormField'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useLoyaltySettings, useProcessExpirations, useSaveLoyaltySettings } from '../../features/loyalty/hooks/useLoyaltyData'
 

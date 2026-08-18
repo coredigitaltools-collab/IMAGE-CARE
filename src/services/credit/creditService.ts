@@ -4,7 +4,7 @@
 // Purpose: Credit, invoice and payables services.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { canDo, parseError } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -52,7 +52,7 @@ export async function getOutstandingCredit(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view credit data.', { requestId });
   }
   try {
-    const { data, error } = await supabase.rpc('fn_get_outstanding_credit_summary', {
+    const { data, error } = await rpc('fn_get_outstanding_credit_summary', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
     });

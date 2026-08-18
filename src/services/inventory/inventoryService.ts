@@ -7,7 +7,7 @@
 //          All changes go through the Business Engine.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { canDo } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -161,7 +161,7 @@ export async function getInventoryMovements(
       APP_CONSTANTS.MAX_PAGE_SIZE
     );
 
-    const { data, error } = await supabase.rpc('fn_list_inventory_movements_cursor', {
+    const { data, error } = await rpc('fn_list_inventory_movements_cursor', {
       p_business_id: ctx.business_id,
       p_branch_id:   filter.branch_id,
       p_product_id:  filter.product_id  ?? null,
@@ -225,7 +225,7 @@ export async function createStockAdjustment(
   }
 
   try {
-    const { error } = await supabase.rpc('engine_stock_adjustment', {
+    const { error } = await rpc('engine_stock_adjustment', {
       p_business_id:     ctx.business_id,
       p_branch_id:       request.branch_id,
       p_product_id:      request.product_id,
@@ -322,7 +322,7 @@ export async function createStockTransfer(
     if (itemsError) return serviceFail('INTERNAL_ERROR', 'Failed to add transfer items.', { requestId });
 
     // Dispatch (deduct from source)
-    const { error: dispatchError } = await supabase.rpc('engine_dispatch_transfer', {
+    const { error: dispatchError } = await rpc('engine_dispatch_transfer', {
       p_transfer_id:     transferId,
       p_user_id:         ctx.user_id,
       p_idempotency_key: request.idempotency_key ?? uuidv4(),
@@ -360,7 +360,7 @@ export async function receiveStockTransfer(
   }
 
   try {
-    const { error } = await supabase.rpc('engine_receive_transfer', {
+    const { error } = await rpc('engine_receive_transfer', {
       p_transfer_id: transferId,
       p_user_id:     ctx.user_id,
       p_idempotency_key: uuidv4(),

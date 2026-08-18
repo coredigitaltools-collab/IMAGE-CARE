@@ -4,7 +4,7 @@
 // Purpose: Purchasing service - purchases, supplier payments.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { canDo, parseError } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -68,7 +68,7 @@ export async function listPurchases(
   }
   try {
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await supabase.rpc('fn_list_purchases_cursor', {
+    const { data, error } = await rpc('fn_list_purchases_cursor', {
       p_business_id:  ctx.business_id,
       p_branch_id:    filter.branch_id   ?? null,
       p_supplier_id:  filter.supplier_id ?? null,
@@ -97,7 +97,7 @@ export async function recordSupplierPayment(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to record supplier payments.', { requestId });
   }
   try {
-    const { error } = await supabase.rpc('engine_process_supplier_payment', {
+    const { error } = await rpc('engine_process_supplier_payment', {
       p_business_id:     ctx.business_id,
       p_branch_id:       input.branch_id,
       p_supplier_id:     input.supplier_id,

@@ -6,7 +6,7 @@ import { KpiCard } from '../../components/dashboard/KpiCard'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { formatCurrency } from '../../lib/format'
 import { useCreditAccounts, useCreditDashboardKpis } from '../../features/credit/hooks/useCreditData'
 
