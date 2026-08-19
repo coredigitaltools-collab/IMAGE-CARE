@@ -1,21 +1,6 @@
 import type { Brand, Category, Supplier } from '../../types/inventory'
 import type { Branch } from '../../types/domain'
-
-export interface InventoryFilters {
-  categoryId: string
-  supplierId: string
-  brandId: string
-  status: string
-  branchId: string
-}
-
-export const EMPTY_FILTERS: InventoryFilters = {
-  categoryId: 'all',
-  supplierId: 'all',
-  brandId: 'all',
-  status: 'all',
-  branchId: 'all',
-}
+import { EMPTY_FILTERS, type InventoryFilters } from './inventoryFilters'
 
 interface InventoryFilterBarProps {
   categories: Category[]

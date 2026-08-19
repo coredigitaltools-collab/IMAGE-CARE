@@ -5,15 +5,14 @@
 //          audit services - all financial service boundaries.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { canDo, parseError } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Expense, PayrollRecord, CashTransaction, JournalEntry, UUID } from '../../types/database';
-import { createAndPostExpense, processPayroll, processCreditRepayment, type CreateExpenseInput } from '../business/businessEngine';
+import { createAndPostExpense, processPayroll, type CreateExpenseInput } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
-import { v4 as uuidv4 } from 'uuid';
 
 // ===========================================================
 // EXPENSE SERVICE
@@ -43,7 +42,7 @@ export async function listExpenses(
   }
   try {
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await supabase.rpc('fn_list_expenses_cursor', {
+    const { data, error } = await rpc('fn_list_expenses_cursor', {
       p_business_id: ctx.business_id,
       p_branch_id:   filter.branch_id ?? null,
       p_category:    filter.category  ?? null,
@@ -57,7 +56,7 @@ export async function listExpenses(
     const rows = (data ?? []) as Expense[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1] as any;
+    const last = items[items.length - 1] as Expense;
     return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.expense_date ?? null : null, next_cursor_id: hasMore ? last?.id ?? null : null } }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId }); }
 }
@@ -149,11 +148,12 @@ export async function getCashBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view cash data.', { requestId });
   }
   try {
-    const { data, error } = await supabase.rpc('fn_get_cash_position', {
+    const { data, error } = await rpc('fn_get_cash_position', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId,
     });
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return serviceOk(data as any, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId }); }
 }
@@ -218,7 +218,7 @@ export async function getAccountBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view account balances.', { requestId });
   }
   try {
-    const { data, error } = await supabase.rpc('fn_get_account_balance', {
+    const { data, error } = await rpc('fn_get_account_balance', {
       p_business_id:  ctx.business_id,
       p_account_code: accountCode,
       p_year:         filter?.year   ?? null,
@@ -238,6 +238,7 @@ export async function listAuditLogs(
   ctx: UserContext,
   filter: { table_name?: string; user_id?: UUID; date?: DateFilter } = {},
   pagination: PaginationRequest = {}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<ServiceResponse<PagedResponse<any>>> {
   const requestId = makeRequestId();
   if (!canDo(ctx, 'settings', 'view')) {
@@ -245,7 +246,7 @@ export async function listAuditLogs(
   }
   try {
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await supabase.rpc('fn_list_audit_logs_cursor', {
+    const { data, error } = await rpc('fn_list_audit_logs_cursor', {
       p_business_id: ctx.business_id,
       p_table_name:  filter.table_name ?? null,
       p_user_id:     filter.user_id   ?? null,
@@ -256,6 +257,7 @@ export async function listAuditLogs(
       p_limit:       pageSize + 1,
     });
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load audit logs.', { requestId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows = (data ?? []) as any[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;

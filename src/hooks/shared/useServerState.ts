@@ -10,27 +10,20 @@
 import {
   useQuery,
   useMutation,
-  useQueryClient,
-  type UseQueryOptions,
-  type UseMutationOptions,
+  QueryClient,
 } from '@tanstack/react-query';
 import { queryKeys, invalidateAfter } from '../../lib/queryClient';
-import type { ServiceResponse, PagedResponse } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
-import type {
-  Product, Customer, Supplier, Sale, Purchase,
-  Expense, PayrollRecord, CashTransaction, Invoice, Bill,
-  DashboardKPIs, StockSummaryRow, UUID
-} from '../../types/database';
+import type { UUID } from '../../types/database';
 
 // Services
 import { getDashboardKPIs, getSalesByPeriod, getTopProducts, getStockSummary, getCashPosition, getExpenseBreakdown } from '../../services/reporting/reportingService';
-import { listProducts, getProduct, listCustomers, getCustomer, listSuppliers, getSupplier, listCategories, listUnits } from '../../services/masterData/masterDataService';
-import { listSales, getSale, getSaleReceipt } from '../../services/sales/salesService';
+import { listProducts, getProduct, listCustomers, getCustomer, listSuppliers, listCategories, listUnits } from '../../services/masterData/masterDataService';
+import { listSales, getSale } from '../../services/sales/salesService';
 import { createSale, cancelSale } from '../../services/sales/salesService';
-import { listPurchases, getPurchase } from '../../services/purchasing/purchasingService';
+import { listPurchases } from '../../services/purchasing/purchasingService';
 import { createPurchase } from '../../services/purchasing/purchasingService';
-import { listInventory, getStock } from '../../services/inventory/inventoryService';
+import { listInventory } from '../../services/inventory/inventoryService';
 import { createStockAdjustment } from '../../services/inventory/inventoryService';
 import { listExpenses, createExpense } from '../../services/financial/financialServices';
 import { listPayroll, approvePayroll, processPayrollPayment } from '../../services/financial/financialServices';
@@ -82,7 +75,7 @@ export function useProductsQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.products(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listProducts(ctx, filters as any ?? {});
+      const r = await listProducts(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -130,7 +123,7 @@ export function useCustomersQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.customers(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listCustomers(ctx, filters as any ?? {});
+      const r = await listCustomers(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -153,7 +146,7 @@ export function useSuppliersQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.suppliers(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listSuppliers(ctx, filters as any ?? {});
+      const r = await listSuppliers(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -169,7 +162,7 @@ export function useSalesQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.sales(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listSales(ctx, filters as any ?? {});
+      const r = await listSales(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -220,7 +213,7 @@ export function usePurchasesQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.purchases(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listPurchases(ctx, filters as any ?? {});
+      const r = await listPurchases(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -300,7 +293,7 @@ export function useInvoicesQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.invoices(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listInvoices(ctx, filters as any ?? {});
+      const r = await listInvoices(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -311,7 +304,7 @@ export function useBillsQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.bills(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listBills(ctx, filters as any ?? {});
+      const r = await listBills(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -340,7 +333,7 @@ export function useExpensesQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.expenses(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listExpenses(ctx, filters as any ?? {});
+      const r = await listExpenses(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -366,7 +359,7 @@ export function usePayrollQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.payroll(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listPayroll(ctx, filters as any ?? {});
+      const r = await listPayroll(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -415,7 +408,7 @@ export function useCashTransactionsQuery(ctx: UserContext, filters?: object) {
   return useQuery({
     queryKey: queryKeys.cashTxns(ctx.business_id, filters),
     queryFn:  async () => {
-      const r = await listCashTransactions(ctx, filters as any ?? {});
+      const r = await listCashTransactions(ctx, filters as Record<string, unknown> ?? {});
       if (!r.success) throw new Error(r.error?.message);
       return r.data!;
     },
@@ -492,4 +485,4 @@ export function useExpenseBreakdownQuery(
 }
 
 // Bare queryClient reference for invalidation helpers
-const queryClient = new (require('@tanstack/react-query').QueryClient)();
+const queryClient = new QueryClient();

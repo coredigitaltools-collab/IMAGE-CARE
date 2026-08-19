@@ -1,5 +1,27 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom';
+import type { UserContext } from '../types/app';
+
+export const TEST_BUSINESS_ID = 'business-test-001';
+export const TEST_BRANCH_ID = 'branch-test-001';
+export const TEST_USER_ID = 'user-test-001';
+
+const fullPermissions = { view: true, create: true, edit: true, delete: true, approve: true, export: true, sync: true, branch_scope: 'all' as const };
+
+export function makeUserContext(overrides: Partial<UserContext> = {}): UserContext {
+  return {
+    user_id: TEST_USER_ID, business_id: TEST_BUSINESS_ID, branch_id: TEST_BRANCH_ID,
+    email: 'owner@example.test', first_name: 'Test', last_name: 'Owner', role: 'Owner',
+    is_owner: true, is_active: true,
+    permissions: Object.fromEntries(['sales', 'purchases', 'inventory', 'customers', 'suppliers', 'credit', 'invoices', 'bills', 'payroll', 'expenses', 'cash', 'journal', 'reports', 'settings'].map(module => [module, { ...fullPermissions }])),
+    branches: [{ branch_id: TEST_BRANCH_ID, can_transact: true }],
+    ...overrides,
+  };
+}
+
+export function makeNoPermissionContext(overrides: Partial<UserContext> = {}): UserContext {
+  return makeUserContext({ is_owner: false, permissions: {}, ...overrides });
+}
 
 // Mock Supabase at the module level - tests never hit the real database.
 // This mock covers both possible import paths used by tests.

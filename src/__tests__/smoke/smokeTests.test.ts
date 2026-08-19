@@ -7,8 +7,12 @@
 //          These tests run against the live Supabase instance.
 // ============================================================
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { makeUserContext } from '../setup';
+import { login } from '../../services/auth/authService';
+import { canDo } from '../../types/app';
+import { serviceFail, serviceOk } from '../../types/contracts';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 
 // ---- Smoke Test 1: Application initializes -----------------
 
@@ -40,7 +44,6 @@ describe('Smoke: Auth Service', () => {
   });
 
   it('login function accepts expected parameters', () => {
-    const { login } = require('../../services/auth/authService');
     // Verify the function exists and accepts the right shape
     expect(typeof login).toBe('function');
     expect(login.length).toBeLessThanOrEqual(1); // One credentials param
@@ -78,7 +81,6 @@ describe('Smoke: Business Context', () => {
 
 describe('Smoke: Permission System', () => {
   it('canDo returns boolean for all modules', () => {
-    const { canDo } = require('../../types/app');
     const ctx = makeUserContext();
     const modules = ['sales', 'purchases', 'inventory', 'expenses', 'payroll'];
     const actions = ['view', 'create', 'edit', 'delete', 'approve'] as const;
@@ -126,7 +128,6 @@ describe('Smoke: Core Services', () => {
 
 describe('Smoke: Formatters', () => {
   it('formatCurrency produces a non-empty string', () => {
-    const { formatCurrency } = require('../../utils/formatters');
     const result = formatCurrency(1000000);
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
@@ -134,7 +135,6 @@ describe('Smoke: Formatters', () => {
   });
 
   it('formatDate handles ISO string', () => {
-    const { formatDate } = require('../../utils/formatters');
     const result = formatDate('2026-08-11T00:00:00Z');
     expect(typeof result).toBe('string');
     expect(result).not.toBe('-');
@@ -186,7 +186,6 @@ describe('Smoke: Offline Detection', () => {
 
 describe('Smoke: ServiceResponse Contract', () => {
   it('serviceOk produces correct shape', () => {
-    const { serviceOk } = require('../../types/contracts');
     const result = serviceOk({ test: true });
 
     expect(result.success).toBe(true);
@@ -197,7 +196,6 @@ describe('Smoke: ServiceResponse Contract', () => {
   });
 
   it('serviceFail produces correct shape', () => {
-    const { serviceFail } = require('../../types/contracts');
     const result = serviceFail('PERMISSION_DENIED', 'Not allowed');
 
     expect(result.success).toBe(false);

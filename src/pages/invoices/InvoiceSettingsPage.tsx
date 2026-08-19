@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { FormField } from '../../components/settings/FormField'
 import { ToggleRow } from '../../components/settings/ToggleRow'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useInvoiceSettings, useSaveInvoiceSettings } from '../../features/invoices/hooks/useInvoicesData'
 
 export function InvoiceSettingsPage() {

@@ -7,7 +7,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { RoleBadge } from '../../components/settings/RoleBadge'
 import { StaffFormModal } from '../../components/settings/StaffFormModal'
 import { PermissionMatrixTable } from '../../components/settings/PermissionMatrixTable'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import {
   useArchiveRole,

@@ -26,3 +26,4 @@ dist-ssr
 # Local Supabase credentials
 .env
 .env.local
+coverage/

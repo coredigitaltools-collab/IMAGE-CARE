@@ -7,8 +7,9 @@
 //          Never allow pages to call sync directly.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { ok, fail, parseError } from '../../types/app';
+import { serviceFail } from '../../types/contracts';
 import type { ApiResult, UserContext } from '../../types/app';
 import type { UUID } from '../../types/database';
 import { APP_CONSTANTS } from '../../config/env';
@@ -29,7 +30,7 @@ export async function registerDevice(
   device: DeviceInfo
 ): Promise<ApiResult<{ device_record_id: UUID }>> {
   try {
-    const { data, error } = await supabase.rpc('fn_register_device', {
+    const { data, error } = await rpc('fn_register_device', {
       p_business_id: ctx.business_id,
       p_user_id:     ctx.user_id,
       p_device_id:   device.device_id,
@@ -67,7 +68,7 @@ export async function getInitialSyncPayload(
   branchId?: UUID
 ): Promise<ApiResult<InitialSyncPayload>> {
   try {
-    const { data, error } = await supabase.rpc('fn_get_initial_sync_payload', {
+    const { data, error } = await rpc('fn_get_initial_sync_payload', {
       p_business_id: ctx.business_id,
       p_user_id:     ctx.user_id,
       p_branch_id:   branchId ?? null,
@@ -106,7 +107,7 @@ export async function pullChanges(
   branchId?: UUID
 ): Promise<ApiResult<PullResult>> {
   try {
-    const { data, error } = await supabase.rpc('fn_get_changes_since', {
+    const { data, error } = await rpc('fn_get_changes_since', {
       p_business_id:  ctx.business_id,
       p_user_id:      ctx.user_id,
       p_device_id:    deviceId,
@@ -155,7 +156,7 @@ export async function pushQueuedOperations(
     if (batchError) return fail(parseError(batchError));
 
     // Process the batch
-    const { data, error } = await supabase.rpc('fn_process_sync_batch', {
+    const { data, error } = await rpc('fn_process_sync_batch', {
       p_business_id: ctx.business_id,
       p_user_id:     ctx.user_id,
       p_device_id:   deviceId,
@@ -219,11 +220,11 @@ export async function runSyncSession(
 ): Promise<ApiResult<{ push: SyncBatchResult; pull: PullResult }>> {
   // Push pending local operations first
   const pushResult = await pushQueuedOperations(ctx, deviceId);
-  if (pushResult.error) return fail(pushResult.error);
+  if (pushResult.error) return serviceFail(pushResult.error.code, pushResult.error.message);
 
   // Then pull server changes
   const pullResult = await pullChanges(ctx, deviceId, currentCursor, branchId);
-  if (pullResult.error) return fail(pullResult.error);
+  if (pullResult.error) return serviceFail(pullResult.error.code, pullResult.error.message);
 
   return ok({ push: pushResult.data!, pull: pullResult.data! });
 }

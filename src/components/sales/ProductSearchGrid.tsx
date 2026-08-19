@@ -33,7 +33,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
   const categoriesWithProducts = useMemo(() => {
     const ids = new Set(sellable.map((p) => p.categoryId))
     return categories.filter((c) => ids.has(c.id))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [sellable, categories])
 
   const filtered = useMemo(() => {
@@ -43,7 +43,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
       if (!q) return true
       return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [sellable, query, categoryId])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -7,7 +7,7 @@
 //          Uses the shared DB-003/DB-006 reporting engine.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { ok, fail, parseError } from '../../types/app';
 import type { ApiResult, UserContext, DateRange } from '../../types/app';
 import type { UUID, DashboardKPIs, StockSummaryRow } from '../../types/database';
@@ -29,7 +29,7 @@ export async function getDashboardKPIs(
     const from = dateRange?.from ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const to   = dateRange?.to   ?? now.toISOString();
 
-    const { data, error } = await supabase.rpc('fn_get_dashboard_kpis', {
+    const { data, error } = await rpc('fn_get_dashboard_kpis', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
       p_from_date:   from,
@@ -70,7 +70,7 @@ export async function getSalesByPeriod(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_sales_by_period', {
+    const { data, error } = await rpc('fn_get_sales_by_period', {
       p_business_id: ctx.business_id,
       p_from_date:   input.from_date,
       p_to_date:     input.to_date,
@@ -113,7 +113,7 @@ export async function getTopProducts(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_top_products', {
+    const { data, error } = await rpc('fn_get_top_products', {
       p_business_id: ctx.business_id,
       p_from_date:   input.from_date,
       p_to_date:     input.to_date,
@@ -174,7 +174,7 @@ export async function getCashPosition(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_cash_position', {
+    const { data, error } = await rpc('fn_get_cash_position', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
     });
@@ -206,7 +206,7 @@ export async function getOutstandingCredit(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_outstanding_credit_summary', {
+    const { data, error } = await rpc('fn_get_outstanding_credit_summary', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
     });
@@ -236,7 +236,7 @@ export async function getExpenseBreakdown(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_expense_breakdown', {
+    const { data, error } = await rpc('fn_get_expense_breakdown', {
       p_business_id: ctx.business_id,
       p_from_date:   input.from_date,
       p_to_date:     input.to_date,
