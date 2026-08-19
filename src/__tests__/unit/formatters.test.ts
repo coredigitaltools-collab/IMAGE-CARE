@@ -325,3 +325,155 @@ describe('formatPercent', () => {
     expect(formatPercent(100)).toContain('100');
   });
 });
+
+// ============================================================
+// lib/audit.ts - pure utility functions
+// ============================================================
+
+describe('lib/audit - utility functions', () => {
+  it('newId: returns a UUID-formatted string', async () => {
+    const { newId } = await import('../../lib/audit');
+    const id = newId();
+    expect(typeof id).toBe('string');
+    expect(id.length).toBeGreaterThan(10);
+    expect(id).toMatch(/^[0-9a-f-]+$/i);
+  });
+
+  it('stampNew: returns all required audit fields', async () => {
+    const { stampNew } = await import('../../lib/audit');
+    const stamp = stampNew('user-123', 'branch-456');
+    expect(stamp.created_by).toBe('user-123');
+    expect(stamp.branch_id).toBe('branch-456');
+    expect(stamp.is_active).toBe(true);
+    expect(typeof stamp.created_at).toBe('string');
+    expect(typeof stamp.id).toBe('string');
+  });
+
+  it('stampNew: branch_id defaults to null', async () => {
+    const { stampNew } = await import('../../lib/audit');
+    const stamp = stampNew('user-123');
+    expect(stamp.branch_id).toBeNull();
+  });
+
+  it('stampUpdated: preserves id and updates updated_at', async () => {
+    const { stampNew, stampUpdated } = await import('../../lib/audit');
+    const original = stampNew('user-001');
+    const updated  = stampUpdated(original, 'user-002');
+    expect(updated.id).toBe(original.id);
+    expect(updated.updated_by).toBe('user-002');
+    expect(updated.created_by).toBe('user-001');
+  });
+
+  it('markSynced: sets sync_status to synced', async () => {
+    const { stampNew, markSynced } = await import('../../lib/audit');
+    const record = stampNew('user-001');
+    const synced = markSynced(record);
+    expect(synced.sync_status).toBe('synced');
+    expect(typeof synced.last_synced_at).toBe('string');
+  });
+});
+
+// ============================================================
+// lib/currency.ts - currency conversion
+// ============================================================
+
+describe('lib/currency - conversion functions', () => {
+  it('convertFromUgx: UGX to UGX is 1:1', async () => {
+    const { convertFromUgx } = await import('../../lib/currency');
+    expect(convertFromUgx(1000, 'UGX')).toBe(1000);
+  });
+
+  it('convertFromUgx: converts UGX to USD', async () => {
+    const { convertFromUgx } = await import('../../lib/currency');
+    const usd = convertFromUgx(3800, 'USD');
+    expect(usd).toBe(1);
+  });
+
+  it('convertFromUgx: converts UGX to KES', async () => {
+    const { convertFromUgx } = await import('../../lib/currency');
+    const kes = convertFromUgx(26, 'KES');
+    expect(kes).toBe(1);
+  });
+
+  it('convertToUgx: USD to UGX', async () => {
+    const { convertToUgx } = await import('../../lib/currency');
+    const ugx = convertToUgx(1, 'USD');
+    expect(ugx).toBe(3800);
+  });
+
+  it('convertToUgx: UGX to UGX is 1:1', async () => {
+    const { convertToUgx } = await import('../../lib/currency');
+    expect(convertToUgx(500, 'UGX')).toBe(500);
+  });
+
+  it('SUPPORTED_CURRENCIES includes UGX, USD, KES', async () => {
+    const { SUPPORTED_CURRENCIES } = await import('../../lib/currency');
+    expect(SUPPORTED_CURRENCIES).toContain('UGX');
+    expect(SUPPORTED_CURRENCIES).toContain('USD');
+    expect(SUPPORTED_CURRENCIES).toContain('KES');
+  });
+});
+
+// ============================================================
+// lib/format.ts - display formatting
+// ============================================================
+
+describe('lib/format - display formatting', () => {
+  it('formatCurrency: formats a UGX amount', async () => {
+    const { formatCurrency } = await import('../../lib/format');
+    const result = formatCurrency(50000, 'UGX');
+    expect(result).toContain('50,000');
+  });
+
+  it('formatRelativeTime: returns "Never" for null', async () => {
+    const { formatRelativeTime } = await import('../../lib/format');
+    expect(formatRelativeTime(null)).toBe('Never');
+  });
+
+  it('formatRelativeTime: returns "Just now" for very recent time', async () => {
+    const { formatRelativeTime } = await import('../../lib/format');
+    const justNow = new Date(Date.now() - 10_000).toISOString();
+    expect(formatRelativeTime(justNow)).toBe('Just now');
+  });
+
+  it('formatRelativeTime: returns minutes ago for recent time', async () => {
+    const { formatRelativeTime } = await import('../../lib/format');
+    const fiveMin = new Date(Date.now() - 5 * 60_000).toISOString();
+    const result = formatRelativeTime(fiveMin);
+    expect(result).toContain('min ago');
+  });
+
+  it('formatClockTime: returns a time string', async () => {
+    const { formatClockTime } = await import('../../lib/format');
+    const result = formatClockTime(new Date().toISOString());
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================
+// lib/customerHealth.ts - business analytics
+// ============================================================
+
+describe('lib/customerHealth - scoring', () => {
+  it('getCustomerHealth: returns object with status for recent purchase', async () => {
+    const { getCustomerHealth } = await import('../../lib/customerHealth');
+    const recent = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const result = getCustomerHealth({ lastPurchaseAt: recent, creditBalance: 0 });
+    expect(result).toHaveProperty('status');
+    expect(result).toHaveProperty('label');
+  });
+
+  it('getCustomerHealth: returns inactive status for no purchase history', async () => {
+    const { getCustomerHealth } = await import('../../lib/customerHealth');
+    const result = getCustomerHealth({ lastPurchaseAt: null, creditBalance: 0 });
+    expect(result.status).toBe('inactive');
+  });
+
+  it('getCustomerHealth: returns status object for high credit balance', async () => {
+    const { getCustomerHealth } = await import('../../lib/customerHealth');
+    const result = getCustomerHealth({ lastPurchaseAt: null, creditBalance: 100000 });
+    expect(result).toHaveProperty('status');
+    expect(Array.isArray(result.reasons)).toBe(true);
+  });
+});

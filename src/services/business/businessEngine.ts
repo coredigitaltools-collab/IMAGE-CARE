@@ -10,9 +10,8 @@
 import { supabase, rpc } from '../../lib/supabase';
 import { ok, fail, parseError } from '../../types/app';
 import type { ApiResult, UserContext } from '../../types/app';
-import type { UUID, Sale, SaleItem, Purchase, PurchaseItem, Expense } from '../../types/database';
+import type { UUID, Sale, Purchase, Expense } from '../../types/database';
 import { canDo } from '../../types/app';
-import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
 
 // ---- Sale --------------------------------------------------

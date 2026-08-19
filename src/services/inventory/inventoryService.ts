@@ -14,7 +14,6 @@ import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } fr
 import type { UserContext } from '../../types/app';
 import type { InventoryMovement, UUID } from '../../types/database';
 import type { StockSummaryRow } from '../../types/database';
-import type { StockAdjustment } from '../../types/schema';
 import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -72,7 +71,7 @@ export async function getStock(
       cost_price:       row.cost_price,
       selling_price:    row.selling_price,
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load stock.', { requestId });
   }
 }
@@ -130,7 +129,7 @@ export async function listInventory(
         next_cursor_id:   null,
       },
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load inventory.', { requestId });
   }
 }
@@ -178,7 +177,7 @@ export async function getInventoryMovements(
     const rows = (data ?? []) as InventoryMovement[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1] as any;
+    const last = items[items.length - 1] as InventoryMovement;
 
     return serviceOk<PagedResponse<InventoryMovement>>({
       items,
@@ -190,7 +189,7 @@ export async function getInventoryMovements(
         next_cursor_id:   hasMore ? last?.id ?? null : null,
       },
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load movements.', { requestId });
   }
 }
@@ -245,7 +244,7 @@ export async function createStockAdjustment(
     }
 
     return serviceOk(undefined, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to create adjustment.', { requestId });
   }
 }
@@ -344,7 +343,7 @@ export async function createStockTransfer(
       transfer_number: transfer?.transfer_number ?? '',
       status:          transfer?.status ?? 'dispatched',
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to create transfer.', { requestId });
   }
 }
@@ -368,7 +367,7 @@ export async function receiveStockTransfer(
 
     if (error) return serviceFail('BUSINESS_RULE_VIOLATION', error.message, { requestId });
     return serviceOk(undefined, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to receive transfer.', { requestId });
   }
 }

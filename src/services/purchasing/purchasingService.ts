@@ -83,6 +83,7 @@ export async function listPurchases(
     const rows = (data ?? []) as Purchase[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const last = items[items.length - 1] as any;
     return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.next_cursor_date ?? null : null, next_cursor_id: hasMore ? last?.next_cursor_id ?? null : null } }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load purchases.', { requestId }); }

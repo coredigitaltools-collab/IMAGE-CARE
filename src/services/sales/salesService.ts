@@ -43,6 +43,7 @@ export async function createSale(
   const result = await createAndPostSale(ctx, {
     ...request,
     idempotency_key: request.idempotency_key ?? uuidv4(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
   if (result.error) {
@@ -102,6 +103,7 @@ export async function getSale(
       return serviceFail('RESOURCE_NOT_FOUND', 'Sale not found.', { requestId });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sale = data as any;
     return serviceOk<SaleDetail>({
       ...sale,
@@ -159,6 +161,7 @@ export async function listSales(
     const rows = (data ?? []) as Sale[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const last = items[items.length - 1] as any;
 
     return serviceOk<PagedResponse<Sale>>({
@@ -171,7 +174,7 @@ export async function listSales(
         next_cursor_id:   hasMore ? last?.next_cursor_id   ?? null : null,
       },
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load sales.', { requestId });
   }
 }
@@ -238,7 +241,7 @@ export async function cancelSale(
     }
 
     return serviceOk(undefined, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to cancel sale.', { requestId });
   }
 }
@@ -303,6 +306,7 @@ export async function getSaleReceipt(
       return serviceFail('RESOURCE_NOT_FOUND', 'Sale not found.', { requestId });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = data as any;
     return serviceOk<SaleReceipt>({
       sale_number:     s.sale_number,
@@ -311,6 +315,7 @@ export async function getSaleReceipt(
       branch_name:     s.branches?.name ?? '',
       customer_name:   s.customers?.name ?? null,
       served_by:       s.users ? `${s.users.first_name} ${s.users.last_name}` : null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       items:           (s.sale_items ?? []).map((si: any) => ({
         product_name:   si.products?.name ?? '',
         quantity:       si.quantity,
@@ -326,7 +331,7 @@ export async function getSaleReceipt(
       change_given:    s.change_given,
       payment_method:  s.payment_method,
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load receipt.', { requestId });
   }
 }

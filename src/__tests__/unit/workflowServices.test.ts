@@ -2,20 +2,24 @@
 // ImageCare ERP - Workflow Services Unit Tests
 // File: src/__tests__/unit/workflowServices.test.ts
 //
-// ApiResult shape: { data: T | null, error: AppError | null }
-//   (no `ok` field - unlike EngineResult which has ok: boolean)
+// Tests permission gates (canDo() checks) across all major services.
+// Each service returns PERMISSION_DENIED before any DB call when the
+// user lacks the required permission - no DB mock needed for those paths.
 //
-// Pattern:
-//   success => result.data !== null, result.error === null
-//   failure => result.error !== null, result.data === null
+// Result shapes:
+//   ApiResult (listProducts, etc.): { data, error: { code } }
+//   ServiceResponse (listInventory, etc.): { success, data, error: { code } }
+// Both return error.code === 'PERMISSION_DENIED' for permission failures.
 // ============================================================
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { UUID } from '../../types/database';
 import type { UserContext, ModulePermissions } from '../../types/app';
 
-// ---- Mocks ------------------------------------------------
-const { rpcSpy } = vi.hoisted(() => ({ rpcSpy: vi.fn().mockResolvedValue({ data: null, error: null }) }));
+// ---- Mocks -------------------------------------------------
+const { rpcSpy } = vi.hoisted(() => ({
+  rpcSpy: vi.fn().mockResolvedValue({ data: null, error: null }),
+}));
 
 vi.mock('../../lib/supabase', () => ({
   supabase: {
@@ -31,62 +35,20 @@ vi.mock('../../lib/supabase', () => ({
         return ch;
       },
     }),
+    from: () => {
+      const ch: Record<string, unknown> = {};
+      const res = () => Promise.resolve({ data: [], error: null });
+      ch['select'] = () => ch; ch['eq'] = () => ch; ch['is'] = () => ch;
+      ch['order'] = () => ch; ch['limit'] = () => ch;
+      ch['maybeSingle'] = res;
+      ch['single'] = () => Promise.resolve({ data: null, error: null });
+      return ch;
+    },
     rpc: rpcSpy,
   },
 }));
 
-vi.mock('../../lib/rpc', () => ({
-  rpcPostCashSale:        vi.fn().mockResolvedValue({ ok: true, data: { sale_id: 's1', sale_number: 'INV-000001', total_amount: 1000, status: 'confirmed' } }),
-  rpcPostCreditSale:      vi.fn().mockResolvedValue({ ok: true, data: { sale_id: 's1', sale_number: 'INV-000001', total_amount: 800, status: 'confirmed', credit_account_id: 'ca1' } }),
-  rpcReceivePurchase:     vi.fn().mockResolvedValue({ ok: true, data: { purchase_id: 'p1', purchase_number: 'PO-000001', total_amount: 5000, status: 'confirmed' } }),
-  rpcPaySupplier:         vi.fn().mockResolvedValue({ ok: true, data: { purchase_id: 'p1', amount: 1000, journal_entry_id: 'je1', cash_transaction_id: 'ct1' } }),
-  rpcRecordExpense:       vi.fn().mockResolvedValue({ ok: true, data: { expense_id: 'e1', expense_number: 'EXP-000001', total_amount: 200, status: 'confirmed' } }),
-  rpcRecordCreditPayment: vi.fn().mockResolvedValue({ ok: true, data: { transaction_id: 'ct1', amount: 500, new_balance: 0, journal_entry_id: 'je1' } }),
-  rpcTransferStock:       vi.fn().mockResolvedValue({ ok: true, data: { out_movement_id: 'mv1', in_movement_id: 'mv2', quantity: 10 } }),
-  rpcAdjustStock:         vi.fn().mockResolvedValue({ ok: true, data: { movement_id: 'mv1', journal_entry_id: 'je1', direction: 'in', quantity: 5 } }),
-}));
-
-vi.mock('../../engines/business/businessEngine', () => ({
-  businessEngine: {
-    createSale:    vi.fn().mockResolvedValue({ ok: true, data: { sale_id: 'draft-001' } }),
-    recordExpense: vi.fn().mockResolvedValue({ ok: true, data: { expense_id: 'exp-001' } }),
-  },
-}));
-
-vi.mock('../../engines/purchasing/purchasingEngine', () => ({
-  purchasingEngine: {
-    createPurchase: vi.fn().mockResolvedValue({ ok: true, data: { purchase_id: 'po-001', purchase_number: 'PO-000001', total_amount: 5000 } }),
-  },
-}));
-
-vi.mock('../../engines/inventory/inventoryEngine', () => ({
-  inventoryEngine: {
-    getStock:          vi.fn().mockResolvedValue({ ok: true, data: { quantity_on_hand: 10, stock_value: 500, is_low_stock: false } }),
-    getLowStockAlerts: vi.fn().mockResolvedValue({ ok: true, data: [] }),
-    recordMovement:    vi.fn().mockResolvedValue({ ok: true, data: { movement_id: 'mv1' } }),
-  },
-}));
-
-vi.mock('../../engines/reporting/reportingEngine', () => ({
-  reportingEngine: {
-    getKpis:           vi.fn().mockResolvedValue({ ok: true, data: { revenue: 100000, cogs: 60000, gross_profit: 40000, expenses: 10000, net_profit: 30000, sale_count: 50, cash_in_hand: 45000, outstanding_credit: 5000 } }),
-    getLowStockAlerts: vi.fn().mockResolvedValue({ ok: true, data: [] }),
-    getSalesSummary:   vi.fn().mockResolvedValue({ ok: true, data: { total_revenue: 100000, total_sales: 50, average_sale: 2000 } }),
-  },
-}));
-
-vi.mock('../../engines/credit/creditEngine', () => ({
-  creditEngine: {
-    getBalance:    vi.fn().mockResolvedValue({ ok: true, data: { balance: 1000, credit_limit: 5000 } }),
-    recordPayment: vi.fn().mockResolvedValue({ ok: true, data: { transaction_id: 'ct1', new_balance: 500 } }),
-  },
-}));
-
-vi.mock('../../engines/audit/auditEngine', () => ({
-  auditEngine: { log: vi.fn().mockResolvedValue(undefined) },
-}));
-
-// ---- Context helpers ---------------------------------------
+// ---- Helpers -----------------------------------------------
 const u = (s: string) => s as UUID;
 
 function noPermsCtx(): UserContext {
@@ -101,377 +63,182 @@ function ownerCtx(): UserContext {
   return { ...noPermsCtx(), is_owner: true };
 }
 
-function withPermsCtx(modules: string[]): UserContext {
+function withPerms(modules: string[]): UserContext {
   const permissions: Record<string, ModulePermissions> = {};
   for (const m of modules) {
-    permissions[m] = { view: true, create: true, edit: true, delete: true, approve: false, export: false, sync: false, branch_scope: 'assigned' };
+    permissions[m] = {
+      view: true, create: true, edit: true, delete: true,
+      approve: false, export: false, sync: false, branch_scope: 'assigned',
+    };
   }
   return { ...noPermsCtx(), permissions };
 }
 
-// ---- ApiResult helpers (no `ok` field) --------------------
-function isDenied(r: { error: { code: string } | null }): boolean {
+// Result helpers - works for both ApiResult and ServiceResponse
+function isDenied(r: { error: { code: string } | null; success?: boolean }): boolean {
   return r.error?.code === 'PERMISSION_DENIED';
 }
-function isValidationError(r: { error: { code: string } | null }): boolean {
-  return r.error?.code === 'VALIDATION_ERROR';
-}
-function hasData<T>(r: { data: T | null }): boolean {
-  return r.data !== null;
+function hasData(r: { data: unknown; error: unknown }): boolean {
+  return r.data !== null && r.data !== undefined;
 }
 
 beforeEach(() => { vi.clearAllMocks(); });
 
 // ============================================================
-// SALES WORKFLOW SERVICE
+// SALES SERVICE
 // ============================================================
 
-describe('salesWorkflowService - permissions', () => {
-  it('createAndPostSale: PERMISSION_DENIED when no sales:create', async () => {
-    const { createAndPostSale } = await import('../../services/sales/salesWorkflowService');
-    const r = await createAndPostSale(noPermsCtx(), u('branch-001'), { payment_method: 'cash', lines: [] });
-    expect(isDenied(r)).toBe(true);
-  });
-
+describe('salesService - permission gates', () => {
   it('listSales: PERMISSION_DENIED when no sales:view', async () => {
-    const { listSales } = await import('../../services/sales/salesWorkflowService');
+    const { listSales } = await import('../../services/sales/salesService');
     const r = await listSales(noPermsCtx());
     expect(isDenied(r)).toBe(true);
   });
 
-  it('getSaleDetail: PERMISSION_DENIED when no sales:view', async () => {
-    const { getSaleDetail } = await import('../../services/sales/salesWorkflowService');
-    const r = await getSaleDetail(noPermsCtx(), u('sale-001'));
+  it('getSale: PERMISSION_DENIED when no sales:view', async () => {
+    const { getSale } = await import('../../services/sales/salesService');
+    const r = await getSale(noPermsCtx(), u('sale-001'));
     expect(isDenied(r)).toBe(true);
   });
 
-  it('getDashboardKpis: PERMISSION_DENIED when not owner and no reports:view', async () => {
-    const { getDashboardKpis } = await import('../../services/sales/salesWorkflowService');
-    const r = await getDashboardKpis(noPermsCtx(), { from_date: '2024-01-01', to_date: '2024-01-31' });
+  it('createSale: PERMISSION_DENIED when no sales:create', async () => {
+    const { createSale } = await import('../../services/sales/salesService');
+    const r = await createSale(noPermsCtx(), {} as Parameters<typeof createSale>[1]);
     expect(isDenied(r)).toBe(true);
   });
 
-  it('getDashboardKpis: succeeds when reports:view permitted', async () => {
-    const { getDashboardKpis } = await import('../../services/sales/salesWorkflowService');
-    const r = await getDashboardKpis(withPermsCtx(['reports']), { from_date: '2024-01-01', to_date: '2024-01-31' });
-    expect(hasData(r)).toBe(true);
-    expect(r.data!.revenue).toBe(100000);
+  it('cancelSale: PERMISSION_DENIED when no sales:edit', async () => {
+    const { cancelSale } = await import('../../services/sales/salesService');
+    const r = await cancelSale(noPermsCtx(), u('sale-001'));
+    expect(isDenied(r)).toBe(true);
   });
 
-  it('createAndPostSale: calls rpcPostCashSale for cash sale when authorized', async () => {
-    const { createAndPostSale } = await import('../../services/sales/salesWorkflowService');
-    const { rpcPostCashSale } = await import('../../lib/rpc');
-    await createAndPostSale(withPermsCtx(['sales']), u('branch-001'), { payment_method: 'cash', lines: [] });
-    expect(rpcPostCashSale).toHaveBeenCalled();
+  it('getSaleReceipt: PERMISSION_DENIED when no sales:view', async () => {
+    const { getSaleReceipt } = await import('../../services/sales/salesService');
+    const r = await getSaleReceipt(noPermsCtx(), u('sale-001'));
+    expect(isDenied(r)).toBe(true);
   });
 
-  it('createAndPostSale: calls rpcPostCreditSale for credit sale when authorized', async () => {
-    const { createAndPostSale } = await import('../../services/sales/salesWorkflowService');
-    const { rpcPostCreditSale } = await import('../../lib/rpc');
-    await createAndPostSale(withPermsCtx(['sales']), u('branch-001'), { payment_method: 'credit', lines: [] });
-    expect(rpcPostCreditSale).toHaveBeenCalled();
-  });
-
-  it('createAndPostSale: returns data on success', async () => {
-    const { createAndPostSale } = await import('../../services/sales/salesWorkflowService');
-    const r = await createAndPostSale(withPermsCtx(['sales']), u('branch-001'), { payment_method: 'cash', lines: [] });
-    expect(hasData(r)).toBe(true);
+  it('listSales: no error when sales:view granted (empty result from mock)', async () => {
+    const { listSales } = await import('../../services/sales/salesService');
+    const r = await listSales(withPerms(['sales']));
+    expect(isDenied(r)).toBe(false);
   });
 });
 
 // ============================================================
-// PURCHASING WORKFLOW SERVICE
+// PURCHASING SERVICE
 // ============================================================
 
-describe('purchasingWorkflowService - permissions', () => {
-  it('createPurchaseOrder: PERMISSION_DENIED when no purchasing:create', async () => {
-    const { createPurchaseOrder } = await import('../../services/purchasing/purchasingWorkflowService');
-    const r = await createPurchaseOrder(noPermsCtx(), u('branch-001'), { payment_method: 'cash', lines: [] });
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('receivePurchaseStock: PERMISSION_DENIED when no purchasing:edit', async () => {
-    const { receivePurchaseStock } = await import('../../services/purchasing/purchasingWorkflowService');
-    const r = await receivePurchaseStock(noPermsCtx(), u('branch-001'), u('po-001'));
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('paySupplier: PERMISSION_DENIED when no purchasing:edit', async () => {
-    const { paySupplier } = await import('../../services/purchasing/purchasingWorkflowService');
-    const r = await paySupplier(noPermsCtx(), u('branch-001'), u('po-001'), 1000, 'cash');
-    expect(isDenied(r)).toBe(true);
-  });
-
+describe('purchasingService - permission gates', () => {
   it('listPurchases: PERMISSION_DENIED when no purchasing:view', async () => {
-    const { listPurchases } = await import('../../services/purchasing/purchasingWorkflowService');
+    const { listPurchases } = await import('../../services/purchasing/purchasingService');
     const r = await listPurchases(noPermsCtx());
     expect(isDenied(r)).toBe(true);
   });
 
-  it('getPurchaseDetail: PERMISSION_DENIED when no purchasing:view', async () => {
-    const { getPurchaseDetail } = await import('../../services/purchasing/purchasingWorkflowService');
-    const r = await getPurchaseDetail(noPermsCtx(), u('po-001'));
+  it('getPurchase: PERMISSION_DENIED when no purchasing:view', async () => {
+    const { getPurchase } = await import('../../services/purchasing/purchasingService');
+    const r = await getPurchase(noPermsCtx(), u('po-001'));
     expect(isDenied(r)).toBe(true);
   });
 
-  it('receivePurchaseStock: calls rpcReceivePurchase when authorized', async () => {
-    const { receivePurchaseStock } = await import('../../services/purchasing/purchasingWorkflowService');
-    const { rpcReceivePurchase } = await import('../../lib/rpc');
-    const r = await receivePurchaseStock(withPermsCtx(['purchasing']), u('branch-001'), u('po-001'));
-    expect(rpcReceivePurchase).toHaveBeenCalled();
-    expect(hasData(r)).toBe(true);
+  it('createPurchase: PERMISSION_DENIED when no purchasing:create', async () => {
+    const { createPurchase } = await import('../../services/purchasing/purchasingService');
+    const r = await createPurchase(noPermsCtx(), {} as Parameters<typeof createPurchase>[1]);
+    expect(isDenied(r)).toBe(true);
   });
 
-  it('paySupplier: calls rpcPaySupplier when authorized', async () => {
-    const { paySupplier } = await import('../../services/purchasing/purchasingWorkflowService');
-    const { rpcPaySupplier } = await import('../../lib/rpc');
-    const r = await paySupplier(withPermsCtx(['purchasing']), u('branch-001'), u('po-001'), 1000, 'cash');
-    expect(rpcPaySupplier).toHaveBeenCalled();
-    expect(hasData(r)).toBe(true);
+  it('recordSupplierPayment: PERMISSION_DENIED when no purchasing:edit', async () => {
+    const { recordSupplierPayment } = await import('../../services/purchasing/purchasingService');
+    const r = await recordSupplierPayment(noPermsCtx(), {} as Parameters<typeof recordSupplierPayment>[1]);
+    expect(isDenied(r)).toBe(true);
   });
 
-  it('createPurchaseOrder: creates draft when authorized', async () => {
-    const { createPurchaseOrder } = await import('../../services/purchasing/purchasingWorkflowService');
-    const r = await createPurchaseOrder(withPermsCtx(['purchasing']), u('branch-001'), { payment_method: 'credit', lines: [] });
-    expect(hasData(r)).toBe(true);
+  it('listPurchases: no error when purchasing:view granted', async () => {
+    const { listPurchases } = await import('../../services/purchasing/purchasingService');
+    const r = await listPurchases(withPerms(['purchases']));
+    expect(isDenied(r)).toBe(false);
   });
 });
 
 // ============================================================
-// INVENTORY WORKFLOW SERVICE
+// INVENTORY SERVICE
 // ============================================================
 
-describe('inventoryWorkflowService - permissions', () => {
-  it('getStockLevel: PERMISSION_DENIED when no inventory:view', async () => {
-    const { getStockLevel } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await getStockLevel(noPermsCtx(), u('prod-001'), u('branch-001'));
+describe('inventoryService - permission gates', () => {
+  it('listInventory: PERMISSION_DENIED when no inventory:view', async () => {
+    const { listInventory } = await import('../../services/inventory/inventoryService');
+    const r = await listInventory(noPermsCtx());
     expect(isDenied(r)).toBe(true);
   });
 
-  it('listStockSummary: PERMISSION_DENIED when no inventory:view', async () => {
-    const { listStockSummary } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await listStockSummary(noPermsCtx());
+  it('getStock: PERMISSION_DENIED when no inventory:view', async () => {
+    const { getStock } = await import('../../services/inventory/inventoryService');
+    const r = await getStock(noPermsCtx(), u('prod-001'));
     expect(isDenied(r)).toBe(true);
   });
 
-  it('getLowStockAlerts: PERMISSION_DENIED when no inventory:view', async () => {
-    const { getLowStockAlerts } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await getLowStockAlerts(noPermsCtx());
+  it('createStockTransfer: PERMISSION_DENIED when no inventory:create', async () => {
+    const { createStockTransfer } = await import('../../services/inventory/inventoryService');
+    const r = await createStockTransfer(noPermsCtx(), {} as Parameters<typeof createStockTransfer>[1]);
     expect(isDenied(r)).toBe(true);
   });
 
-  it('transferStock: PERMISSION_DENIED when no inventory:edit', async () => {
-    const { transferStock } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await transferStock(noPermsCtx(), { from_branch_id: u('b1'), to_branch_id: u('b2'), product_id: u('p'), quantity: 5, unit_cost: 100 });
+  it('createStockAdjustment: PERMISSION_DENIED when no inventory:create', async () => {
+    const { createStockAdjustment } = await import('../../services/inventory/inventoryService');
+    const r = await createStockAdjustment(noPermsCtx(), {} as Parameters<typeof createStockAdjustment>[1]);
     expect(isDenied(r)).toBe(true);
   });
 
-  it('recordStockAdjustment: PERMISSION_DENIED when no inventory:edit', async () => {
-    const { recordStockAdjustment } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await recordStockAdjustment(noPermsCtx(), { branch_id: u('b'), product_id: u('p'), quantity: 5, unit_cost: 100, direction: 'in', reason: 'found' });
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getMovementHistory: PERMISSION_DENIED when no inventory:view', async () => {
-    const { getMovementHistory } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await getMovementHistory(noPermsCtx(), u('prod-001'));
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getStockLevel: succeeds when authorized', async () => {
-    const { getStockLevel } = await import('../../services/inventory/inventoryWorkflowService');
-    const r = await getStockLevel(withPermsCtx(['inventory']), u('prod-001'), u('branch-001'));
-    expect(hasData(r)).toBe(true);
-    expect(r.data!.quantity_on_hand).toBe(10);
-  });
-
-  it('transferStock: calls rpcTransferStock when authorized', async () => {
-    const { transferStock } = await import('../../services/inventory/inventoryWorkflowService');
-    const { rpcTransferStock } = await import('../../lib/rpc');
-    await transferStock(withPermsCtx(['inventory']), { from_branch_id: u('b1'), to_branch_id: u('b2'), product_id: u('p'), quantity: 5, unit_cost: 100 });
-    expect(rpcTransferStock).toHaveBeenCalled();
-  });
-
-  it('recordStockAdjustment: calls rpcAdjustStock when authorized', async () => {
-    const { recordStockAdjustment } = await import('../../services/inventory/inventoryWorkflowService');
-    const { rpcAdjustStock } = await import('../../lib/rpc');
-    const r = await recordStockAdjustment(withPermsCtx(['inventory']), { branch_id: u('b'), product_id: u('p'), quantity: 5, unit_cost: 100, direction: 'in', reason: 'test' });
-    expect(rpcAdjustStock).toHaveBeenCalled();
-    expect(hasData(r)).toBe(true);
+  it('listInventory: no error when inventory:view granted', async () => {
+    const { listInventory } = await import('../../services/inventory/inventoryService');
+    const r = await listInventory(withPerms(['inventory']));
+    expect(isDenied(r)).toBe(false);
   });
 });
 
 // ============================================================
-// CREDIT WORKFLOW SERVICE
+// CREDIT SERVICE
 // ============================================================
 
-describe('creditWorkflowService - permissions', () => {
-  it('listCreditAccounts: PERMISSION_DENIED when no credit:view', async () => {
-    const { listCreditAccounts } = await import('../../services/credit/creditWorkflowService');
-    const r = await listCreditAccounts(noPermsCtx());
+describe('creditService - permission gates', () => {
+  it('getOutstandingCredit: PERMISSION_DENIED when no credit:view', async () => {
+    const { getOutstandingCredit } = await import('../../services/credit/creditService');
+    const r = await getOutstandingCredit(noPermsCtx());
     expect(isDenied(r)).toBe(true);
   });
 
-  it('getCreditBalance: PERMISSION_DENIED when no credit:view', async () => {
-    const { getCreditBalance } = await import('../../services/credit/creditWorkflowService');
-    const r = await getCreditBalance(noPermsCtx(), u('ca-001'));
+  it('listInvoices: PERMISSION_DENIED when no credit:view', async () => {
+    const { listInvoices } = await import('../../services/credit/creditService');
+    const r = await listInvoices(noPermsCtx());
     expect(isDenied(r)).toBe(true);
   });
 
-  it('recordCreditRepayment: PERMISSION_DENIED when no credit:create', async () => {
-    const { recordCreditRepayment } = await import('../../services/credit/creditWorkflowService');
-    const r = await recordCreditRepayment(noPermsCtx(), u('br'), u('ca'), 500, 'cash');
+  it('listBills: PERMISSION_DENIED when no credit:view', async () => {
+    const { listBills } = await import('../../services/credit/creditService');
+    const r = await listBills(noPermsCtx());
     expect(isDenied(r)).toBe(true);
   });
 
-  it('updateCreditLimit: PERMISSION_DENIED for non-owner', async () => {
-    const { updateCreditLimit } = await import('../../services/credit/creditWorkflowService');
-    const r = await updateCreditLimit(noPermsCtx(), u('ca-001'), 10000);
+  it('recordCreditPayment: PERMISSION_DENIED when no credit:create', async () => {
+    const { recordCreditPayment } = await import('../../services/credit/creditService');
+    const r = await recordCreditPayment(noPermsCtx(), {} as Parameters<typeof recordCreditPayment>[1]);
     expect(isDenied(r)).toBe(true);
   });
 
-  it('updateCreditLimit: VALIDATION_ERROR for negative limit even for owner', async () => {
-    const { updateCreditLimit } = await import('../../services/credit/creditWorkflowService');
-    const r = await updateCreditLimit(ownerCtx(), u('ca-001'), -100);
-    expect(isValidationError(r)).toBe(true);
-  });
-
-  it('getCreditTransactionHistory: PERMISSION_DENIED when no credit:view', async () => {
-    const { getCreditTransactionHistory } = await import('../../services/credit/creditWorkflowService');
-    const r = await getCreditTransactionHistory(noPermsCtx(), u('ca-001'));
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('recordCreditRepayment: calls rpcRecordCreditPayment when authorized', async () => {
-    const { recordCreditRepayment } = await import('../../services/credit/creditWorkflowService');
-    const { rpcRecordCreditPayment } = await import('../../lib/rpc');
-    const r = await recordCreditRepayment(withPermsCtx(['credit']), u('br'), u('ca'), 500, 'cash');
-    expect(rpcRecordCreditPayment).toHaveBeenCalled();
-    expect(hasData(r)).toBe(true);
+  it('getOutstandingCredit: no error when credit:view granted', async () => {
+    const { getOutstandingCredit } = await import('../../services/credit/creditService');
+    const r = await getOutstandingCredit(withPerms(['credit']));
+    expect(isDenied(r)).toBe(false);
   });
 });
 
 // ============================================================
-// EXPENSES WORKFLOW SERVICE
+// MASTER DATA SERVICE
 // ============================================================
 
-describe('expensesWorkflowService - permissions', () => {
-  it('recordExpense: PERMISSION_DENIED when no expenses:create', async () => {
-    const { recordExpense } = await import('../../services/expenses/expensesWorkflowService');
-    const r = await recordExpense(noPermsCtx(), u('br'), { category: 'Rent', description: 'Office', amount: 500, payment_method: 'cash' });
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('listExpenses: PERMISSION_DENIED when no expenses:view', async () => {
-    const { listExpenses } = await import('../../services/expenses/expensesWorkflowService');
-    const r = await listExpenses(noPermsCtx());
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getExpenseSummaryByCategory: PERMISSION_DENIED when no expenses:view', async () => {
-    const { getExpenseSummaryByCategory } = await import('../../services/expenses/expensesWorkflowService');
-    const r = await getExpenseSummaryByCategory(noPermsCtx(), '2024-01-01', '2024-01-31');
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('listPayroll: PERMISSION_DENIED when no payroll:view', async () => {
-    const { listPayroll } = await import('../../services/expenses/expensesWorkflowService');
-    const r = await listPayroll(noPermsCtx());
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('recordExpense: calls rpcRecordExpense when authorized', async () => {
-    const { recordExpense } = await import('../../services/expenses/expensesWorkflowService');
-    const { rpcRecordExpense } = await import('../../lib/rpc');
-    const r = await recordExpense(withPermsCtx(['expenses']), u('br'), { category: 'Rent', description: 'Office', amount: 500, payment_method: 'cash' });
-    expect(rpcRecordExpense).toHaveBeenCalled();
-    expect(hasData(r)).toBe(true);
-  });
-});
-
-// ============================================================
-// REPORTING WORKFLOW SERVICE
-// ============================================================
-
-describe('reportingWorkflowService - permissions', () => {
-  it('getDashboardKpis: PERMISSION_DENIED when not owner and no reports:view', async () => {
-    const { getDashboardKpis } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getDashboardKpis(noPermsCtx(), { from_date: '2024-01-01', to_date: '2024-01-31' });
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getDashboardKpis: succeeds for owner, accounting values correct', async () => {
-    const { getDashboardKpis } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getDashboardKpis(ownerCtx(), { from_date: '2024-01-01', to_date: '2024-01-31' });
-    expect(hasData(r)).toBe(true);
-    expect(r.data!.revenue).toBe(100000);
-    expect(r.data!.gross_profit).toBe(40000);   // revenue - cogs = 100000 - 60000
-    expect(r.data!.net_profit).toBe(30000);     // gross_profit - expenses = 40000 - 10000
-    expect(r.data!.gross_profit).not.toBe(r.data!.revenue);  // revenue != gross_profit
-    expect(r.data!.net_profit).not.toBe(r.data!.cash_in_hand); // profit != cash
-  });
-
-  it('getLowStockAlerts: PERMISSION_DENIED when no inventory:view', async () => {
-    const { getLowStockAlerts } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getLowStockAlerts(noPermsCtx());
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getSalesSummary: PERMISSION_DENIED when not owner and no reports:view', async () => {
-    const { getSalesSummary } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getSalesSummary(noPermsCtx(), { from_date: '2024-01-01', to_date: '2024-01-31' });
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getCashFlow: PERMISSION_DENIED when not owner and no reports:view', async () => {
-    const { getCashFlow } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getCashFlow(noPermsCtx(), u('br'), '2024-01-01', '2024-01-31');
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getBranchOverview: PERMISSION_DENIED when not owner and no reports:view', async () => {
-    const { getBranchOverview } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getBranchOverview(noPermsCtx(), { from_date: '2024-01-01', to_date: '2024-01-31' });
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getDailySummary: PERMISSION_DENIED when not owner and no reports:view', async () => {
-    const { getDailySummary } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getDailySummary(noPermsCtx(), '2024-01-01', '2024-01-31');
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getDailySummary: succeeds for owner (empty result from mock)', async () => {
-    const { getDailySummary } = await import('../../services/reporting/reportingWorkflowService');
-    const r = await getDailySummary(ownerCtx(), '2024-01-01', '2024-01-31');
-    // data is an array (possibly empty) - not denied
-    expect(r.error?.code).not.toBe('PERMISSION_DENIED');
-  });
-});
-
-// ============================================================
-// AUDIT WORKFLOW SERVICE
-// ============================================================
-
-describe('auditWorkflowService - permissions', () => {
-  it('getAuditLog: PERMISSION_DENIED for non-owner', async () => {
-    const { getAuditLog } = await import('../../services/audit/auditWorkflowService');
-    const r = await getAuditLog(noPermsCtx());
-    expect(isDenied(r)).toBe(true);
-  });
-
-  it('getAuditLog: allowed for owner - error code is not PERMISSION_DENIED', async () => {
-    const { getAuditLog } = await import('../../services/audit/auditWorkflowService');
-    const r = await getAuditLog(ownerCtx());
-    expect(r.error?.code).not.toBe('PERMISSION_DENIED');
-  });
-});
-
-// ============================================================
-// MASTER DATA SERVICE - permission enforcement
-// ============================================================
-
-describe('masterDataService - permissions', () => {
+describe('masterDataService - permission gates', () => {
   it('listProducts: PERMISSION_DENIED when no inventory:view', async () => {
     const { listProducts } = await import('../../services/masterData/masterDataService');
     const r = await listProducts(noPermsCtx());
@@ -480,13 +247,13 @@ describe('masterDataService - permissions', () => {
 
   it('createProduct: PERMISSION_DENIED when no inventory:create', async () => {
     const { createProduct } = await import('../../services/masterData/masterDataService');
-    const r = await createProduct(noPermsCtx(), { name: 'Test' } as any);
+    const r = await createProduct(noPermsCtx(), {} as Parameters<typeof createProduct>[1]);
     expect(isDenied(r)).toBe(true);
   });
 
   it('updateProduct: PERMISSION_DENIED when no inventory:edit', async () => {
     const { updateProduct } = await import('../../services/masterData/masterDataService');
-    const r = await updateProduct(noPermsCtx(), u('prod-001'), { selling_price: 120 });
+    const r = await updateProduct(noPermsCtx(), u('prod-001'), {});
     expect(isDenied(r)).toBe(true);
   });
 
@@ -502,27 +269,234 @@ describe('masterDataService - permissions', () => {
     expect(isDenied(r)).toBe(true);
   });
 
+  it('listProducts: succeeds when inventory:view granted', async () => {
+    const { listProducts } = await import('../../services/masterData/masterDataService');
+    const r = await listProducts(withPerms(['inventory']));
+    expect(isDenied(r)).toBe(false);
+  });
+
+  it('listCustomers: succeeds when customers:view granted', async () => {
+    const { listCustomers } = await import('../../services/masterData/masterDataService');
+    const r = await listCustomers(withPerms(['customers']));
+    expect(isDenied(r)).toBe(false);
+  });
+});
+
+// ============================================================
+// REPORTING SERVICE
+// ============================================================
+
+describe('reportingService - permission gates', () => {
+  it('getDashboardKPIs: PERMISSION_DENIED when not owner and no reports:view', async () => {
+    const { getDashboardKPIs } = await import('../../services/reporting/reportingService');
+    const r = await getDashboardKPIs(noPermsCtx(), {} as Parameters<typeof getDashboardKPIs>[1]);
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getSalesByPeriod: PERMISSION_DENIED when no reports:view', async () => {
+    const { getSalesByPeriod } = await import('../../services/reporting/reportingService');
+    const r = await getSalesByPeriod(noPermsCtx(), {} as Parameters<typeof getSalesByPeriod>[1]);
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getExpenseBreakdown: PERMISSION_DENIED when no reports:view', async () => {
+    const { getExpenseBreakdown } = await import('../../services/reporting/reportingService');
+    const r = await getExpenseBreakdown(noPermsCtx(), {} as Parameters<typeof getExpenseBreakdown>[1]);
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getDashboardKPIs: no error when owner', async () => {
+    const { getDashboardKPIs } = await import('../../services/reporting/reportingService');
+    const r = await getDashboardKPIs(withPerms(['reports']), {} as Parameters<typeof getDashboardKPIs>[1]);
+    expect(isDenied(r)).toBe(false);
+  });
+});
+
+// ============================================================
+// FINANCIAL SERVICES - permission gates
+// (src/services/financial/financialServices.ts)
+// ============================================================
+
+describe('financialServices - permission gates', () => {
+  it('createExpense: PERMISSION_DENIED when no expenses:create', async () => {
+    const { createExpense } = await import('../../services/financial/financialServices');
+    const r = await createExpense(noPermsCtx(), {} as Parameters<typeof createExpense>[1]);
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('listExpenses: PERMISSION_DENIED when no expenses:view', async () => {
+    const { listExpenses } = await import('../../services/financial/financialServices');
+    const r = await listExpenses(noPermsCtx());
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getPayroll: PERMISSION_DENIED when no payroll:view', async () => {
+    const { getPayroll } = await import('../../services/financial/financialServices');
+    const r = await getPayroll(noPermsCtx(), u('period-001'));
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('listPayroll: PERMISSION_DENIED when no payroll:view', async () => {
+    const { listPayroll } = await import('../../services/financial/financialServices');
+    const r = await listPayroll(noPermsCtx());
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('approvePayroll: PERMISSION_DENIED when no payroll:approve', async () => {
+    const { approvePayroll } = await import('../../services/financial/financialServices');
+    const r = await approvePayroll(noPermsCtx(), u('period-001'));
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getCashBalance: PERMISSION_DENIED when no cash:view', async () => {
+    const { getCashBalance } = await import('../../services/financial/financialServices');
+    const r = await getCashBalance(noPermsCtx());
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('listCashTransactions: PERMISSION_DENIED when no cash:view', async () => {
+    const { listCashTransactions } = await import('../../services/financial/financialServices');
+    const r = await listCashTransactions(noPermsCtx());
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('listJournalEntries: PERMISSION_DENIED when no journal:view', async () => {
+    const { listJournalEntries } = await import('../../services/financial/financialServices');
+    const r = await listJournalEntries(noPermsCtx());
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getAccountBalance: PERMISSION_DENIED when no journal:view', async () => {
+    const { getAccountBalance } = await import('../../services/financial/financialServices');
+    const r = await getAccountBalance(noPermsCtx(), '1100');
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('listExpenses: no error when expenses:view granted', async () => {
+    const { listExpenses } = await import('../../services/financial/financialServices');
+    const r = await listExpenses(withPerms(['expenses']));
+    expect(isDenied(r)).toBe(false);
+  });
+
+  it('getCashBalance: no error when cash:view granted', async () => {
+    const { getCashBalance } = await import('../../services/financial/financialServices');
+    const r = await getCashBalance(withPerms(['cash']));
+    expect(isDenied(r)).toBe(false);
+  });
+});
+
+// ============================================================
+// SETTINGS SERVICE - basic function calls
+// (src/services/settings/settingsService.ts)
+// These functions hit Supabase directly (no canDo gate).
+// With the mock returning null data, they return ok(null) - testable.
+// ============================================================
+
+describe('settingsService - basic function calls', () => {
+  it('getSetting: returns ok result (null data from mock)', async () => {
+    const { getSetting } = await import('../../services/settings/settingsService');
+    const r = await getSetting(noPermsCtx(), 'general', 'currency');
+    // mock returns {data:null, error:null} -> ok(null)
+    expect(r).toBeDefined();
+    expect(r.error).toBeNull();
+  });
+
+  it('getSettingsByCategory: returns ok result', async () => {
+    const { getSettingsByCategory } = await import('../../services/settings/settingsService');
+    const r = await getSettingsByCategory(noPermsCtx(), 'general');
+    expect(r).toBeDefined();
+  });
+
+  it('getChartOfAccounts: returns ok result', async () => {
+    const { getChartOfAccounts } = await import('../../services/settings/settingsService');
+    const r = await getChartOfAccounts(noPermsCtx());
+    expect(r).toBeDefined();
+  });
+
+  it('getBusinessCurrency: returns a string', async () => {
+    const { getBusinessCurrency } = await import('../../services/settings/settingsService');
+    const result = await getBusinessCurrency(noPermsCtx());
+    expect(typeof result).toBe('string');
+  });
+
+  it('getVatRate: returns a number', async () => {
+    const { getVatRate } = await import('../../services/settings/settingsService');
+    const result = await getVatRate(noPermsCtx());
+    expect(typeof result).toBe('number');
+  });
+
+  it('allowNegativeStock: returns a boolean', async () => {
+    const { allowNegativeStock } = await import('../../services/settings/settingsService');
+    const result = await allowNegativeStock(noPermsCtx());
+    expect(typeof result).toBe('boolean');
+  });
+
+  it('getReceiptPrefix: returns a string', async () => {
+    const { getReceiptPrefix } = await import('../../services/settings/settingsService');
+    const result = await getReceiptPrefix(noPermsCtx());
+    expect(typeof result).toBe('string');
+  });
+});
+
+// ============================================================
+// MASTER DATA SERVICE - additional permission gates
+// ============================================================
+
+describe('masterDataService - additional permission gates', () => {
+  it('getProduct: returns a result (no permission gate on single-record lookup)', async () => {
+    const { getProduct } = await import('../../services/masterData/masterDataService');
+    const r = await getProduct(noPermsCtx(), u('prod-001'));
+    expect(r).toBeDefined();
+    expect(isDenied(r)).toBe(false); // no canDo gate on get-by-id
+  });
+
+  it('listSuppliers: PERMISSION_DENIED when no suppliers:view', async () => {
+    const { listSuppliers } = await import('../../services/masterData/masterDataService');
+    const r = await listSuppliers(noPermsCtx());
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('createSupplier: PERMISSION_DENIED when no suppliers:create', async () => {
+    const { createSupplier } = await import('../../services/masterData/masterDataService');
+    const r = await createSupplier(noPermsCtx(), {} as Parameters<typeof createSupplier>[1]);
+    expect(isDenied(r)).toBe(true);
+  });
+
+  it('getCustomer: returns a result (no permission gate on single-record lookup)', async () => {
+    const { getCustomer } = await import('../../services/masterData/masterDataService');
+    const r = await getCustomer(noPermsCtx(), u('cust-001'));
+    expect(r).toBeDefined();
+    expect(isDenied(r)).toBe(false);
+  });
+
   it('createCustomer: PERMISSION_DENIED when no customers:create', async () => {
     const { createCustomer } = await import('../../services/masterData/masterDataService');
-    const r = await createCustomer(noPermsCtx(), { name: 'Alice' } as any);
+    const r = await createCustomer(noPermsCtx(), {} as Parameters<typeof createCustomer>[1]);
     expect(isDenied(r)).toBe(true);
   });
 
   it('updateCustomer: PERMISSION_DENIED when no customers:edit', async () => {
     const { updateCustomer } = await import('../../services/masterData/masterDataService');
-    const r = await updateCustomer(noPermsCtx(), u('cust-001'), { name: 'Alice Updated' } as any);
+    const r = await updateCustomer(noPermsCtx(), u('cust-001'), {});
     expect(isDenied(r)).toBe(true);
   });
 
-  it('listProducts: succeeds when inventory:view granted (returns empty from mock)', async () => {
-    const { listProducts } = await import('../../services/masterData/masterDataService');
-    const r = await listProducts(withPermsCtx(['inventory']));
-    expect(r.error?.code).not.toBe('PERMISSION_DENIED');
+  it('getSupplier: returns a result (no permission gate on single-record lookup)', async () => {
+    const { getSupplier } = await import('../../services/masterData/masterDataService');
+    const r = await getSupplier(noPermsCtx(), u('sup-001'));
+    expect(r).toBeDefined();
+    expect(isDenied(r)).toBe(false);
   });
 
-  it('listCustomers: succeeds when customers:view granted (returns empty from mock)', async () => {
-    const { listCustomers } = await import('../../services/masterData/masterDataService');
-    const r = await listCustomers(withPermsCtx(['customers']));
-    expect(r.error?.code).not.toBe('PERMISSION_DENIED');
+  it('listCategories: returns result (no permission gate)', async () => {
+    const { listCategories } = await import('../../services/masterData/masterDataService');
+    const r = await listCategories(noPermsCtx());
+    expect(r).toBeDefined();
+  });
+
+  it('listUnits: returns result (no permission gate)', async () => {
+    const { listUnits } = await import('../../services/masterData/masterDataService');
+    const r = await listUnits(noPermsCtx());
+    expect(r).toBeDefined();
   });
 });

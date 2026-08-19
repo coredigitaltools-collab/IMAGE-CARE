@@ -11,9 +11,8 @@ import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Expense, PayrollRecord, CashTransaction, JournalEntry, UUID } from '../../types/database';
-import { createAndPostExpense, processPayroll, processCreditRepayment, type CreateExpenseInput } from '../business/businessEngine';
+import { createAndPostExpense, processPayroll, type CreateExpenseInput } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
-import { v4 as uuidv4 } from 'uuid';
 
 // ===========================================================
 // EXPENSE SERVICE
@@ -57,7 +56,7 @@ export async function listExpenses(
     const rows = (data ?? []) as Expense[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1] as any;
+    const last = items[items.length - 1] as Expense;
     return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.expense_date ?? null : null, next_cursor_id: hasMore ? last?.id ?? null : null } }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId }); }
 }
@@ -154,6 +153,7 @@ export async function getCashBalance(
       p_branch_id:   branchId,
     });
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return serviceOk(data as any, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId }); }
 }
@@ -238,6 +238,7 @@ export async function listAuditLogs(
   ctx: UserContext,
   filter: { table_name?: string; user_id?: UUID; date?: DateFilter } = {},
   pagination: PaginationRequest = {}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<ServiceResponse<PagedResponse<any>>> {
   const requestId = makeRequestId();
   if (!canDo(ctx, 'settings', 'view')) {
@@ -256,6 +257,7 @@ export async function listAuditLogs(
       p_limit:       pageSize + 1,
     });
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load audit logs.', { requestId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows = (data ?? []) as any[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;

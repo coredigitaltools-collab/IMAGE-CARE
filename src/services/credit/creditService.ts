@@ -5,15 +5,14 @@
 // ============================================================
 
 import { supabase, rpc } from '../../lib/supabase';
-import { canDo, parseError } from '../../types/app';
+import { canDo } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Customer, Invoice, Bill, UUID } from '../../types/database';
-import type { CreditAccount } from '../../types/schema';
+
 import { processCreditRepayment } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
-import { v4 as uuidv4 } from 'uuid';
 
 // ===========================================================
 // CREDIT SERVICE
@@ -46,7 +45,7 @@ export async function getCustomerCredit(
 export async function getOutstandingCredit(
   ctx: UserContext,
   branchId?: UUID
-): Promise<ServiceResponse<any[]>> {
+): Promise<ServiceResponse<unknown[]>> {
   const requestId = makeRequestId();
   if (!canDo(ctx, 'credit', 'view')) {
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view credit data.', { requestId });
@@ -57,7 +56,7 @@ export async function getOutstandingCredit(
       p_branch_id:   branchId ?? null,
     });
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load credit summary.', { requestId });
-    return serviceOk((data ?? []) as any[], requestId);
+    return serviceOk((data ?? []) as unknown[], requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load credit summary.', { requestId }); }
 }
 
@@ -142,7 +141,7 @@ export async function recordInvoicePayment(
     if (invoice.status === 'paid') return serviceFail('BUSINESS_RULE_VIOLATION', 'Invoice is already fully paid.', { requestId });
     if (input.amount > invoice.balance_due) return serviceFail('BUSINESS_RULE_VIOLATION', 'Payment exceeds outstanding balance.', { requestId });
 
-    const newPaid = invoice.balance_due - input.amount <= 0.01 ? 0 : invoice.balance_due - input.amount;
+    const _newPaid = invoice.balance_due - input.amount <= 0.01 ? 0 : invoice.balance_due - input.amount;
     const { error } = await supabase.schema('imagecare').from('invoices').update({ amount_paid: (invoice.balance_due) + input.amount - invoice.balance_due, balance_due: Math.max(0, invoice.balance_due - input.amount), updated_at: new Date().toISOString() }).eq('id', input.invoice_id);
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to record payment.', { requestId });
     return serviceOk(undefined, requestId);

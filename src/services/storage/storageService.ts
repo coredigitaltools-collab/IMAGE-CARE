@@ -13,7 +13,6 @@ import type { UserContext } from '../../types/app';
 import type { UUID } from '../../types/database';
 import type { FileObject } from '../../types/schema';
 import { env, APP_CONSTANTS } from '../../config/env';
-import { v4 as uuidv4 } from 'uuid';
 
 // ---- Upload File -------------------------------------------
 
@@ -105,7 +104,7 @@ export async function uploadFile(
       signed_url:   signedData?.signedUrl ?? '',
     }, requestId);
 
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'File upload failed.', { requestId });
   }
 }
@@ -132,13 +131,13 @@ export async function getSignedFileUrl(
       return serviceFail('RESOURCE_NOT_FOUND', 'File not found.', { requestId });
     }
 
-    if ((fileMeta as any).business_id !== ctx.business_id) {
+    if ((fileMeta as Record<string, unknown>).business_id !== ctx.business_id) {
       return serviceFail('PERMISSION_DENIED', 'You do not have access to this file.', { requestId });
     }
 
     const { data: signedData, error: signedError } = await supabase.storage
-      .from((fileMeta as any).bucket_name)
-      .createSignedUrl((fileMeta as any).storage_path, expiresSeconds);
+      .from((fileMeta as Record<string, unknown>).bucket_name as string)
+      .createSignedUrl((fileMeta as Record<string, unknown>).storage_path as string, expiresSeconds);
 
     if (signedError || !signedData?.signedUrl) {
       return serviceFail('INTERNAL_ERROR', 'Failed to generate file URL.', { requestId });
@@ -153,7 +152,7 @@ export async function getSignedFileUrl(
     });
 
     return serviceOk(signedData.signedUrl, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to get file URL.', { requestId });
   }
 }
@@ -175,7 +174,7 @@ export async function deleteFile(
 
     if (error) return serviceFail('BUSINESS_RULE_VIOLATION', error.message, { requestId });
     return serviceOk(undefined, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to delete file.', { requestId });
   }
 }
