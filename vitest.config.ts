@@ -16,98 +16,56 @@ export default defineConfig({
       exclude: [
         // Test files
         'src/__tests__/**',
-
-        // Entrypoint glue
+        // Entrypoint glue (mounts React app)
         'src/main.tsx',
         'src/App.tsx',
-
         // Router / app shell
         'src/app/**',
-
-        // React page components (require full React + router rendering)
-        'src/pages/**',
+        // React page components (require full rendering + router + context)
         'src/features/**',
-
-        // UI components (require React rendering + component context)
+        'src/pages/**',
+        // UI components (require React rendering)
         'src/components/**',
-
         // React context providers
         'src/context/**',
-
-        // React Query hooks and module hooks (require QueryClientProvider + component)
+        // React Query hooks / module hooks (require QueryClientProvider)
         'src/hooks/**',
-
-        // Offline-first / browser-only infrastructure.
-        // These depend on IndexedDB (idb library) or Web Crypto API and
-        // cannot be executed in a Node.js unit test environment.
-        'src/lib/localStore.ts',
-        'src/lib/offlineDb.ts',
-        'src/lib/encryption.ts',
-        'src/lib/supabaseClient.ts',
-
-        // Flat service layer (src/services/*.ts) - these are the Stage 1-3
-        // offline-first services. Every one either directly imports localStore
-        // or transitively depends on it (through salesService, accountingService
-        // etc.). They are browser-only and cannot be unit-tested in Node.js.
-        // The Stage 4 services live in subdirectories (services/sales/,
-        // services/purchasing/, etc.) and ARE covered by workflowServices.test.ts
-        'src/services/accountingService.ts',
-        'src/services/annualSummaryService.ts',
-        'src/services/backupSyncService.ts',
-        'src/services/bankReconciliationService.ts',
-        'src/services/billsService.ts',
-        'src/services/branchOverviewService.ts',
-        'src/services/branchService.ts',
-        'src/services/brandService.ts',
-        'src/services/businessProfileService.ts',
-        'src/services/categoryService.ts',
-        'src/services/configSettingsService.ts',
-        'src/services/creditService.ts',
-        'src/services/customerService.ts',
-        'src/services/dailySummaryService.ts',
-        'src/services/dashboardService.ts',
-        'src/services/expenseService.ts',
-        'src/services/index.ts',
-        'src/services/inventoryDashboardService.ts',
-        'src/services/inventoryReportsService.ts',
-        'src/services/invoiceService.ts',
-        'src/services/loyaltyService.ts',
-        'src/services/monthlySummaryService.ts',
-        'src/services/offlineModeService.ts',
-        'src/services/payrollService.ts',
-        'src/services/permissionsService.ts',
-        'src/services/productService.ts',
-        'src/services/purchasingService.ts',
-        'src/services/roleService.ts',
-        'src/services/salesService.ts',
-        'src/services/salesTargetsService.ts',
-        'src/services/staffService.ts',
-        'src/services/stockService.ts',
-        'src/services/stockSummaryService.ts',
-        'src/services/supplierService.ts',
-        'src/services/taxSettingsService.ts',
-        'src/services/unitService.ts',
-
-        // Singleton clients (no executable logic, just client initialization)
+        // Supabase client singletons
         'src/lib/supabase.ts',
+        'src/lib/supabaseClient.ts',
+        // React Query client config
         'src/lib/queryClient.ts',
-
+        // Offline / IndexedDB infrastructure (browser-only, not unit-testable in Node)
+        'src/lib/offlineDb.ts',
+        'src/lib/localStore.ts',
+        'src/lib/encryption.ts',
+        // Flat (root-level) service files: the Stage 1-3 offline-first service layer.
+        // All depend on lib/localStore (IndexedDB) which is browser-only.
+        // Stage 4 services live in subdirectories (src/services/sales/, etc.)
+        // and ARE measured via the subdirectory pattern below.
+        'src/services/*.ts',
         // Re-export barrel files (no logic)
         'src/engines/index.ts',
-
-        // Pure TypeScript type-only files (no executable code)
+        // Seed / mock data files (dev tooling, not production runtime)
+        'src/data/**',
+        // Pure TypeScript type-only files (interfaces, enums - no executable code)
         'src/types/database.ts',
         'src/types/schema.ts',
         'src/types/contracts.ts',
-        'src/vite-env.d.ts',
-
-        // Vite environment config (reads import.meta.env at module load time)
+        'src/types/accounting.ts',
+        'src/types/bankReconciliation.ts',
+        'src/types/domain.ts',
+        'src/types/expenses.ts',
+        'src/types/inventory.ts',
+        'src/types/invoices.ts',
+        'src/types/loyalty.ts',
+        'src/types/payroll.ts',
+        'src/types/purchasing.ts',
+        'src/types/sales.ts',
+        'src/types/salesTargets.ts',
+        // Vite environment config (reads import.meta.env, not unit-testable)
         'src/config/env.ts',
-
-        // Seed / mock data (dev tooling only)
-        'src/data/**',
-
-        // Static assets and styles
+        // CSS / assets
         'src/styles/**',
         'src/assets/**',
         'src/index.css',
