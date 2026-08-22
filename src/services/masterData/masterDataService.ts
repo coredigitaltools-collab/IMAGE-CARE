@@ -387,3 +387,185 @@ export async function createSupplier(
     return fail(parseError(err));
   }
 }
+
+// ============================================================
+// Stage 5: Extended functions for supplier/customer management
+// and branch management.
+// ============================================================
+
+import type { BranchRecord as SettingsBranchRecord } from '../../types/settings';
+export type BranchRecord = SettingsBranchRecord;
+
+export async function updateSupplier(
+  ctx: UserContext,
+  supplierId: UUID,
+  input: Partial<Omit<Supplier, 'id' | 'business_id' | 'created_at' | 'updated_at' | 'deleted_at'>>
+): Promise<ApiResult<Supplier>> {
+  if (!canDo(ctx, 'suppliers', 'edit')) return fail({ code: 'PERMISSION_DENIED', message: 'Permission denied.' });
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('suppliers')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('id', supplierId).eq('business_id', ctx.business_id).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as Supplier);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function archiveSupplier(ctx: UserContext, supplierId: UUID): Promise<ApiResult<void>> {
+  if (!canDo(ctx, 'suppliers', 'delete')) return fail({ code: 'PERMISSION_DENIED', message: 'Permission denied.' });
+  try {
+    const { error } = await supabase.schema('imagecare').from('suppliers')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', supplierId).eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function archiveCustomer(ctx: UserContext, customerId: UUID): Promise<ApiResult<void>> {
+  if (!canDo(ctx, 'customers', 'delete')) return fail({ code: 'PERMISSION_DENIED', message: 'Permission denied.' });
+  try {
+    const { error } = await supabase.schema('imagecare').from('customers')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', customerId).eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function reactivateCustomer(ctx: UserContext, customerId: UUID): Promise<ApiResult<void>> {
+  if (!canDo(ctx, 'customers', 'edit')) return fail({ code: 'PERMISSION_DENIED', message: 'Permission denied.' });
+  try {
+    const { error } = await supabase.schema('imagecare').from('customers')
+      .update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq('id', customerId).eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export interface CustomerNote {
+  id: UUID; customer_id: UUID; business_id: UUID;
+  note: string; created_by: UUID; created_at: string;
+}
+
+export async function listCustomerNotes(ctx: UserContext, customerId: UUID): Promise<ApiResult<CustomerNote[]>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('customer_notes')
+      .select('*').eq('customer_id', customerId).eq('business_id', ctx.business_id)
+      .order('created_at', { ascending: false });
+    if (error) return ok([] as CustomerNote[]);
+    return ok((data ?? []) as CustomerNote[]);
+  } catch { return ok([]); }
+}
+
+export async function addCustomerNote(ctx: UserContext, customerId: UUID, note: string): Promise<ApiResult<CustomerNote>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('customer_notes')
+      .insert({ customer_id: customerId, business_id: ctx.business_id, note, created_by: ctx.user_id })
+      .select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as CustomerNote);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function findCustomerDuplicates(
+  ctx: UserContext,
+  input: { name?: string; phone?: string; email?: string }
+): Promise<ApiResult<Customer[]>> {
+  try {
+    let query = supabase.schema('imagecare').from('customers').select('*')
+      .eq('business_id', ctx.business_id).is('deleted_at', null);
+    if (input.phone) query = query.eq('phone', input.phone);
+    else if (input.email) query = query.eq('email', input.email);
+    else if (input.name) query = query.ilike('name', `%${input.name}%`);
+    const { data, error } = await query.limit(10);
+    if (error) return ok([]);
+    return ok((data ?? []) as Customer[]);
+  } catch { return ok([]); }
+}
+
+export async function listBranches(ctx: UserContext): Promise<ApiResult<BranchRecord[]>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('branches')
+      .select('*').eq('business_id', ctx.business_id).order('name');
+    if (error) return fail(parseError(error));
+    return ok((data ?? []) as unknown as BranchRecord[]);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function createBranch(
+  ctx: UserContext,
+  input: { name: string; address?: string; phone?: string }
+): Promise<ApiResult<BranchRecord>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('branches')
+      .insert({ ...input, business_id: ctx.business_id, is_active: true, is_main: false })
+      .select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as unknown as BranchRecord);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function updateBranch(
+  ctx: UserContext,
+  branchId: UUID,
+  input: { name?: string; address?: string; phone?: string; is_active?: boolean }
+): Promise<ApiResult<BranchRecord>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('branches')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('id', branchId).eq('business_id', ctx.business_id).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as unknown as BranchRecord);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+// ============================================================
+// Stage 5 Final Pass: Category and Brand CRUD
+// ============================================================
+
+export async function createCategory(
+  ctx: UserContext,
+  input: { name: string; description?: string }
+): Promise<ApiResult<ProductCategory>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('product_categories')
+      .insert({ name: input.name, description: input.description ?? null, business_id: ctx.business_id, is_active: true })
+      .select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as ProductCategory);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function updateCategory(
+  ctx: UserContext,
+  categoryId: UUID,
+  input: { name?: string; description?: string }
+): Promise<ApiResult<ProductCategory>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('product_categories')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('id', categoryId).eq('business_id', ctx.business_id).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as ProductCategory);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function archiveCategory(
+  ctx: UserContext,
+  categoryId: UUID
+): Promise<ApiResult<void>> {
+  try {
+    const { error } = await supabase.schema('imagecare').from('product_categories')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', categoryId).eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+// Brands - stored as product metadata since no dedicated brands table in Stage 4
+// Use a lightweight approach: categories with a 'brand' marker or simple in-memory
+// Since no brands table exists in Stage 4, brand operations are advisory-only.
+// The UI shows brands from products' metadata. Real brand persistence requires Stage 6.

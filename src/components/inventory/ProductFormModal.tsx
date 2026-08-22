@@ -155,20 +155,9 @@ export function ProductFormModal({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="pf-unit" className="mb-1.5 block text-sm font-medium text-ink-700">Unit</label>
-            <select
-              id="pf-unit"
-              {...register('unitId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-            >
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.abbreviation})
-                </option>
-              ))}
-            </select>
-            {errors.unitId && <p className="mt-1 text-xs text-brand-red-700">{errors.unitId.message}</p>}
+          <div style={{ display: 'none' }}>
+            {/* Unit locked to Piece for Stage 5 */}
+            <input type="hidden" {...register('unitId')} value={units[0]?.id ?? 'piece'} />
           </div>
           <div>
             <label htmlFor="pf-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">Supplier</label>

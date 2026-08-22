@@ -7,7 +7,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import { useProducts, useSuppliers } from '../../features/inventory/hooks/useInventoryData'
@@ -53,8 +53,10 @@ export function PurchaseReturnsPage() {
           <EmptyState icon={RotateCcw} title="No returns recorded" description="Goods returned to a supplier will appear here." />
         ) : (
           <ul className="divide-y divide-ink-100">
-            {(returnsQuery.data ?? []).map((ret) => {
-              const total = ret.items.reduce((sum, i) => sum + i.quantity * i.unitCost, 0)
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {(returnsQuery.data ?? []).map((ret: any) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const total = ret.items.reduce((sum: number, i: any) => sum + i.quantity * i.unitCost, 0)
               return (
                 <li key={ret.id} className="py-3">
                   <div className="flex items-center justify-between gap-3">

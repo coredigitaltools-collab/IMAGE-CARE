@@ -7,7 +7,7 @@
 //          Uses the shared DB-003/DB-006 reporting engine.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { ok, fail, parseError } from '../../types/app';
 import type { ApiResult, UserContext, DateRange } from '../../types/app';
 import type { UUID, DashboardKPIs, StockSummaryRow } from '../../types/database';
@@ -29,7 +29,7 @@ export async function getDashboardKPIs(
     const from = dateRange?.from ?? new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const to   = dateRange?.to   ?? now.toISOString();
 
-    const { data, error } = await supabase.rpc('fn_get_dashboard_kpis', {
+    const { data, error } = await rpc('fn_get_dashboard_kpis', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
       p_from_date:   from,
@@ -70,7 +70,7 @@ export async function getSalesByPeriod(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_sales_by_period', {
+    const { data, error } = await rpc('fn_get_sales_by_period', {
       p_business_id: ctx.business_id,
       p_from_date:   input.from_date,
       p_to_date:     input.to_date,
@@ -113,7 +113,7 @@ export async function getTopProducts(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_top_products', {
+    const { data, error } = await rpc('fn_get_top_products', {
       p_business_id: ctx.business_id,
       p_from_date:   input.from_date,
       p_to_date:     input.to_date,
@@ -174,7 +174,7 @@ export async function getCashPosition(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_cash_position', {
+    const { data, error } = await rpc('fn_get_cash_position', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
     });
@@ -206,7 +206,7 @@ export async function getOutstandingCredit(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_outstanding_credit_summary', {
+    const { data, error } = await rpc('fn_get_outstanding_credit_summary', {
       p_business_id: ctx.business_id,
       p_branch_id:   branchId ?? null,
     });
@@ -236,7 +236,7 @@ export async function getExpenseBreakdown(
   }
 
   try {
-    const { data, error } = await supabase.rpc('fn_get_expense_breakdown', {
+    const { data, error } = await rpc('fn_get_expense_breakdown', {
       p_business_id: ctx.business_id,
       p_from_date:   input.from_date,
       p_to_date:     input.to_date,
@@ -248,4 +248,81 @@ export async function getExpenseBreakdown(
   } catch (err) {
     return fail(parseError(err));
   }
+}
+
+// ============================================================
+// Stage 5: Low stock alerts and recent sales for dashboard.
+// ============================================================
+
+import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
+import type { ServiceResponse } from '../../types/contracts';
+
+export async function getLowStockAlerts(
+  ctx: UserContext,
+  branchId?: UUID
+): Promise<ServiceResponse<Array<{ product_id: UUID; product_name: string; quantity_on_hand: number; reorder_level: number }>>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'inventory', 'view')) return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('vw_stock_summary')
+      .select('product_id, product_name, quantity_on_hand, reorder_level, branch_id')
+      .eq('business_id', ctx.business_id);
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let rows = (data ?? []) as any[];
+    rows = rows.filter(r => (r.quantity_on_hand ?? 0) <= (r.reorder_level ?? 0));
+    if (branchId) rows = rows.filter(r => r.branch_id === branchId);
+    return serviceOk(rows, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId }); }
+}
+
+export async function getRecentSales(
+  ctx: UserContext,
+  branchId?: UUID,
+  limit = 10
+): Promise<ServiceResponse<Array<Record<string, unknown>>>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'sales', 'view')) return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
+  try {
+    let q = supabase.schema('imagecare').from('sales')
+      .select('id, sale_number, total_amount, payment_method, status, created_at, customer_id, branch_id')
+      .eq('business_id', ctx.business_id).eq('status', 'confirmed').is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(limit);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q;
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId });
+    return serviceOk((data ?? []) as Record<string, unknown>[], requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId }); }
+}
+
+// ============================================================
+// Stage 5 Final: COGS and Revenue from journal_lines for correct P&L
+// ============================================================
+
+export async function getPLSummary(
+  ctx: UserContext,
+  branchId?: UUID
+): Promise<ServiceResponse<{ revenue: number; cogs: number; expenses: number; grossProfit: number; netProfit: number }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'journal', 'view')) return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
+  try {
+    // Query journal_lines directly to get actual P&L figures
+    // Revenue = sum of credit_amount on account 4000
+    // COGS    = sum of debit_amount on account 5000
+    // Expenses= sum of debit_amount on account 6000
+    let q = supabase.schema('imagecare').from('journal_lines')
+      .select('account_code, debit_amount, credit_amount, branch_id')
+      .eq('business_id', ctx.business_id)
+      .in('account_code', ['4000', '5000', '6000']);
+    if (branchId) q = q.eq('branch_id', branchId);
+    const { data, error } = await q;
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load P&L data.', { requestId });
+    const rows = (data ?? []) as Array<{ account_code: string; debit_amount: number; credit_amount: number }>;
+    const revenue  = rows.filter(r => r.account_code === '4000').reduce((s, r) => s + (r.credit_amount ?? 0), 0);
+    const cogs     = rows.filter(r => r.account_code === '5000').reduce((s, r) => s + (r.debit_amount  ?? 0), 0);
+    const expenses = rows.filter(r => r.account_code === '6000').reduce((s, r) => s + (r.debit_amount  ?? 0), 0);
+    const grossProfit = revenue - cogs;
+    const netProfit   = grossProfit - expenses;
+    return serviceOk({ revenue, cogs, expenses, grossProfit, netProfit }, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load P&L data.', { requestId }); }
 }

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { useBrands, useCategories, useProducts, useSuppliers, useUnits } from '../../features/inventory/hooks/useInventoryData'
+import { useBrands, useCategories, useProducts, useSuppliers } from '../../features/inventory/hooks/useInventoryData'
 
 export function InventoryTabs() {
   const location = useLocation()
@@ -7,7 +7,6 @@ export function InventoryTabs() {
   const productsQuery = useProducts()
   const categoriesQuery = useCategories()
   const brandsQuery = useBrands()
-  const unitsQuery = useUnits()
   const suppliersQuery = useSuppliers()
 
   // Counts mirror what each destination page shows by default: active
@@ -18,7 +17,6 @@ export function InventoryTabs() {
     '/inventory/products': productsQuery.data?.filter((p) => p.status === 'active').length,
     '/inventory/categories': categoriesQuery.data?.filter((c) => c.is_active).length,
     '/inventory/brands': brandsQuery.data?.filter((b) => b.is_active).length,
-    '/inventory/units': unitsQuery.data?.filter((u) => u.is_active).length,
     '/inventory/suppliers': suppliersQuery.data?.length,
   }
 
@@ -27,7 +25,6 @@ export function InventoryTabs() {
     { to: '/inventory/products', label: 'Products' },
     { to: '/inventory/categories', label: 'Categories' },
     { to: '/inventory/brands', label: 'Brands' },
-    { to: '/inventory/units', label: 'Units' },
     { to: '/inventory/suppliers', label: 'Suppliers' },
     { to: '/inventory/movements', label: 'Stock Movements' },
     { to: '/inventory/adjustments', label: 'Adjustments' },

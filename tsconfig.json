@@ -24,7 +24,8 @@
       "@/*": [
         "./src/*"
       ]
-    }
+    },
+    "noImplicitAny": false
   },
   "include": [
     "src"

@@ -7,12 +7,11 @@
 //          This mirrors the DB-003 Business Engine on the server.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { ok, fail, parseError } from '../../types/app';
 import type { ApiResult, UserContext } from '../../types/app';
-import type { UUID, Sale, SaleItem, Purchase, PurchaseItem, Expense } from '../../types/database';
+import type { UUID, Sale, Purchase, Expense } from '../../types/database';
 import { canDo } from '../../types/app';
-import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
 
 // ---- Sale --------------------------------------------------
@@ -111,7 +110,7 @@ export async function createAndPostSale(
     if (itemsError) return fail(parseError(itemsError));
 
     // 4. Post through DB-003 Business Engine (atomic: stock + journal + cash)
-    const { error: postError } = await supabase.rpc('engine_post_sale', {
+    const { error: postError } = await rpc('engine_post_sale', {
       p_sale_id:         saleId,
       p_user_id:         ctx.user_id,
       p_idempotency_key: idempotencyKey,
@@ -225,7 +224,7 @@ export async function createAndPostPurchase(
 
     if (itemsError) return fail(parseError(itemsError));
 
-    const { error: postError } = await supabase.rpc('engine_post_purchase', {
+    const { error: postError } = await rpc('engine_post_purchase', {
       p_purchase_id:     purchaseId,
       p_user_id:         ctx.user_id,
       p_idempotency_key: idempotencyKey,
@@ -296,7 +295,7 @@ export async function createAndPostExpense(
 
     if (insertError) return fail(parseError(insertError));
 
-    const { error: postError } = await supabase.rpc('engine_post_expense', {
+    const { error: postError } = await rpc('engine_post_expense', {
       p_expense_id:      expenseId,
       p_user_id:         ctx.user_id,
       p_idempotency_key: idempotencyKey,
@@ -335,7 +334,7 @@ export async function processCreditRepayment(
   }
 
   try {
-    const { error } = await supabase.rpc('engine_process_credit_repayment', {
+    const { error } = await rpc('engine_process_credit_repayment', {
       p_business_id:     ctx.business_id,
       p_branch_id:       input.branch_id,
       p_customer_id:     input.customer_id,
@@ -364,7 +363,7 @@ export async function processPayroll(
   }
 
   try {
-    const { error } = await supabase.rpc('engine_process_payroll', {
+    const { error } = await rpc('engine_process_payroll', {
       p_payroll_id:      payrollId,
       p_user_id:         ctx.user_id,
       p_idempotency_key: uuidv4(),

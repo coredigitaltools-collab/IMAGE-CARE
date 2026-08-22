@@ -6,9 +6,9 @@
 //          Pages must never post sales directly to Supabase tables.
 // ============================================================
 
-import { supabase } from '../../lib/supabase';
+import { supabase, rpc } from '../../lib/supabase';
 import { parseError, canDo } from '../../types/app';
-import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
+import { mapErrorCode, serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Sale, SaleItem, PaymentMethod, UUID } from '../../types/database';
@@ -43,15 +43,11 @@ export async function createSale(
   const result = await createAndPostSale(ctx, {
     ...request,
     idempotency_key: request.idempotency_key ?? uuidv4(),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
   if (result.error) {
-    const { code, message } = result.error;
-    const svcCode = code === 'INSUFFICIENT_STOCK' ? 'BUSINESS_RULE_VIOLATION'
-                  : code === 'PERMISSION_DENIED'  ? 'PERMISSION_DENIED'
-                  : code === 'DUPLICATE_TRANSACTION' ? 'DUPLICATE_OPERATION'
-                  : 'INTERNAL_ERROR';
-    return serviceFail(svcCode, message, { requestId });
+    return serviceFail(mapErrorCode(result.error.code), result.error.message, { requestId });
   }
 
   const { data } = await supabase
@@ -107,6 +103,7 @@ export async function getSale(
       return serviceFail('RESOURCE_NOT_FOUND', 'Sale not found.', { requestId });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sale = data as any;
     return serviceOk<SaleDetail>({
       ...sale,
@@ -147,7 +144,7 @@ export async function listSales(
       APP_CONSTANTS.MAX_PAGE_SIZE
     );
 
-    const { data, error } = await supabase.rpc('fn_list_sales_cursor', {
+    const { data, error } = await rpc('fn_list_sales_cursor', {
       p_business_id:  ctx.business_id,
       p_branch_id:    filter.branch_id   ?? null,
       p_status:       filter.status      ?? null,
@@ -164,6 +161,7 @@ export async function listSales(
     const rows = (data ?? []) as Sale[];
     const hasMore = rows.length > pageSize;
     const items = hasMore ? rows.slice(0, pageSize) : rows;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const last = items[items.length - 1] as any;
 
     return serviceOk<PagedResponse<Sale>>({
@@ -176,7 +174,7 @@ export async function listSales(
         next_cursor_id:   hasMore ? last?.next_cursor_id   ?? null : null,
       },
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load sales.', { requestId });
   }
 }
@@ -221,7 +219,7 @@ export async function cancelSale(
         .select('product_id, quantity')
         .eq('sale_id', saleId);
 
-      const { error } = await supabase.rpc('engine_return_sale', {
+      const { error } = await rpc('engine_return_sale', {
         p_sale_id:  saleId,
         p_user_id:  ctx.user_id,
         p_reason:   reason,
@@ -243,7 +241,7 @@ export async function cancelSale(
     }
 
     return serviceOk(undefined, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to cancel sale.', { requestId });
   }
 }
@@ -308,6 +306,7 @@ export async function getSaleReceipt(
       return serviceFail('RESOURCE_NOT_FOUND', 'Sale not found.', { requestId });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = data as any;
     return serviceOk<SaleReceipt>({
       sale_number:     s.sale_number,
@@ -316,6 +315,7 @@ export async function getSaleReceipt(
       branch_name:     s.branches?.name ?? '',
       customer_name:   s.customers?.name ?? null,
       served_by:       s.users ? `${s.users.first_name} ${s.users.last_name}` : null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       items:           (s.sale_items ?? []).map((si: any) => ({
         product_name:   si.products?.name ?? '',
         quantity:       si.quantity,
@@ -331,7 +331,7 @@ export async function getSaleReceipt(
       change_given:    s.change_given,
       payment_method:  s.payment_method,
     }, requestId);
-  } catch (err) {
+  } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load receipt.', { requestId });
   }
 }

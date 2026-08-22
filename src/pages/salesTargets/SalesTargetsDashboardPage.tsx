@@ -7,7 +7,7 @@ import { CreateTargetModal } from '../../components/salesTargets/CreateTargetMod
 import { KpiCard } from '../../components/dashboard/KpiCard'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useBranches, useStaff } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'

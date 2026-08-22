@@ -3,7 +3,7 @@ import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useAppearanceSettings, useSaveAppearanceSettings } from '../../features/settings/hooks/useSettingsData'
 import type { AppearanceSettings } from '../../types/settings'

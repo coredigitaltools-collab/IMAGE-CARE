@@ -167,3 +167,81 @@ export async function getReceiptPrefix(ctx: UserContext): Promise<string> {
   if (typeof val === 'string') return val.replace(/"/g, '');
   return 'RCP';
 }
+
+// ============================================================
+// Stage 5: Business profile, staff, expense categories.
+// ============================================================
+
+import type { StaffMember as SettingsStaffMember } from '../../types/settings';
+export type { StaffMember } from '../../types/settings';
+
+export interface BusinessProfile {
+  id: UUID; business_id: UUID; name: string; phone: string | null;
+  email: string | null; address: string | null; currency: string;
+  logo_url: string | null; tax_id: string | null; receipt_footer: string | null;
+}
+
+export async function getBusinessProfile(ctx: UserContext): Promise<ApiResult<BusinessProfile>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('businesses')
+      .select('*').eq('id', ctx.business_id).single();
+    if (error) return fail(parseError(error));
+    return ok(data as unknown as BusinessProfile);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function saveBusinessProfile(
+  ctx: UserContext,
+  input: Partial<Omit<BusinessProfile, 'id' | 'business_id'>>
+): Promise<ApiResult<BusinessProfile>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('businesses')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('id', ctx.business_id).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as unknown as BusinessProfile);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function listStaff(ctx: UserContext): Promise<ApiResult<SettingsStaffMember[]>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('users')
+      .select('*').eq('business_id', ctx.business_id).is('deleted_at', null).order('first_name');
+    if (error) return fail(parseError(error));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapped: SettingsStaffMember[] = ((data ?? []) as any[]).map((u: any) => ({
+      ...u,
+      fullName:       `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim(),
+      username:       u.email?.split('@')[0] ?? u.id,
+      branchIds:      [] as string[],
+      updated_at:     u.updated_at ?? new Date().toISOString(),
+      created_by:     u.created_by ?? '',
+      updated_by:     u.updated_by ?? '',
+      sync_status:    'synced' as const,
+      last_synced_at: null,
+    }));
+    return ok(mapped);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export interface ExpenseCategory {
+  id: UUID; business_id: UUID; name: string; is_active: boolean; created_at: string;
+}
+
+export async function listExpenseCategories(ctx: UserContext): Promise<ApiResult<ExpenseCategory[]>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('expense_categories')
+      .select('*').eq('business_id', ctx.business_id).eq('is_active', true).order('name');
+    if (error) return ok([]);
+    return ok((data ?? []) as ExpenseCategory[]);
+  } catch { return ok([]); }
+}
+
+export async function createExpenseCategory(ctx: UserContext, name: string): Promise<ApiResult<ExpenseCategory>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('expense_categories')
+      .insert({ name, business_id: ctx.business_id, is_active: true }).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as ExpenseCategory);
+  } catch (err) { return fail(parseError(err)); }
+}
