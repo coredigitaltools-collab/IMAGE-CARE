@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Bills',       path: '/bills',      icon: '📋', module: 'bills' },
   { label: 'Expenses',    path: '/expenses',   icon: '💸', module: 'expenses' },
   { label: 'Payroll',     path: '/payroll',    icon: '💰', module: 'payroll' },
+  { label: 'Cash Flow',   path: '/cash-flow',  icon: '🏦', module: 'cash' },
   { label: 'Reports',     path: '/reports',    icon: '📊', module: 'reports' },
   { label: 'Settings',    path: '/settings',   icon: '⚙',  module: 'settings' },
 ];
