@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  // GitHub Pages serves this repo as a project site under /IMAGE-CARE/,
+  // not at the domain root. Without an explicit base, Vite emits
+  // root-relative asset paths (/assets/...) which 404/503 in production
+  // even though `vite preview`/`vite dev` work fine locally.
+  base: '/IMAGE-CARE/',
   plugins: [react()],
   resolve: {
     alias: {
