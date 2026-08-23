@@ -136,6 +136,84 @@ const AboutPage                  = lazy(() => import('../pages/settings/AboutPag
 // state, not separate routes, so no sub-routing is needed here)
 const ReportsPage = lazy(() => import('../pages/reports/ReportsPage').then(m => ({ default: m.ReportsPage })));
 
+// ---- Restored modules (see Module-Inventory-Forensic-Report.md) --
+// These 10 modules' pages, sub-nav (*Tabs.tsx), and (for most) real
+// backend hooks already existed in source - they were just never
+// wired into this router after the pre-backend history reset. Route
+// paths below are taken from each module's own Tabs component
+// (already-hardcoded internal navigation), which also match the old
+// 06972ff router.
+
+// Loyalty
+const LoyaltyDashboardPage   = lazy(() => import('../pages/loyalty/LoyaltyDashboardPage').then(m => ({ default: m.LoyaltyDashboardPage })));
+const LoyaltyRewardsPage     = lazy(() => import('../pages/loyalty/LoyaltyRewardsPage').then(m => ({ default: m.LoyaltyRewardsPage })));
+const LoyaltyRedemptionsPage = lazy(() => import('../pages/loyalty/LoyaltyRedemptionsPage').then(m => ({ default: m.LoyaltyRedemptionsPage })));
+const LoyaltyReportsPage     = lazy(() => import('../pages/loyalty/LoyaltyReportsPage').then(m => ({ default: m.LoyaltyReportsPage })));
+const LoyaltySettingsPage    = lazy(() => import('../pages/loyalty/LoyaltySettingsPage').then(m => ({ default: m.LoyaltySettingsPage })));
+
+// Sales Targets
+const SalesTargetsDashboardPage = lazy(() => import('../pages/salesTargets/SalesTargetsDashboardPage').then(m => ({ default: m.SalesTargetsDashboardPage })));
+const TargetsListPage           = lazy(() => import('../pages/salesTargets/TargetsListPage').then(m => ({ default: m.TargetsListPage })));
+const LeaderboardPage           = lazy(() => import('../pages/salesTargets/LeaderboardPage').then(m => ({ default: m.LeaderboardPage })));
+const TargetReportsPage         = lazy(() => import('../pages/salesTargets/TargetReportsPage').then(m => ({ default: m.TargetReportsPage })));
+const TargetSettingsPage        = lazy(() => import('../pages/salesTargets/TargetSettingsPage').then(m => ({ default: m.TargetSettingsPage })));
+
+// Stock Summary
+const StockSummaryDashboardPage = lazy(() => import('../pages/stockSummary/StockSummaryDashboardPage').then(m => ({ default: m.StockSummaryDashboardPage })));
+const CurrentStockPage          = lazy(() => import('../pages/stockSummary/CurrentStockPage').then(m => ({ default: m.CurrentStockPage })));
+const StockBranchComparisonPage = lazy(() => import('../pages/stockSummary/BranchComparisonPage').then(m => ({ default: m.BranchComparisonPage })));
+const StockReportsPage          = lazy(() => import('../pages/stockSummary/StockReportsPage').then(m => ({ default: m.StockReportsPage })));
+
+// Daily Summary
+const DailyDashboardPage          = lazy(() => import('../pages/dailySummary/DailyDashboardPage').then(m => ({ default: m.DailyDashboardPage })));
+const DailySalesSummaryPage       = lazy(() => import('../pages/dailySummary/DailySalesSummaryPage').then(m => ({ default: m.DailySalesSummaryPage })));
+const DailyInventorySummaryPage   = lazy(() => import('../pages/dailySummary/DailyInventorySummaryPage').then(m => ({ default: m.DailyInventorySummaryPage })));
+const DailyCashSummaryPage        = lazy(() => import('../pages/dailySummary/DailyCashSummaryPage').then(m => ({ default: m.DailyCashSummaryPage })));
+const DailyReportPage             = lazy(() => import('../pages/dailySummary/DailyReportPage').then(m => ({ default: m.DailyReportPage })));
+
+// Monthly Summary
+const MonthlyDashboardPage          = lazy(() => import('../pages/monthlySummary/MonthlyDashboardPage').then(m => ({ default: m.MonthlyDashboardPage })));
+const MonthlySalesSummaryPage       = lazy(() => import('../pages/monthlySummary/MonthlySalesSummaryPage').then(m => ({ default: m.MonthlySalesSummaryPage })));
+const MonthlyInventorySummaryPage   = lazy(() => import('../pages/monthlySummary/MonthlyInventorySummaryPage').then(m => ({ default: m.MonthlyInventorySummaryPage })));
+const MonthlyCashFlowSummaryPage    = lazy(() => import('../pages/monthlySummary/MonthlyCashFlowSummaryPage').then(m => ({ default: m.MonthlyCashFlowSummaryPage })));
+const MonthlyBranchComparisonPage   = lazy(() => import('../pages/monthlySummary/MonthlyBranchComparisonPage').then(m => ({ default: m.MonthlyBranchComparisonPage })));
+const MonthlyReportPage             = lazy(() => import('../pages/monthlySummary/MonthlyReportPage').then(m => ({ default: m.MonthlyReportPage })));
+
+// Annual Summary
+const AnnualDashboardPage           = lazy(() => import('../pages/annualSummary/AnnualDashboardPage').then(m => ({ default: m.AnnualDashboardPage })));
+const AnnualSalesSummaryPage        = lazy(() => import('../pages/annualSummary/AnnualSalesSummaryPage').then(m => ({ default: m.AnnualSalesSummaryPage })));
+const AnnualCashFlowSummaryPage     = lazy(() => import('../pages/annualSummary/AnnualCashFlowSummaryPage').then(m => ({ default: m.AnnualCashFlowSummaryPage })));
+const AnnualBranchPerformancePage   = lazy(() => import('../pages/annualSummary/AnnualBranchPerformancePage').then(m => ({ default: m.AnnualBranchPerformancePage })));
+const YearOverYearPage              = lazy(() => import('../pages/annualSummary/YearOverYearPage').then(m => ({ default: m.YearOverYearPage })));
+const AnnualReportPage              = lazy(() => import('../pages/annualSummary/AnnualReportPage').then(m => ({ default: m.AnnualReportPage })));
+
+// Bank Reconciliation
+const BankDashboardPage         = lazy(() => import('../pages/bankReconciliation/BankDashboardPage').then(m => ({ default: m.BankDashboardPage })));
+const BankAccountsPage          = lazy(() => import('../pages/bankReconciliation/BankAccountsPage').then(m => ({ default: m.BankAccountsPage })));
+const ReconciliationPage        = lazy(() => import('../pages/bankReconciliation/ReconciliationPage').then(m => ({ default: m.ReconciliationPage })));
+const UnmatchedTransactionsPage = lazy(() => import('../pages/bankReconciliation/UnmatchedTransactionsPage').then(m => ({ default: m.UnmatchedTransactionsPage })));
+const BankReportsPage           = lazy(() => import('../pages/bankReconciliation/BankReportsPage').then(m => ({ default: m.BankReportsPage })));
+
+// Branch Overview
+const BranchOverviewDashboardPage = lazy(() => import('../pages/branchOverview/BranchOverviewDashboardPage').then(m => ({ default: m.BranchOverviewDashboardPage })));
+const PerformanceComparisonPage   = lazy(() => import('../pages/branchOverview/PerformanceComparisonPage').then(m => ({ default: m.PerformanceComparisonPage })));
+const InventoryByBranchPage       = lazy(() => import('../pages/branchOverview/InventoryByBranchPage').then(m => ({ default: m.InventoryByBranchPage })));
+const SalesByBranchPage           = lazy(() => import('../pages/branchOverview/SalesByBranchPage').then(m => ({ default: m.SalesByBranchPage })));
+const BranchReportsPage           = lazy(() => import('../pages/branchOverview/BranchReportsPage').then(m => ({ default: m.BranchReportsPage })));
+
+// Offline Mode
+const OfflineStatusDashboardPage = lazy(() => import('../pages/offlineMode/OfflineStatusDashboardPage').then(m => ({ default: m.OfflineStatusDashboardPage })));
+const PendingSyncQueuePage       = lazy(() => import('../pages/offlineMode/PendingSyncQueuePage').then(m => ({ default: m.PendingSyncQueuePage })));
+const ConflictResolutionPage     = lazy(() => import('../pages/offlineMode/ConflictResolutionPage').then(m => ({ default: m.ConflictResolutionPage })));
+const SyncHistoryPage            = lazy(() => import('../pages/offlineMode/SyncHistoryPage').then(m => ({ default: m.SyncHistoryPage })));
+const OfflineSettingsPage        = lazy(() => import('../pages/offlineMode/OfflineSettingsPage').then(m => ({ default: m.OfflineSettingsPage })));
+
+// Accounting (single self-contained page today - old 06972ff
+// frontend had this as its own top-level "cash-movements" module;
+// its data hook, useAccountingData.ts, already draws real Cash
+// Flow/cash_transactions data for the cash-in-hand breakdown)
+const CashMovementsPage = lazy(() => import('../pages/accounting/CashMovementsPage').then(m => ({ default: m.CashMovementsPage })));
+
 // ---- Auth guard -------------------------------------------
 function RequireAuth() {
   const { isAuthenticated, isLoading } = useApp();
@@ -328,6 +406,121 @@ export const router = createBrowserRouter([
 
           // Reports
           { path: 'reports', element: <ReportsPage /> },
+
+          // ---- Restored modules (see Module-Inventory-Forensic-Report.md) --
+
+          // Loyalty
+          {
+            path: 'loyalty',
+            children: [
+              { index: true, element: <LoyaltyDashboardPage /> },
+              { path: 'rewards', element: <LoyaltyRewardsPage /> },
+              { path: 'redemptions', element: <LoyaltyRedemptionsPage /> },
+              { path: 'reports', element: <LoyaltyReportsPage /> },
+              { path: 'settings', element: <LoyaltySettingsPage /> },
+            ],
+          },
+
+          // Sales Targets
+          {
+            path: 'sales-targets',
+            children: [
+              { index: true, element: <SalesTargetsDashboardPage /> },
+              { path: 'list', element: <TargetsListPage /> },
+              { path: 'leaderboard', element: <LeaderboardPage /> },
+              { path: 'reports', element: <TargetReportsPage /> },
+              { path: 'settings', element: <TargetSettingsPage /> },
+            ],
+          },
+
+          // Stock Summary
+          {
+            path: 'stock-summary',
+            children: [
+              { index: true, element: <StockSummaryDashboardPage /> },
+              { path: 'current-stock', element: <CurrentStockPage /> },
+              { path: 'branch-comparison', element: <StockBranchComparisonPage /> },
+              { path: 'reports', element: <StockReportsPage /> },
+            ],
+          },
+
+          // Daily Summary
+          {
+            path: 'daily-summary',
+            children: [
+              { index: true, element: <DailyDashboardPage /> },
+              { path: 'sales', element: <DailySalesSummaryPage /> },
+              { path: 'inventory', element: <DailyInventorySummaryPage /> },
+              { path: 'cash', element: <DailyCashSummaryPage /> },
+              { path: 'report', element: <DailyReportPage /> },
+            ],
+          },
+
+          // Monthly Summary
+          {
+            path: 'monthly-summary',
+            children: [
+              { index: true, element: <MonthlyDashboardPage /> },
+              { path: 'sales', element: <MonthlySalesSummaryPage /> },
+              { path: 'inventory', element: <MonthlyInventorySummaryPage /> },
+              { path: 'cash-flow', element: <MonthlyCashFlowSummaryPage /> },
+              { path: 'branches', element: <MonthlyBranchComparisonPage /> },
+              { path: 'report', element: <MonthlyReportPage /> },
+            ],
+          },
+
+          // Annual Summary
+          {
+            path: 'annual-summary',
+            children: [
+              { index: true, element: <AnnualDashboardPage /> },
+              { path: 'sales', element: <AnnualSalesSummaryPage /> },
+              { path: 'cash-flow', element: <AnnualCashFlowSummaryPage /> },
+              { path: 'branches', element: <AnnualBranchPerformancePage /> },
+              { path: 'year-over-year', element: <YearOverYearPage /> },
+              { path: 'report', element: <AnnualReportPage /> },
+            ],
+          },
+
+          // Bank Reconciliation
+          {
+            path: 'bank-reconciliation',
+            children: [
+              { index: true, element: <BankDashboardPage /> },
+              { path: 'accounts', element: <BankAccountsPage /> },
+              { path: 'reconcile', element: <ReconciliationPage /> },
+              { path: 'unmatched', element: <UnmatchedTransactionsPage /> },
+              { path: 'reports', element: <BankReportsPage /> },
+            ],
+          },
+
+          // Branch Overview
+          {
+            path: 'branch-overview',
+            children: [
+              { index: true, element: <BranchOverviewDashboardPage /> },
+              { path: 'performance', element: <PerformanceComparisonPage /> },
+              { path: 'inventory', element: <InventoryByBranchPage /> },
+              { path: 'sales', element: <SalesByBranchPage /> },
+              { path: 'reports', element: <BranchReportsPage /> },
+            ],
+          },
+
+          // Offline Mode
+          {
+            path: 'offline-mode',
+            children: [
+              { index: true, element: <OfflineStatusDashboardPage /> },
+              { path: 'queue', element: <PendingSyncQueuePage /> },
+              { path: 'conflicts', element: <ConflictResolutionPage /> },
+              { path: 'history', element: <SyncHistoryPage /> },
+              { path: 'settings', element: <OfflineSettingsPage /> },
+            ],
+          },
+
+          // Accounting (single self-contained page - old
+          // "cash-movements" module)
+          { path: 'accounting', element: <CashMovementsPage /> },
 
           // Error routes
           { path: '401', element: <UnauthorizedPage /> },

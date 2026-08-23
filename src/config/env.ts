@@ -82,6 +82,22 @@ export const MODULES = {
   CREDIT:     'credit',
   INVOICES:   'invoices',
   BILLS:      'bills',
+  // Restored from the pre-reset 20-module frontend (see
+  // docs/MODULE_INTEGRATION_MAP.md SRS-008, SRS-013, SRS-014, SRS-016,
+  // SRS-017, SRS-018, SRS-020, SRS-021). These module keys did not exist
+  // before this pass - a business owner must be granted an explicit
+  // user_permissions row for each before the corresponding sidebar item
+  // becomes visible to them (module view access is never inferred from
+  // is_owner, per usePermission.ts).
+  LOYALTY:          'loyalty',
+  SALES_TARGETS:    'salesTargets',
+  STOCK_SUMMARY:    'stockSummary',
+  DAILY_SUMMARY:    'dailySummary',
+  MONTHLY_SUMMARY:  'monthlySummary',
+  ANNUAL_SUMMARY:   'annualSummary',
+  BRANCH_OVERVIEW:  'branchOverview',
+  OFFLINE_MODE:     'offlineMode',
+  ACCOUNTING:       'accounting',
 } as const;
 
 export type ModuleName = typeof MODULES[keyof typeof MODULES];

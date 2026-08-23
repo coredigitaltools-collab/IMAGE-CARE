@@ -38,6 +38,20 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Payroll',     path: '/payroll',    icon: '💰', module: 'payroll' },
   { label: 'Cash Flow',   path: '/cash-flow',  icon: '🏦', module: 'cash' },
   { label: 'Reports',     path: '/reports',    icon: '📊', module: 'reports' },
+  // Restored from the pre-reset 20-module frontend (commit 06972ff,
+  // "Offline Pack") - these modules and their pages/routes still existed
+  // in source, just weren't wired into this shell. See
+  // Module-Inventory-Forensic-Report.md for the full history.
+  { label: 'Loyalty',             path: '/loyalty',             icon: '🎁', module: 'loyalty' },
+  { label: 'Sales Targets',       path: '/sales-targets',       icon: '🎯', module: 'salesTargets' },
+  { label: 'Stock Summary',       path: '/stock-summary',       icon: '🧮', module: 'stockSummary' },
+  { label: 'Daily Summary',       path: '/daily-summary',       icon: '📅', module: 'dailySummary' },
+  { label: 'Monthly Summary',     path: '/monthly-summary',     icon: '🗓', module: 'monthlySummary' },
+  { label: 'Annual Summary',      path: '/annual-summary',      icon: '📆', module: 'annualSummary' },
+  { label: 'Bank Reconciliation', path: '/bank-reconciliation', icon: '🏛', module: 'bank' },
+  { label: 'Branch Overview',     path: '/branch-overview',     icon: '🏢', module: 'branchOverview' },
+  { label: 'Offline Mode',        path: '/offline-mode',        icon: '📴', module: 'offlineMode' },
+  { label: 'Accounting',          path: '/accounting',          icon: '🧾', module: 'accounting' },
   { label: 'Settings',    path: '/settings',   icon: '⚙',  module: 'settings' },
 ];
 
