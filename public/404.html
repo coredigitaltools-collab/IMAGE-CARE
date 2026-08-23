@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ImageCare ERP</title>
+    <!--
+      GitHub Pages serves this file for any path it doesn't recognize
+      as a real static file - which is every in-app route, since this
+      is a single-page app using client-side routing under /IMAGE-CARE/.
+
+      Rather than showing a dead end, this redirects back to the real
+      index.html (preserving the path/query/hash the visitor asked
+      for via sessionStorage), so a direct link, a bookmark, or a
+      browser refresh on e.g. /IMAGE-CARE/dashboard lands on the app
+      instead of a GitHub 404 page.
+
+      pathSegmentsToKeep is 1 because this site is deployed as a
+      project site under the single path segment "IMAGE-CARE".
+      Standard technique: https://github.com/rafgraph/spa-github-pages
+    -->
+    <script>
+      var pathSegmentsToKeep = 1;
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body>
+  </body>
+</html>
