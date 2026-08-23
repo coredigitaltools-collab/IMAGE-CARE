@@ -2,45 +2,59 @@
 // ImageCare ERP - Login Page
 // File: src/features/auth/LoginPage.tsx
 // Purpose: Authentication screen. Establishes identity.
-//          Business ID is loaded from the authenticated user record.
+//          Business ID is never shown or entered here - it is
+//          resolved server-side from the authenticated account
+//          (see fn_get_my_business_id in 0020_stage7_pin_auth.sql).
 //          Authentication does NOT determine authorization.
 // ============================================================
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
+import {
+  pageStyle, cardStyle, fieldGroup, labelStyle, inputStyle,
+  errorBoxStyle, noticeBoxStyle, primaryButtonStyle, brandBadgeStyle,
+} from './authStyles';
 
 export function LoginPage() {
-  const { signIn, isAuthenticated, isLoading } = useApp();
+  const { signIn, isAuthenticated, isLoading, isLocked, hasPin } = useApp();
   const navigate = useNavigate();
 
   const [email,       setEmail]       = useState('');
   const [password,    setPassword]    = useState('');
-  const [businessId,  setBusinessId]  = useState('');
   const [error,       setError]       = useState<string | null>(null);
+  const [notice,      setNotice]      = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
-  // Redirect if already authenticated
+  // Redirect if already fully authenticated. A user who is
+  // authenticated-but-locked (isLocked) intentionally does NOT get
+  // redirected here - "Use email and password instead" on the PIN
+  // unlock screen sends them to this exact page, and it must render
+  // the form rather than immediately bouncing them back.
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
-      navigate('/dashboard', { replace: true });
+    if (isAuthenticated && !isLoading && !isLocked) {
+      navigate(hasPin ? '/dashboard' : '/setup-pin', { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isLoading, isLocked, hasPin, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
 
     // Basic field validation
     if (!email.trim())      { setError('Email is required.'); return; }
     if (!password.trim())   { setError('Password is required.'); return; }
-    if (!businessId.trim()) { setError('Business ID is required.'); return; }
 
     setIsSubmitting(true);
     try {
-      const result = await signIn(email.trim(), password, businessId.trim());
+      const result = await signIn(email.trim(), password);
       if (result.success) {
-        navigate('/dashboard', { replace: true });
+        // Navigation happens via the isAuthenticated effect above, once
+        // hasPin has resolved, so the user lands on PIN setup (no PIN
+        // yet) or the dashboard (PIN already configured) correctly.
       } else {
         setError(result.error ?? 'Sign in failed. Please check your credentials.');
       }
@@ -48,6 +62,26 @@ export function LoginPage() {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError('Enter your email address above first, then click "Forgot password?".');
+      return;
+    }
+    setIsSendingReset(true);
+    try {
+      await supabase.auth.resetPasswordForEmail(email.trim());
+    } catch {
+      // Intentionally fall through - see notice below.
+    } finally {
+      setIsSendingReset(false);
+      // Same message whether or not the account exists, so the form
+      // never confirms/denies which emails are registered.
+      setNotice('If an account exists for that email, a password reset link has been sent.');
     }
   }
 
@@ -65,19 +99,7 @@ export function LoginPage() {
       <div style={cardStyle}>
         {/* Brand */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 48,
-            height: 48,
-            borderRadius: 12,
-            background: 'var(--color-primary-600)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 700,
-            fontSize: 20,
-            marginBottom: 16,
-          }}>
+          <div style={brandBadgeStyle}>
             IC
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>
@@ -90,16 +112,15 @@ export function LoginPage() {
 
         {/* Error */}
         {error && (
-          <div style={{
-            padding: '10px 14px',
-            backgroundColor: 'var(--color-error-50)',
-            border: '1px solid #fca5a5',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 20,
-            fontSize: 13,
-            color: 'var(--color-error-700)',
-          }}>
+          <div style={errorBoxStyle}>
             {error}
+          </div>
+        )}
+
+        {/* Notice (e.g. password reset sent) */}
+        {notice && !error && (
+          <div style={noticeBoxStyle}>
+            {notice}
           </div>
         )}
 
@@ -111,7 +132,7 @@ export function LoginPage() {
               id="email"
               type="email"
               value={email}
-              onChange={e => { setEmail(e.target.value); setError(null); }}
+              onChange={e => { setEmail(e.target.value); setError(null); setNotice(null); }}
               placeholder="you@example.com"
               autoComplete="email"
               style={inputStyle}
@@ -121,12 +142,26 @@ export function LoginPage() {
           </div>
 
           <div style={fieldGroup}>
-            <label style={labelStyle} htmlFor="password">Password</label>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <label style={labelStyle} htmlFor="password">Password</label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isSendingReset}
+                style={{
+                  background: 'none', border: 'none', padding: 0,
+                  fontSize: 12, color: 'var(--color-primary-600)',
+                  cursor: isSendingReset ? 'wait' : 'pointer',
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
             <input
               id="password"
               type="password"
               value={password}
-              onChange={e => { setPassword(e.target.value); setError(null); }}
+              onChange={e => { setPassword(e.target.value); setError(null); setNotice(null); }}
               placeholder="Your password"
               autoComplete="current-password"
               style={inputStyle}
@@ -135,47 +170,23 @@ export function LoginPage() {
             />
           </div>
 
-          <div style={fieldGroup}>
-            <label style={labelStyle} htmlFor="businessId">Business ID</label>
-            <input
-              id="businessId"
-              type="text"
-              value={businessId}
-              onChange={e => { setBusinessId(e.target.value); setError(null); }}
-              placeholder="Your business identifier"
-              autoComplete="off"
-              style={inputStyle}
-              disabled={isSubmitting}
-              required
-            />
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-              Provided by your system administrator
-            </p>
-          </div>
-
           <button
             type="submit"
-            disabled={isSubmitting || !email || !password || !businessId}
-            style={{
-              width: '100%',
-              padding: '10px 16px',
-              backgroundColor: isSubmitting ? 'var(--color-primary-400)' : 'var(--color-primary-600)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: isSubmitting ? 'wait' : 'pointer',
-              marginTop: 8,
-              transition: 'background-color var(--transition-fast)',
-              opacity: (!email || !password || !businessId) ? 0.6 : 1,
-            }}
+            disabled={isSubmitting || !email || !password}
+            style={primaryButtonStyle(!email || !password, isSubmitting)}
           >
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 24 }}>
+        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--color-text-muted)', marginTop: 20 }}>
+          New business?{' '}
+          <Link to="/register" style={{ color: 'var(--color-primary-600)', fontWeight: 500 }}>
+            Create an account
+          </Link>
+        </p>
+
+        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 16 }}>
           ImageCare ERP v1.0
         </p>
       </div>
@@ -183,47 +194,4 @@ export function LoginPage() {
   );
 }
 
-// ---- Styles ------------------------------------------------
-const pageStyle: React.CSSProperties = {
-  minHeight: '100vh',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: 'var(--color-bg)',
-  padding: '24px 16px',
-};
-
-const cardStyle: React.CSSProperties = {
-  width: '100%',
-  maxWidth: 400,
-  backgroundColor: 'var(--color-surface)',
-  borderRadius: 'var(--radius-xl)',
-  padding: '36px 32px',
-  boxShadow: 'var(--shadow-xl)',
-  border: '1px solid var(--color-border)',
-};
-
-const fieldGroup: React.CSSProperties = {
-  marginBottom: 16,
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 13,
-  fontWeight: 500,
-  color: 'var(--color-text-primary)',
-  marginBottom: 6,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 12px',
-  border: '1px solid var(--color-border-dark)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 14,
-  color: 'var(--color-text-primary)',
-  backgroundColor: 'var(--color-surface)',
-  outline: 'none',
-  transition: 'border-color var(--transition-fast)',
-  boxSizing: 'border-box',
-};
+// Styles are shared with the other auth screens - see ./authStyles.ts
