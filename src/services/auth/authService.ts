@@ -12,6 +12,18 @@
 // The user's role field is a display label. It is loaded
 // into context for display purposes only and is never
 // checked for authorization.
+//
+// BUSINESS ID: Users never see or enter a Business ID. It is
+// resolved server-side from the authenticated session via
+// fn_get_my_business_id(), which relies on imagecare.users.
+// auth_user_id being globally UNIQUE (one Supabase Auth account
+// = exactly one business). business_id remains a required,
+// internal database field everywhere else (RLS, every table,
+// every RPC) - it is only absent from the login/registration UI.
+//
+// DAILY PIN: A per-user 4-digit PIN is a convenience unlock layer
+// on top of this authentication, never a replacement for it. See
+// setPin/verifyPin/hasPin below and 0020_stage7_pin_auth.sql.
 // ============================================================
 
 import { supabase } from '../../lib/supabase';
@@ -24,7 +36,6 @@ import type { UUID } from '../../types/database';
 export interface LoginCredentials {
   email:       string;
   password:    string;
-  business_id: UUID;
 }
 
 export interface LoginResult {
@@ -44,8 +55,15 @@ export async function login(credentials: LoginCredentials): Promise<ApiResult<Lo
       return fail({ code: 'AUTH_INVALID', message: 'Incorrect email or password.' });
     }
 
-    // 2. Load full user context (identity + permissions + is_owner)
-    const context = await loadUserContext(credentials.business_id);
+    // 2. Resolve business_id server-side. The user never supplies this.
+    const businessId = await getMyBusinessId();
+    if (!businessId) {
+      await supabase.auth.signOut();
+      return fail({ code: 'AUTH_INVALID', message: 'No business is associated with this account.' });
+    }
+
+    // 3. Load full user context (identity + permissions + is_owner)
+    const context = await loadUserContext(businessId);
     if (!context) {
       await supabase.auth.signOut();
       return fail({ code: 'AUTH_INVALID', message: 'Account not found for this business.' });
@@ -67,6 +85,164 @@ export async function login(credentials: LoginCredentials): Promise<ApiResult<Lo
   } catch (err) {
     return fail(parseError(err));
   }
+}
+
+// ---- Business ID resolution ---------------------------------
+// Derives business_id purely from the live Supabase session via
+// imagecare.fn_get_my_business_id(). The user is never asked for
+// this and it is never transmitted from the client.
+
+export async function getMyBusinessId(): Promise<UUID | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('fn_get_my_business_id');
+    if (error || !data) return null;
+    return data as UUID;
+  } catch {
+    return null;
+  }
+}
+
+// ---- Self-service business registration ---------------------
+// First-time signup: Business Name, Owner Name, Email, Password
+// only - no Business ID, branch, secret word, or OTP. Creates the
+// Supabase Auth account, then the business + owner user row +
+// full owner permission grants via fn_register_business(), which
+// is idempotent (see 0020_stage7_pin_auth.sql).
+
+export interface RegisterInput {
+  businessName:   string;
+  ownerFirstName: string;
+  ownerLastName:  string;
+  email:          string;
+  password:       string;
+}
+
+export async function register(input: RegisterInput): Promise<ApiResult<LoginResult>> {
+  try {
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email:    input.email,
+      password: input.password,
+    });
+
+    if (signUpError) {
+      return fail({ code: 'AUTH_INVALID', message: signUpError.message || 'Could not create account.' });
+    }
+    if (!signUpData.user) {
+      return fail({ code: 'AUTH_INVALID', message: 'Could not create account.' });
+    }
+
+    if (!signUpData.session) {
+      // Email confirmation is required by this Supabase project before a
+      // session is issued. No business/owner data has been written yet -
+      // the user completes registration by confirming their email and
+      // then signing in (which does not require a Business ID either).
+      return fail({
+        code: 'AUTH_INVALID',
+        message: 'Account created. Please check your email to confirm your address, then sign in.',
+      });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: regData, error: regError } = await (supabase as any).rpc('fn_register_business', {
+      p_business_name:    input.businessName,
+      p_owner_first_name: input.ownerFirstName,
+      p_owner_last_name:  input.ownerLastName,
+    });
+
+    if (regError || !regData) {
+      return fail({ code: 'SERVER_ERROR', message: 'Could not set up your business. Please try again.' });
+    }
+
+    const businessId = (regData as { business_id: UUID }).business_id;
+    const context = await loadUserContext(businessId);
+    if (!context) {
+      return fail({
+        code: 'SERVER_ERROR',
+        message: 'Your account was created, but we could not load your business. Please sign in.',
+      });
+    }
+
+    return ok({
+      session: {
+        access_token:  signUpData.session.access_token,
+        refresh_token: signUpData.session.refresh_token,
+      },
+      user_context: context,
+    });
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+// ---- Daily PIN -----------------------------------------------
+// Convenience quick-unlock layer on top of full Supabase auth.
+// Never a replacement for it, never used as the Supabase password,
+// never stored or returned in plaintext. See fn_set_pin/
+// fn_verify_pin/fn_has_pin in 0020_stage7_pin_auth.sql.
+
+export async function hasPin(): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('fn_has_pin');
+    if (error) return false;
+    return Boolean(data);
+  } catch {
+    return false;
+  }
+}
+
+export async function setPin(pin: string, confirmPin: string): Promise<ApiResult<null>> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).rpc('fn_set_pin', {
+      p_pin:         pin,
+      p_pin_confirm: confirmPin,
+    });
+    if (error) {
+      return fail({ code: 'VALIDATION_ERROR', message: mapPinSetError(error.message) });
+    }
+    return ok(null);
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+export type VerifyPinReason = 'NO_PIN_SET' | 'LOCKED' | 'WRONG_PIN';
+
+export interface VerifyPinResult {
+  success:            boolean;
+  reason?:            VerifyPinReason;
+  attemptsRemaining?: number;
+  lockedUntil?:       string;
+}
+
+export async function verifyPin(pin: string): Promise<VerifyPinResult> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('fn_verify_pin', { p_pin: pin });
+    if (error || !data) {
+      return { success: false, reason: 'WRONG_PIN' };
+    }
+    const result = data as {
+      success: boolean; reason?: VerifyPinReason;
+      attempts_remaining?: number; locked_until?: string;
+    };
+    return {
+      success:           Boolean(result.success),
+      reason:            result.reason,
+      attemptsRemaining: result.attempts_remaining,
+      lockedUntil:       result.locked_until,
+    };
+  } catch {
+    return { success: false, reason: 'WRONG_PIN' };
+  }
+}
+
+function mapPinSetError(message: string): string {
+  if (message.includes('do not match'))            return 'PIN and confirmation do not match.';
+  if (message.includes('exactly 4 digits'))         return 'PIN must be exactly 4 digits.';
+  return 'Could not set PIN. Please try again.';
 }
 
 // ---- Logout ------------------------------------------------

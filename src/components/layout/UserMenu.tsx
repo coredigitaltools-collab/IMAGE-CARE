@@ -5,11 +5,13 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { formatFullName, formatInitials } from '../../utils/formatters';
 
 export function UserMenu() {
-  const { userContext, signOut } = useApp();
+  const { userContext, signOut, lock } = useApp();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -33,6 +35,16 @@ export function UserMenu() {
     setIsSigningOut(true);
     setIsOpen(false);
     await signOut();
+  }
+
+  // Lock: the normal daily action. Returns to the PIN unlock screen
+  // without touching the Supabase session - distinct from Sign out,
+  // which terminates the session and requires full email/password
+  // to sign back in.
+  function handleLock() {
+    setIsOpen(false);
+    lock();
+    navigate('/unlock');
   }
 
   return (
@@ -103,6 +115,22 @@ export function UserMenu() {
 
           {/* Actions */}
           <div style={{ padding: '6px 0' }}>
+            <button
+              onClick={handleLock}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 14px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-text-primary)',
+              }}
+            >
+              Lock
+            </button>
             <button
               onClick={handleSignOut}
               disabled={isSigningOut}

@@ -33,6 +33,10 @@ import { useApp } from '../context/AppContext';
 import { AppShell } from '../components/layout/AppShell';
 import { LoadingScreen } from '../components/feedback/LoadingScreen';
 import { LoginPage } from '../features/auth/LoginPage';
+import { RegisterPage } from '../features/auth/RegisterPage';
+import { PinSetupPage } from '../features/auth/PinSetupPage';
+import { UnlockPage } from '../features/auth/UnlockPage';
+import { ForgotPinPage } from '../features/auth/ForgotPinPage';
 
 // ---- Lazy-loaded module pages --------------------------------
 const DashboardPage     = lazy(() => import('../features/dashboard/DashboardPage'));
@@ -215,11 +219,22 @@ const OfflineSettingsPage        = lazy(() => import('../pages/offlineMode/Offli
 const CashMovementsPage = lazy(() => import('../pages/accounting/CashMovementsPage').then(m => ({ default: m.CashMovementsPage })));
 
 // ---- Auth guard -------------------------------------------
+// Gates the main app tree. Three checks, in order:
+//   1. Live, authoritative user context loaded -> else /login.
+//   2. Daily PIN lock active (isLocked) -> else /unlock. This is
+//      the normal state after re-opening the app on a trusted
+//      device that already held a session - see AppContext's
+//      "DAILY PIN LOCK ARCHITECTURE" note.
+//   3. No PIN configured yet (hasPin === false) -> /setup-pin,
+//      forced (covers both first-time registration and an
+//      existing user's next login after this feature shipped).
 function RequireAuth() {
-  const { isAuthenticated, isLoading } = useApp();
+  const { isAuthenticated, isLoading, isLocked, hasPin } = useApp();
 
   if (isLoading) return <LoadingScreen message="Loading your session..." />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (isLocked) return <Navigate to="/unlock" replace />;
+  if (!hasPin) return <Navigate to="/setup-pin" replace />;
   return <Outlet />;
 }
 
@@ -236,10 +251,33 @@ function SuspenseShell() {
 
 // ---- Router -----------------------------------------------
 export const router = createBrowserRouter([
-  // Public routes
+  // Public routes - no Business ID anywhere in this flow. Business
+  // ID is resolved server-side from the authenticated session (see
+  // fn_get_my_business_id in 0020_stage7_pin_auth.sql).
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/register',
+    element: <RegisterPage />,
+  },
+  {
+    path: '/forgot-pin',
+    element: <ForgotPinPage />,
+  },
+  // /unlock and /setup-pin require a live session (checked inside
+  // each page itself, same pattern as LoginPage's own redirect
+  // effect) but are deliberately NOT behind RequireAuth - they are
+  // themselves how a locked / PIN-less session resolves to one that
+  // can pass RequireAuth's checks.
+  {
+    path: '/unlock',
+    element: <UnlockPage />,
+  },
+  {
+    path: '/setup-pin',
+    element: <PinSetupPage />,
   },
 
   // Protected routes - require authentication

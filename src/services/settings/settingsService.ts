@@ -205,8 +205,19 @@ export async function saveBusinessProfile(
 
 export async function listStaff(ctx: UserContext): Promise<ApiResult<SettingsStaffMember[]>> {
   try {
+    // Explicit column list (not '*'): imagecare.users also carries
+    // pin_hash/pin_failed_attempts/pin_locked_until/pin_set_at (daily
+    // unlock PIN - see 0020_stage7_pin_auth.sql). Those must never be
+    // included in an API response, even a bcrypt hash, so they are
+    // deliberately left out of this select.
     const { data, error } = await supabase.schema('imagecare').from('users')
-      .select('*').eq('business_id', ctx.business_id).is('deleted_at', null).order('first_name');
+      .select(`
+        id, business_id, branch_id, auth_user_id, first_name, last_name,
+        email, phone, role, is_owner, employment_type, hire_date, salary,
+        salary_currency, avatar_url, is_active, last_login_at, settings,
+        metadata, created_at, updated_at, deleted_at
+      `)
+      .eq('business_id', ctx.business_id).is('deleted_at', null).order('first_name');
     if (error) return fail(parseError(error));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mapped: SettingsStaffMember[] = ((data ?? []) as any[]).map((u: any) => ({
