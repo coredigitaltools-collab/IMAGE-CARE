@@ -21,6 +21,7 @@ import {
   pageStyle, cardStyle, fieldGroup, labelStyle, inputStyle,
   errorBoxStyle, primaryButtonStyle, brandBadgeStyle,
 } from './authStyles';
+import { PasswordInput } from './PasswordInput';
 
 export function RegisterPage() {
   const { register, isAuthenticated, isLoading, isLocked, hasPin } = useApp();
@@ -143,21 +144,21 @@ export function RegisterPage() {
 
           <div style={fieldGroup}>
             <label style={labelStyle} htmlFor="password">Password</label>
-            <input
-              id="password" type="password" value={password}
+            <PasswordInput
+              id="password" value={password}
               onChange={e => { setPassword(e.target.value); setError(null); }}
               placeholder="Choose a password" autoComplete="new-password"
-              style={inputStyle} disabled={isSubmitting} required
+              disabled={isSubmitting} required
             />
           </div>
 
           <div style={fieldGroup}>
             <label style={labelStyle} htmlFor="confirmPassword">Confirm password</label>
-            <input
-              id="confirmPassword" type="password" value={confirmPassword}
+            <PasswordInput
+              id="confirmPassword" value={confirmPassword}
               onChange={e => { setConfirmPassword(e.target.value); setError(null); }}
               placeholder="Re-enter your password" autoComplete="new-password"
-              style={inputStyle} disabled={isSubmitting} required
+              disabled={isSubmitting} required
             />
           </div>
 

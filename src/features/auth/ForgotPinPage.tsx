@@ -20,6 +20,7 @@ import {
   pageStyle, cardStyle, fieldGroup, labelStyle, inputStyle,
   errorBoxStyle, primaryButtonStyle, brandBadgeStyle,
 } from './authStyles';
+import { PasswordInput } from './PasswordInput';
 
 export function ForgotPinPage() {
   const { signIn, userContext } = useApp();
@@ -83,11 +84,11 @@ export function ForgotPinPage() {
 
           <div style={fieldGroup}>
             <label style={labelStyle} htmlFor="password">Password</label>
-            <input
-              id="password" type="password" value={password}
+            <PasswordInput
+              id="password" value={password}
               onChange={e => { setPassword(e.target.value); setError(null); }}
               placeholder="Your password" autoComplete="current-password"
-              style={inputStyle} disabled={isSubmitting} required
+              disabled={isSubmitting} required
             />
           </div>
 

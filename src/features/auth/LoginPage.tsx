@@ -16,6 +16,7 @@ import {
   pageStyle, cardStyle, fieldGroup, labelStyle, inputStyle,
   errorBoxStyle, noticeBoxStyle, primaryButtonStyle, brandBadgeStyle,
 } from './authStyles';
+import { PasswordInput } from './PasswordInput';
 
 export function LoginPage() {
   const { signIn, isAuthenticated, isLoading, isLocked, hasPin } = useApp();
@@ -157,14 +158,12 @@ export function LoginPage() {
                 Forgot password?
               </button>
             </div>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               value={password}
               onChange={e => { setPassword(e.target.value); setError(null); setNotice(null); }}
               placeholder="Your password"
               autoComplete="current-password"
-              style={inputStyle}
               disabled={isSubmitting}
               required
             />
