@@ -4,15 +4,26 @@
 // Purpose: Purchasing service - purchases, supplier payments.
 // ============================================================
 
-import { supabase, rpc } from '../../lib/supabase';
-import { canDo, parseError } from '../../types/app';
+import { supabase } from '../../lib/supabase';
+import { canDo } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Purchase, UUID } from '../../types/database';
 import { createAndPostPurchase, type CreatePurchaseInput } from '../business/businessEngine';
+import { purchasingEngine as realPurchasingEngine } from '../../engines';
+import type { EngineContext } from '../../engines/types';
 import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
+
+function toEngineContext(ctx: UserContext, branchId?: UUID): EngineContext {
+  return {
+    business_id: ctx.business_id,
+    branch_id:   branchId ?? ctx.branch_id ?? null,
+    user_id:     ctx.user_id,
+    user_ctx:    ctx,
+  };
+}
 
 export interface PurchaseFilter {
   branch_id?: UUID;
@@ -67,25 +78,39 @@ export async function listPurchases(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view purchases.', { requestId });
   }
   try {
+    // fn_list_purchases_cursor does not exist live or in any tracked
+    // migration (confirmed by Phase 1 verification) - replaced with a
+    // direct offset-paginated query, matching the pattern already used
+    // by listInventory/listBranches in this codebase.
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await rpc('fn_list_purchases_cursor', {
-      p_business_id:  ctx.business_id,
-      p_branch_id:    filter.branch_id   ?? null,
-      p_supplier_id:  filter.supplier_id ?? null,
-      p_status:       filter.status      ?? null,
-      p_from_date:    filter.date?.from  ?? null,
-      p_to_date:      filter.date?.to    ?? null,
-      p_cursor_date:  pagination.cursor_date ?? null,
-      p_cursor_id:    pagination.cursor_id   ?? null,
-      p_limit:        pageSize + 1,
-    });
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
+
+    let q = supabase.schema('imagecare').from('purchases')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .range(offset, offset + pageSize - 1)
+      .order('purchase_date', { ascending: false });
+
+    if (filter.branch_id)   q = q.eq('branch_id', filter.branch_id);
+    if (filter.supplier_id) q = q.eq('supplier_id', filter.supplier_id);
+    if (filter.status)      q = q.eq('status', filter.status);
+    if (filter.date?.from)  q = q.gte('purchase_date', filter.date.from);
+    if (filter.date?.to)    q = q.lte('purchase_date', filter.date.to);
+
+    const { data, error, count } = await q;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load purchases.', { requestId });
-    const rows = (data ?? []) as Purchase[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const last = items[items.length - 1] as any;
-    return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.next_cursor_date ?? null : null, next_cursor_id: hasMore ? last?.next_cursor_id ?? null : null } }, requestId);
+
+    return serviceOk({
+      items: (data ?? []) as Purchase[],
+      pagination: {
+        total_count:      count ?? 0,
+        page_size:        pageSize,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
+      },
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load purchases.', { requestId }); }
 }
 
@@ -98,17 +123,17 @@ export async function recordSupplierPayment(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to record supplier payments.', { requestId });
   }
   try {
-    const { error } = await rpc('engine_process_supplier_payment', {
-      p_business_id:     ctx.business_id,
-      p_branch_id:       input.branch_id,
-      p_supplier_id:     input.supplier_id,
-      p_amount:          input.amount,
-      p_payment_method:  input.payment_method,
-      p_user_id:         ctx.user_id,
-      p_reference_notes: input.reference_notes ?? null,
-      p_idempotency_key: uuidv4(),
+    const ectx = toEngineContext(ctx, input.branch_id);
+    const result = await realPurchasingEngine.recordSupplierPayment(ectx, {
+      supplier_id:      input.supplier_id,
+      branch_id:        input.branch_id,
+      amount:           input.amount,
+      payment_method:   input.payment_method as CreatePurchaseInput['payment_method'],
+      reference_number: undefined,
+      notes:            input.reference_notes,
+      idempotency_key:  uuidv4(),
     });
-    if (error) return serviceFail('BUSINESS_RULE_VIOLATION', parseError(error).message, { requestId });
+    if (!result.ok) return serviceFail('BUSINESS_RULE_VIOLATION', result.error!.message, { requestId });
     return serviceOk(undefined, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to record payment.', { requestId }); }
 }
@@ -160,21 +185,23 @@ export async function approvePurchaseOrder(
   idempotencyKey?: string
 ): Promise<ServiceResponse<{ purchase_id: UUID; status: string; journal_entry_id: UUID | null }>> {
   const requestId = makeRequestId();
-  if (!canDo(ctx, 'purchasing', 'edit'))
+  if (!canDo(ctx, 'purchases', 'edit'))
     return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
   try {
     const key = idempotencyKey ?? crypto.randomUUID();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any).rpc('fn_imc_receive_purchase', {
-      p_purchase_id: purchaseId, p_business_id: ctx.business_id, p_idempotency_key: key,
+    const ectx = toEngineContext(ctx);
+    const result = await realPurchasingEngine.receiveStock(ectx, {
+      purchase_id:      purchaseId,
+      idempotency_key:  key,
     });
-    if (error) {
-      const msg = (error as { message?: string })?.message ?? 'Failed to receive stock';
-      return serviceFail('INTERNAL_ERROR', msg, { requestId });
+    if (!result.ok) {
+      return serviceFail('INTERNAL_ERROR', result.error!.message, { requestId });
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = data as any;
-    return serviceOk({ purchase_id: d?.purchase_id ?? purchaseId, status: d?.status ?? 'confirmed', journal_entry_id: d?.journal_entry_id ?? null }, requestId);
+    return serviceOk({
+      purchase_id:      result.data!.purchase_id,
+      status:           result.data!.status,
+      journal_entry_id: result.data!.journal_entry_id,
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to receive stock.', { requestId }); }
 }
 
@@ -190,7 +217,7 @@ export async function getPurchaseDashboardKpis(
   ctx: UserContext, branchId?: UUID
 ): Promise<ServiceResponse<PurchaseDashboardKpis>> {
   const requestId = makeRequestId();
-  if (!canDo(ctx, 'purchasing', 'view'))
+  if (!canDo(ctx, 'purchases', 'view'))
     return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
   try {
     let q = supabase.schema('imagecare').from('purchases')

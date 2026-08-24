@@ -215,10 +215,11 @@ export function useInventoryList(branchId?: UUID) {
 export function useInventoryMovements(productId?: UUID) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
-    queryKey: ['inventory', 'movements', ctx.business_id, productId],
-    queryFn: () => getInventoryMovements(ctx, { product_id: productId, branch_id: (branch ?? '') as UUID }).then(unwrap),
-    enabled: Boolean(productId),
+    queryKey: ['inventory', 'movements', ctx.business_id, branchId, productId],
+    queryFn: () => getInventoryMovements(ctx, { product_id: productId, branch_id: branchId as UUID }).then(unwrap),
+    enabled: Boolean(branchId),
   });
 }
 
@@ -295,7 +296,40 @@ export function useCreateAdjustment(_userId?: string) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
   });
 }
-export function useStockAdjustments() { return useInventoryMovements(undefined); }
+// Bug fix (Phase 6, item 5-class bug): useStockAdjustments previously
+// delegated to useInventoryMovements(undefined), whose query was gated on
+// `enabled: Boolean(productId)` - since no productId is ever passed here,
+// the query never ran and the Stock Adjustments page was permanently
+// empty. It also returned raw inventory_movements rows (product_id,
+// quantity, moved_at) while StockAdjustmentsPage expects
+// {id, productId, reason, quantityChange, createdAt}. Fixed with its own
+// hook: enabled on branch_id (not productId), filtered to adjustment
+// movements only, and mapped to the shape the page renders.
+export function useStockAdjustments() {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
+  return useQuery({
+    queryKey: ['inventory', 'movements', 'adjustments', ctx.business_id, branchId],
+    queryFn: async () => {
+      const rows = await getInventoryMovements(ctx, { branch_id: branchId as UUID }).then(unwrap);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items = Array.isArray(rows) ? rows as any[] : [];
+      return items
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((m: any) => m.movement_type === 'adjustment_in' || m.movement_type === 'adjustment_out')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((m: any) => ({
+          id: m.id,
+          productId: m.product_id,
+          reason: m.notes ?? 'Manual adjustment',
+          quantityChange: m.movement_type === 'adjustment_out' ? -Number(m.quantity) : Number(m.quantity),
+          createdAt: m.moved_at,
+        }));
+    },
+    enabled: Boolean(branchId),
+  });
+}
 export function useGeneratedSku() { return useQuery({ queryKey: ['inventory', 'sku-generator'], queryFn: async () => `SKU-${Date.now().toString(36).toUpperCase()}`, staleTime: 0 }); }
 export function useArchiveBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
 export function useCreateBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: { name: string }) => ({ id: crypto.randomUUID(), name: input.name, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').Brand), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }

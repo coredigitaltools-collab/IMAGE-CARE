@@ -5,7 +5,7 @@
 //          audit services - all financial service boundaries.
 // ============================================================
 
-import { supabase, rpc } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { canDo, parseError } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -13,6 +13,17 @@ import type { UserContext } from '../../types/app';
 import type { Expense, PayrollRecord, CashTransaction, JournalEntry, UUID } from '../../types/database';
 import { createAndPostExpense, processPayroll, type CreateExpenseInput } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
+import { cashEngine, accountingEngine } from '../../engines';
+import type { EngineContext } from '../../engines/types';
+
+function toEngineContext(ctx: UserContext, branchId?: UUID): EngineContext {
+  return {
+    business_id: ctx.business_id,
+    branch_id:   branchId ?? ctx.branch_id ?? null,
+    user_id:     ctx.user_id,
+    user_ctx:    ctx,
+  };
+}
 
 // ===========================================================
 // EXPENSE SERVICE
@@ -41,23 +52,38 @@ export async function listExpenses(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view expenses.', { requestId });
   }
   try {
+    // fn_list_expenses_cursor does not exist live or in any tracked
+    // migration (confirmed by Phase 1 verification) - replaced with a
+    // direct offset-paginated query, matching the pattern already used
+    // by listPurchases/listInventory/listBranches.
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await rpc('fn_list_expenses_cursor', {
-      p_business_id: ctx.business_id,
-      p_branch_id:   filter.branch_id ?? null,
-      p_category:    filter.category  ?? null,
-      p_from_date:   filter.date?.from ?? null,
-      p_to_date:     filter.date?.to   ?? null,
-      p_cursor_date: pagination.cursor_date ?? null,
-      p_cursor_id:   pagination.cursor_id   ?? null,
-      p_limit:       pageSize + 1,
-    });
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
+
+    let query = supabase.schema('imagecare').from('expenses')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .range(offset, offset + pageSize - 1)
+      .order('expense_date', { ascending: false });
+
+    if (filter.branch_id) query = query.eq('branch_id', filter.branch_id);
+    if (filter.category)  query = query.eq('category', filter.category);
+    if (filter.date?.from) query = query.gte('expense_date', filter.date.from);
+    if (filter.date?.to)   query = query.lte('expense_date', filter.date.to);
+
+    const { data, error, count } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId });
-    const rows = (data ?? []) as Expense[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1] as Expense;
-    return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.expense_date ?? null : null, next_cursor_id: hasMore ? last?.id ?? null : null } }, requestId);
+
+    return serviceOk({
+      items: (data ?? []) as Expense[],
+      pagination: {
+        total_count:      count ?? 0,
+        page_size:        pageSize,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
+      },
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId }); }
 }
 
@@ -148,13 +174,19 @@ export async function getCashBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view cash data.', { requestId });
   }
   try {
-    const { data, error } = await rpc('fn_get_cash_position', {
-      p_business_id: ctx.business_id,
-      p_branch_id:   branchId,
-    });
-    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return serviceOk(data as any, requestId);
+    // fn_get_cash_position does not exist live or in any tracked migration
+    // (confirmed by Phase 1 verification) - delegated to cashEngine.getCashBalance,
+    // which derives cash-in-hand directly from confirmed cash_transactions,
+    // never from accounting profit.
+    const result = await cashEngine.getCashBalance(toEngineContext(ctx, branchId), branchId);
+    if (result.error || !result.data) {
+      return serviceFail('INTERNAL_ERROR', result.error?.message ?? 'Failed to load cash balance.', { requestId });
+    }
+    return serviceOk({
+      cash_in:      result.data.total_in,
+      cash_out:     result.data.total_out,
+      net_position: result.data.balance,
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId }); }
 }
 
@@ -218,15 +250,37 @@ export async function getAccountBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view account balances.', { requestId });
   }
   try {
-    const { data, error } = await rpc('fn_get_account_balance', {
-      p_business_id:  ctx.business_id,
-      p_account_code: accountCode,
-      p_year:         filter?.year   ?? null,
-      p_month:        filter?.month  ?? null,
-      p_branch_id:    filter?.branch_id ?? null,
-    });
+    // fn_get_account_balance does not exist live or in any tracked migration
+    // (confirmed by Phase 1 verification). imagecare.vw_account_balances
+    // (created by 0010_stage2_accounting.sql) already aggregates posted
+    // journal_lines per account per branch per period - query it directly
+    // instead of inventing a new RPC.
+    const resolved = await accountingEngine.resolveAccountCode(ctx.business_id, accountCode);
+    if (resolved.error || !resolved.data) {
+      return serviceFail('RESOURCE_NOT_FOUND', resolved.error?.message ?? 'Account not found.', { requestId });
+    }
+
+    let query = supabase.schema('imagecare').from('vw_account_balances')
+      .select('net_balance')
+      .eq('business_id', ctx.business_id)
+      .eq('account_code', accountCode);
+
+    if (filter?.branch_id) query = query.eq('branch_id', filter.branch_id);
+    if (filter?.year)      query = query.eq('period_year', filter.year);
+    if (filter?.month)     query = query.eq('period_month', filter.month);
+
+    const { data, error } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load account balance.', { requestId });
-    return serviceOk(data as number, requestId);
+
+    const rawBalance = (data ?? []).reduce((sum, row) => sum + Number(row.net_balance ?? 0), 0);
+
+    // net_balance = debits - credits. Asset/expense accounts carry a normal
+    // debit balance (positive as-is); liability/equity/revenue accounts
+    // carry a normal credit balance, so flip the sign for a readable figure.
+    const creditNormal = ['liability', 'equity', 'revenue'].includes(resolved.data.account_type);
+    const balance = creditNormal ? -rawBalance : rawBalance;
+
+    return serviceOk(balance, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load account balance.', { requestId }); }
 }
 
@@ -245,23 +299,35 @@ export async function listAuditLogs(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view audit logs.', { requestId });
   }
   try {
+    // fn_list_audit_logs_cursor does not exist live or in any tracked
+    // migration (confirmed by Phase 1 verification) - replaced with a
+    // direct offset-paginated query against imagecare.audit_logs.
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await rpc('fn_list_audit_logs_cursor', {
-      p_business_id: ctx.business_id,
-      p_table_name:  filter.table_name ?? null,
-      p_user_id:     filter.user_id   ?? null,
-      p_action:      null,
-      p_from_date:   filter.date?.from ?? null,
-      p_cursor_date: pagination.cursor_date ?? null,
-      p_cursor_id:   pagination.cursor_id   ?? null,
-      p_limit:       pageSize + 1,
-    });
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
+
+    let query = supabase.schema('imagecare').from('audit_logs')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .range(offset, offset + pageSize - 1)
+      .order('created_at', { ascending: false });
+
+    if (filter.table_name) query = query.eq('table_name', filter.table_name);
+    if (filter.user_id)    query = query.eq('user_id', filter.user_id);
+    if (filter.date?.from) query = query.gte('created_at', filter.date.from);
+    if (filter.date?.to)   query = query.lte('created_at', filter.date.to);
+
+    const { data, error, count } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load audit logs.', { requestId });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = (data ?? []) as any[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1];
-    return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.created_at ?? null : null, next_cursor_id: hasMore ? last?.id ?? null : null } }, requestId);
+
+    return serviceOk({
+      items: data ?? [],
+      pagination: {
+        total_count:      count ?? 0,
+        page_size:        pageSize,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
+      },
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load audit logs.', { requestId }); }
 }

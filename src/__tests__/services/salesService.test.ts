@@ -32,14 +32,34 @@ describe('createSale - permission enforcement', () => {
   it('allows when user has sales.create permission', async () => {
     const ctx = makeUserContext();
 
-    // Mock the DB insert to succeed
+    // createSale (services/sales/salesService.ts) now delegates through
+    // the real multi-step engine (realBusinessEngine.createSale/postSale
+    // -> validateContext, product checks, idempotency, journal posting,
+    // etc. - see the Backend Implementation Pass rewiring of
+    // src/services/business/businessEngine.ts) instead of a single RPC
+    // call, so the mock needs to support arbitrarily deep
+    // .select().eq().is()... chains without throwing. A generic
+    // self-returning Proxy does that without hand-modeling every
+    // table's exact call shape. This test only asserts the ApiResult
+    // shape is well-formed, not that the sale succeeds, so a uniform
+    // "not found" terminal value is fine even where it makes the engine
+    // short-circuit into a permission-was-granted-but-business-rule-
+    // failed response.
+    const chainable: object = new Proxy(
+      {},
+      {
+        get(_target, prop) {
+          if (prop === 'then') {
+            return (resolve: (v: unknown) => void) => resolve({ data: null, error: null, count: 0 });
+          }
+          return () => chainable;
+        },
+      }
+    );
+
     const mockSupabase = vi.mocked(supabase);
-    (mockSupabase.schema as any) = vi.fn().mockReturnThis();
-    (mockSupabase as any).from = vi.fn().mockReturnValue({
-      insert: vi.fn().mockResolvedValue({ data: [{ id: 'new-sale-id' }], error: null }),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { sale_number: 'SALE-000001', status: 'confirmed', journal_entry_id: null }, error: null }),
-    });
+    (mockSupabase.schema as any) = vi.fn().mockReturnValue(chainable);
+    (mockSupabase as any).from = vi.fn().mockReturnValue(chainable);
     (mockSupabase as any).rpc = vi.fn().mockResolvedValue({ data: null, error: null });
 
     const result = await createSale(ctx, {

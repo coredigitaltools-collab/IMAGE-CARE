@@ -302,12 +302,46 @@ describe('CreditEngine: overpayment prevention', () => {
 
 describe('CreditEngine: credit is not cash', () => {
   it('credit charge does NOT create cash movement', () => {
-    // Architectural test: the charge() method only writes to credit_transactions
-    // It does NOT call cashEngine. This is a structural test via type inspection.
+    // Architectural test: charge() (called from inside postSale, which
+    // already posts the sale's full journal including the Accounts
+    // Receivable line) only writes to credit_transactions - it does NOT
+    // call cashEngine, because a credit sale must never increase Cash in
+    // Hand. Isolate just the charge() method's source rather than the
+    // whole class: recordPayment() legitimately DOES call cashEngine
+    // (a repayment is real cash received - see the Phase 12 E2E bug fix
+    // in creditEngine.ts), so a whole-class substring check would give a
+    // false failure there without actually testing charge()'s behavior.
     const engineSrc = CreditEngine.toString();
-    // Should reference credit_transactions but NOT cash_transactions
-    expect(engineSrc).toContain('credit_transactions');
-    expect(engineSrc).not.toContain('cash_transactions');
+    const chargeStart = engineSrc.indexOf('async charge(');
+    // Stop before recordPayment's own leading comment block (which
+    // mentions cashEngine/cash_transactions descriptively) rather than
+    // at "async recordPayment(" itself, so that comment text isn't
+    // mistaken for charge()'s own code.
+    const chargeEnd = engineSrc.indexOf('---- recordPayment', chargeStart);
+    expect(chargeStart).toBeGreaterThan(-1);
+    expect(chargeEnd).toBeGreaterThan(chargeStart);
+    const chargeSrc = engineSrc.slice(chargeStart, chargeEnd);
+
+    expect(chargeSrc).toContain('credit_transactions');
+    expect(chargeSrc).not.toContain('cash_transactions');
+    expect(chargeSrc).not.toContain('cashEngine');
+  });
+
+  it('credit payment DOES record real cash received', () => {
+    // The counterpart to the above: recordPayment() must post the
+    // matching Dr Cash / Cr Accounts Receivable journal entry and record
+    // the cash inflow, or the books never reflect money actually
+    // collected from credit customers.
+    const engineSrc = CreditEngine.toString();
+    const paymentStart = engineSrc.indexOf('async recordPayment(');
+    const paymentEnd = engineSrc.indexOf('async getOrCreateCreditAccount(', paymentStart);
+    expect(paymentStart).toBeGreaterThan(-1);
+    expect(paymentEnd).toBeGreaterThan(paymentStart);
+    const paymentSrc = engineSrc.slice(paymentStart, paymentEnd);
+
+    expect(paymentSrc).toContain('credit_transactions');
+    expect(paymentSrc).toContain('cashEngine');
+    expect(paymentSrc).toContain('postJournal');
   });
 });
 

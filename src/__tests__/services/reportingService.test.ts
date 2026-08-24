@@ -67,11 +67,11 @@ describe('getPLSummary - Net Profit calculation', () => {
     const ctx = makeUserContext();
     setQueryResult({
       data: [
-        { account_code: '4000', debit_amount: 0, credit_amount: 500_000 }, // revenue
-        { account_code: '4000', debit_amount: 0, credit_amount: 250_000 }, // revenue
-        { account_code: '5000', debit_amount: 300_000, credit_amount: 0 }, // COGS
-        { account_code: '6000', debit_amount: 120_000, credit_amount: 0 }, // expenses
-        { account_code: '6000', debit_amount: 30_000, credit_amount: 0 },  // expenses
+        { account_code: '4000', account_type: 'revenue', debit_amount: 0, credit_amount: 500_000 }, // revenue
+        { account_code: '4000', account_type: 'revenue', debit_amount: 0, credit_amount: 250_000 }, // revenue
+        { account_code: '5000', account_type: 'expense', debit_amount: 300_000, credit_amount: 0 }, // COGS
+        { account_code: '6000', account_type: 'expense', debit_amount: 120_000, credit_amount: 0 }, // expenses
+        { account_code: '6000', account_type: 'expense', debit_amount: 30_000, credit_amount: 0 },  // expenses
       ],
       error: null,
     });
@@ -88,12 +88,43 @@ describe('getPLSummary - Net Profit calculation', () => {
     });
   });
 
-  it('ignores account codes outside 4000/5000/6000', async () => {
+  // Bug fix regression test (found during Phase 12 E2E verification):
+  // getPLSummary used to bucket expenses by hardcoded account_code = '6000'
+  // only. Payroll (businessEngine.recordPayroll) always posts its expense
+  // line to account_code 6400, not 6000, so payroll cost was silently
+  // excluded from Net Profit every time. Expenses are now every
+  // account_type='expense' line except 5000 (COGS) - this must include
+  // 6400 (and any other expense sub-account) regardless of its specific code.
+  it('includes payroll (account_code 6400) and other expense sub-accounts in expenses, not just 6000', async () => {
     const ctx = makeUserContext();
     setQueryResult({
       data: [
-        { account_code: '4000', debit_amount: 0, credit_amount: 100_000 },
-        { account_code: '1000', debit_amount: 50_000, credit_amount: 0 }, // unrelated (asset) account
+        { account_code: '4000', account_type: 'revenue', debit_amount: 0, credit_amount: 500_000 },
+        { account_code: '5000', account_type: 'expense', debit_amount: 200_000, credit_amount: 0 }, // COGS
+        { account_code: '6200', account_type: 'expense', debit_amount: 50_000,  credit_amount: 0 }, // Utilities
+        { account_code: '6400', account_type: 'expense', debit_amount: 80_000,  credit_amount: 0 }, // Salaries and Wages (payroll)
+      ],
+      error: null,
+    });
+
+    const result = await getPLSummary(ctx);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({
+      revenue: 500_000,
+      cogs: 200_000,
+      expenses: 130_000,   // 50,000 Utilities + 80,000 Salaries - both counted, not just 6000
+      grossProfit: 300_000,
+      netProfit: 170_000,
+    });
+  });
+
+  it('ignores non-P&L accounts (e.g. asset lines) when computing P&L', async () => {
+    const ctx = makeUserContext();
+    setQueryResult({
+      data: [
+        { account_code: '4000', account_type: 'revenue', debit_amount: 0, credit_amount: 100_000 },
+        { account_code: '1000', account_type: 'asset', debit_amount: 50_000, credit_amount: 0 }, // unrelated (asset) account
       ],
       error: null,
     });
@@ -126,9 +157,9 @@ describe('getPLSummary - Net Profit calculation', () => {
     const ctx = makeUserContext();
     setQueryResult({
       data: [
-        { account_code: '4000', debit_amount: 0, credit_amount: 100_000 },
-        { account_code: '5000', debit_amount: 40_000, credit_amount: 0 },
-        { account_code: '6000', debit_amount: 90_000, credit_amount: 0 },
+        { account_code: '4000', account_type: 'revenue', debit_amount: 0, credit_amount: 100_000 },
+        { account_code: '5000', account_type: 'expense', debit_amount: 40_000, credit_amount: 0 },
+        { account_code: '6000', account_type: 'expense', debit_amount: 90_000, credit_amount: 0 },
       ],
       error: null,
     });
@@ -143,7 +174,7 @@ describe('getPLSummary - Net Profit calculation', () => {
   it('applies the branch filter when a branch_id is supplied', async () => {
     const ctx = makeUserContext();
     setQueryResult({
-      data: [{ account_code: '4000', debit_amount: 0, credit_amount: 200_000 }],
+      data: [{ account_code: '4000', account_type: 'revenue', debit_amount: 0, credit_amount: 200_000 }],
       error: null,
     });
 
@@ -267,12 +298,18 @@ describe('getRecentSales', () => {
   });
 });
 
-// ---- Permission guards on the RPC-backed report endpoints -------
-// These endpoints call the shared `rpc()` boundary rather than the
-// query builder; the permission check happens before that call, so
-// it is exercised here without needing to fake RPC responses.
+// ---- Permission guards on the report endpoints -------------------
+// The permission check runs before any data query in every one of these
+// functions, so it's exercised here without needing to fake a full
+// response. getSalesByPeriod/getTopProducts/getOutstandingCredit/
+// getExpenseBreakdown still call the shared `rpc()` boundary (documented
+// as a known deferred gap at the top of reportingService.ts);
+// getDashboardKPIs and getCashPosition were rewritten during Phase 12 to
+// query real tables directly instead (see their describe blocks above /
+// dedicated tests), but the permission-guard behavior verified here is
+// identical either way.
 
-describe('RPC-backed report endpoints - permission guards', () => {
+describe('Report endpoints - permission guards', () => {
   it('getDashboardKPIs rejects without reports.view', async () => {
     const result = await getDashboardKPIs(makeNoPermissionContext());
     expect(result.success).toBe(false);

@@ -290,6 +290,33 @@ export interface ExpenseResult {
   journal_entry_id: UUID | null;
 }
 
+// ---- Payroll Commands ----------------------------------------
+
+export interface RecordPayrollCommand {
+  branch_id:         UUID;
+  user_id:           UUID;
+  pay_period_start:  string;
+  pay_period_end:    string;
+  pay_date:          string;
+  basic_salary:      number;
+  allowances?:       number;
+  overtime_pay?:     number;
+  tax_deduction?:    number;
+  nssf_deduction?:   number;
+  other_deductions?: number;
+  payment_method:    PaymentMethod;
+  notes?:            string;
+  idempotency_key?:  string;
+}
+
+export interface PayrollResult {
+  payroll_id:       UUID;
+  payroll_number:   string;
+  net_pay:          number;
+  status:           string;
+  journal_entry_id: UUID | null;
+}
+
 // ---- Reporting Types ---------------------------------------
 
 export interface KpiSummary {

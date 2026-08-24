@@ -3,6 +3,17 @@
 // File: src/services/storage/storageService.ts
 // Purpose: Storage service - secure file upload, download,
 //          signed URLs. Every operation validates business ownership.
+//
+// Phase 8 audit: table references corrected from the nonexistent
+// `file_metadata` to the real `storage_metadata` table
+// (0011_stage2_supporting_domains.sql). uploadFile/deleteFile/the
+// access-log call in getSignedFileUrl still call fn_register_upload,
+// fn_soft_delete_file, fn_log_file_access - none of which exist live or
+// in any tracked migration. They fail safely (return a real error, not a
+// fake success) rather than silently no-op. File upload/delete is not in
+// the core-9 priority list or the 22-step E2E test, so replacing those
+// RPCs with real storage_metadata writes is left as a documented
+// remaining blocker rather than built in this pass.
 // ============================================================
 
 import { supabase, rpc } from '../../lib/supabase';
@@ -121,7 +132,7 @@ export async function getSignedFileUrl(
   try {
     const { data: fileMeta, error: metaError } = await supabase
       .schema('imagecare')
-      .from('file_metadata')
+      .from('storage_metadata')
       .select('bucket_name, storage_path, business_id')
       .eq('id', fileId)
       .is('deleted_at', null)
@@ -194,7 +205,7 @@ export async function listFiles(
 
     let query = supabase
       .schema('imagecare')
-      .from('file_metadata')
+      .from('storage_metadata')
       .select('*', { count: 'exact' })
       .eq('business_id', ctx.business_id)
       .eq('is_active', true)

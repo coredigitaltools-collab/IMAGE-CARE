@@ -115,18 +115,21 @@ describe('pullChanges', () => {
 // ---- pushQueuedOperations -----------------------------------------
 
 describe('pushQueuedOperations', () => {
-  it('creates a sync batch then processes it, returning the batch result', async () => {
+  // Phase 8 audit: `sync_batches` does not exist live or in any tracked
+  // migration - the previous implementation inserted a batch-header row
+  // into that nonexistent table before calling fn_process_sync_batch,
+  // which is the "invent fake persistence" pattern the implementation
+  // pass prohibits. That insert has been removed (see
+  // src/services/sync/syncService.ts); pushQueuedOperations now calls
+  // fn_process_sync_batch directly, so there is no longer an
+  // insert-failure path that can short-circuit before the RPC runs.
+
+  it('processes the batch directly and returns the batch result', async () => {
     rpcMock.mockResolvedValue({ data: { total: 3, accepted: 3, rejected: 0, conflicts: 0 }, error: null });
     const result = await pushQueuedOperations(makeUserContext(), 'device-1');
     expect(result.success).toBe(true);
     expect(result.data?.accepted).toBe(3);
-  });
-
-  it('fails without calling the RPC when the batch record cannot be created', async () => {
-    setInsertResult({ error: { message: 'insert failed' } });
-    const result = await pushQueuedOperations(makeUserContext(), 'device-1');
-    expect(result.success).toBe(false);
-    expect(rpcMock).not.toHaveBeenCalled();
+    expect(rpcMock).toHaveBeenCalledWith('fn_process_sync_batch', expect.objectContaining({ p_device_id: 'device-1' }));
   });
 
   it('fails gracefully when batch processing itself errors', async () => {
@@ -172,12 +175,15 @@ describe('runSyncSession', () => {
   });
 
   it('stops and reports failure without pulling when the push fails', async () => {
-    setInsertResult({ error: { message: 'insert failed' } }); // push fails before any RPC call
+    // pushQueuedOperations no longer has an insert-gated batch-header
+    // step (see the pushQueuedOperations describe block above) - the
+    // push RPC call itself is what can fail now.
+    rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'push processing failed' } }); // push
 
     const result = await runSyncSession(makeUserContext(), 'device-1', 0);
 
     expect(result.success).toBe(false);
-    expect(rpcMock).not.toHaveBeenCalled();
+    expect(rpcMock).toHaveBeenCalledTimes(1); // pull never attempted after push fails
   });
 
   it('reports failure when the push succeeds but the pull fails', async () => {

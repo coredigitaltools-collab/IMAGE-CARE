@@ -136,13 +136,26 @@ export async function recordInvoicePayment(
   }
   try {
     // Fetch invoice to validate
-    const { data: invoice } = await supabase.schema('imagecare').from('invoices').select('balance_due, status').eq('id', input.invoice_id).eq('business_id', ctx.business_id).single();
+    const { data: invoice } = await supabase.schema('imagecare').from('invoices').select('amount_paid, balance_due, status').eq('id', input.invoice_id).eq('business_id', ctx.business_id).single();
     if (!invoice) return serviceFail('RESOURCE_NOT_FOUND', 'Invoice not found.', { requestId });
     if (invoice.status === 'paid') return serviceFail('BUSINESS_RULE_VIOLATION', 'Invoice is already fully paid.', { requestId });
     if (input.amount > invoice.balance_due) return serviceFail('BUSINESS_RULE_VIOLATION', 'Payment exceeds outstanding balance.', { requestId });
 
-    const _newPaid = invoice.balance_due - input.amount <= 0.01 ? 0 : invoice.balance_due - input.amount;
-    const { error } = await supabase.schema('imagecare').from('invoices').update({ amount_paid: (invoice.balance_due) + input.amount - invoice.balance_due, balance_due: Math.max(0, invoice.balance_due - input.amount), updated_at: new Date().toISOString() }).eq('id', input.invoice_id);
+    // Bug fix (Phase 6, item 3-class bug): the previous update wrote
+    // `amount_paid: balance_due + amount - balance_due`, which
+    // algebraically simplifies to just `amount` - every payment
+    // OVERWROTE amount_paid with only its own value instead of
+    // accumulating it, so amount_paid silently diverged from
+    // balance_due after any invoice's second payment. Fixed to add
+    // this payment onto the running total, and to flip status to
+    // 'paid' once the balance reaches zero.
+    const newBalanceDue = Math.max(0, invoice.balance_due - input.amount);
+    const { error } = await supabase.schema('imagecare').from('invoices').update({
+      amount_paid: Number(invoice.amount_paid ?? 0) + input.amount,
+      balance_due: newBalanceDue,
+      status:      newBalanceDue <= 0.01 ? 'paid' : invoice.status,
+      updated_at:  new Date().toISOString(),
+    }).eq('id', input.invoice_id);
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to record payment.', { requestId });
     return serviceOk(undefined, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to record payment.', { requestId }); }

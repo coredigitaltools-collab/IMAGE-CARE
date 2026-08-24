@@ -19,6 +19,8 @@ import type {
   CreateCreditChargeCommand, RecordCreditPaymentCommand, CreditResult,
 } from '../types';
 import { engineOk, engineFail, makeError } from '../types';
+import { accountingEngine } from '../accounting/accountingEngine';
+import { cashEngine } from '../cash/cashEngine';
 
 export class CreditEngine {
 
@@ -111,6 +113,19 @@ export class CreditEngine {
   // Amount must not exceed outstanding balance.
   // (DB trigger fn_update_credit_balance enforces this at DB level;
   //  engine validates first to give a clear error before hitting the DB.)
+  //
+  // Bug fix (found during Phase 12 E2E verification): this previously
+  // only inserted a credit_transactions row - the DB trigger correctly
+  // updates credit_accounts.current_balance and customers.credit_balance,
+  // but nothing ever posted the matching Dr Cash / Cr Accounts
+  // Receivable journal entry, and nothing recorded the cash actually
+  // received in cash_transactions. Unlike charge() (called from inside
+  // postSale, which already posts the sale's full journal including the
+  // Accounts Receivable line), recordPayment() has no other caller that
+  // posts accounting for it - it IS the transaction. Left unfixed, the
+  // books stayed permanently unbalanced (Receivable never credited back)
+  // and Cash in Hand never reflected money actually collected from
+  // credit customers.
 
   async recordPayment(
     ctx: EngineContext,
@@ -134,11 +149,51 @@ export class CreditEngine {
       ));
     }
 
+    const branchId = ctx.branch_id ?? (await this.getBranchFromAccount(cmd.credit_account_id));
+    if (!branchId) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Could not determine branch for this credit account.'));
+    }
+
+    // Post accounting: Dr Cash/Mobile Money/Bank, Cr Accounts Receivable
+    const receivableAcct = await accountingEngine.resolveAccountCode(ctx.business_id, '1200');
+    let cashCode = '1100';
+    if (cmd.payment_method === 'mobile_money') cashCode = '1120';
+    else if (cmd.payment_method === 'bank_transfer' || cmd.payment_method === 'card') cashCode = '1130';
+    const cashAcct = await accountingEngine.resolveAccountCode(ctx.business_id, cashCode);
+
+    const jeResult = await accountingEngine.postJournal(ctx, {
+      branch_id:      branchId,
+      entry_type:     'credit_payment',
+      description:    'Credit repayment received',
+      reference_type: 'credit_payment',
+      reference_id:   cmd.credit_account_id,
+      lines: [
+        {
+          account_code:  cashCode,
+          account_name:  cashAcct.ok ? cashAcct.data!.account_name : 'Cash',
+          account_type:  'asset',
+          account_id:    cashAcct.ok ? cashAcct.data!.id : undefined,
+          debit_amount:  cmd.amount,
+          credit_amount: 0,
+        },
+        {
+          account_code:  '1200',
+          account_name:  receivableAcct.ok ? receivableAcct.data!.account_name : 'Accounts Receivable',
+          account_type:  'asset',
+          account_id:    receivableAcct.ok ? receivableAcct.data!.id : undefined,
+          debit_amount:  0,
+          credit_amount: cmd.amount,
+          description:   'Payment clears receivable',
+        },
+      ],
+    });
+    if (!jeResult.ok) return engineFail(jeResult.error!);
+
     const { data, error } = await db.credit_transactions()
-      
+
       .insert({
         business_id:       ctx.business_id,
-        branch_id:         ctx.branch_id ?? (await this.getBranchFromAccount(cmd.credit_account_id)),
+        branch_id:         branchId,
         credit_account_id: cmd.credit_account_id,
         transaction_type:  'payment',
         amount:            cmd.amount,
@@ -158,6 +213,19 @@ export class CreditEngine {
       }
       return engineFail(makeError('DATABASE_ERROR', 'Failed to record credit payment.', error?.message));
     }
+
+    // Record cash inflow (received from customer)
+    const cashResult = await cashEngine.recordMovement(ctx, {
+      branch_id:       branchId,
+      transaction_type:'cash_in',
+      amount:          cmd.amount,
+      payment_method:  cmd.payment_method,
+      reference_type:  'credit_payment',
+      reference_id:    data.id as UUID,
+      description:     'Credit repayment received',
+      notes:           cmd.notes,
+    });
+    if (!cashResult.ok) return engineFail(cashResult.error!);
 
     return engineOk({
       transaction_id:    data.id as UUID,

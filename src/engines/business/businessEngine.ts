@@ -26,6 +26,7 @@ import type {
   EngineContext, EngineResult,
   CreateSaleCommand, PostSaleCommand, SaleResult,
   RecordExpenseCommand, ExpenseResult,
+  RecordPayrollCommand, PayrollResult,
 } from '../types';
 import { engineOk, engineFail, makeError } from '../types';
 import { inventoryEngine } from '../inventory/inventoryEngine';
@@ -89,11 +90,20 @@ async function nextSaleNumber(businessId: UUID): Promise<string> {
 
 async function nextExpenseNumber(businessId: UUID): Promise<string> {
   const { count } = await db.expenses()
-    
+
     .select('id', { count: 'exact', head: true })
     .eq('business_id', businessId);
   const seq = ((count ?? 0) + 1).toString().padStart(6, '0');
   return `EXP-${seq}`;
+}
+
+async function nextPayrollNumber(businessId: UUID): Promise<string> {
+  const { count } = await db.payroll()
+
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId);
+  const seq = ((count ?? 0) + 1).toString().padStart(6, '0');
+  return `PAY-${seq}`;
 }
 
 // ---- Business context validation ---------------------------
@@ -498,6 +508,143 @@ export class BusinessEngine {
     if (cmd.idempotency_key) {
       await markIdempotencyComplete(
         ctx.business_id, ctx.user_id, cmd.idempotency_key, 'expense',
+        result as unknown as Record<string, unknown>
+      );
+    }
+
+    return engineOk(result);
+  }
+
+  // ---- recordPayroll ----------------------------------------
+  // Records one employee's pay for a period and posts accounting
+  // (Dr 6400 Salaries and Wages, Cr Cash) plus a cash outflow.
+  // Mirrors recordExpense's shape - payroll is, from the accounting
+  // engine's point of view, a specialized expense.
+
+  async recordPayroll(
+    ctx: EngineContext,
+    cmd: RecordPayrollCommand,
+  ): Promise<EngineResult<PayrollResult>> {
+    if (cmd.basic_salary <= 0) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Basic salary must be positive.', undefined, 'basic_salary'));
+    }
+
+    if (cmd.idempotency_key) {
+      const { isDuplicate, cachedResult } = await checkIdempotency(
+        ctx.business_id, cmd.idempotency_key, 'payroll'
+      );
+      if (isDuplicate && cachedResult) {
+        return engineOk(cachedResult as unknown as PayrollResult);
+      }
+    }
+
+    const ctxErr = await validateContext(ctx, cmd.branch_id);
+    if (ctxErr) return engineFail(ctxErr);
+
+    const allowances      = cmd.allowances       ?? 0;
+    const overtimePay     = cmd.overtime_pay      ?? 0;
+    const taxDeduction    = cmd.tax_deduction     ?? 0;
+    const nssfDeduction   = cmd.nssf_deduction    ?? 0;
+    const otherDeductions = cmd.other_deductions  ?? 0;
+
+    const grossPay        = cmd.basic_salary + allowances + overtimePay;
+    const totalDeductions = taxDeduction + nssfDeduction + otherDeductions;
+    const netPay          = grossPay - totalDeductions;
+
+    if (netPay < 0) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Deductions cannot exceed gross pay.', undefined, 'net_pay'));
+    }
+
+    const payrollNum = await nextPayrollNumber(ctx.business_id);
+
+    const { data: payroll, error: pErr } = await db.payroll()
+      .insert({
+        business_id:       ctx.business_id,
+        branch_id:         cmd.branch_id,
+        user_id:           cmd.user_id,
+        payroll_number:    payrollNum,
+        pay_period_start:  cmd.pay_period_start,
+        pay_period_end:    cmd.pay_period_end,
+        pay_date:          cmd.pay_date,
+        basic_salary:      cmd.basic_salary,
+        allowances,
+        overtime_pay:      overtimePay,
+        gross_pay:         grossPay,
+        tax_deduction:     taxDeduction,
+        nssf_deduction:    nssfDeduction,
+        other_deductions:  otherDeductions,
+        total_deductions:  totalDeductions,
+        net_pay:           netPay,
+        payment_method:    cmd.payment_method,
+        status:            'paid',
+        notes:             cmd.notes ?? null,
+        created_by:        ctx.user_id,
+      })
+      .select('id, payroll_number, net_pay, status')
+      .single();
+
+    if (pErr || !payroll) {
+      return engineFail(makeError('DATABASE_ERROR', 'Failed to record payroll.', pErr?.message));
+    }
+
+    // Post accounting: Dr 6400 Salaries and Wages, Cr Cash
+    const linesResult = await accountingEngine.buildExpenseJournalLines(ctx, {
+      amount:        netPay,
+      paymentMethod: cmd.payment_method,
+      category:      'Salaries and Wages',
+    });
+    if (!linesResult.ok) return engineFail(linesResult.error!);
+
+    // buildExpenseJournalLines resolves account 6000 by default; payroll
+    // uses the more specific 6400 code, so swap the debit line's code.
+    const payrollLines = linesResult.data!.map(l =>
+      l.debit_amount > 0 ? { ...l, account_code: '6400', account_name: 'Salaries and Wages' } : l
+    );
+
+    const jeResult = await accountingEngine.postJournal(ctx, {
+      branch_id:      cmd.branch_id,
+      entry_type:     'payroll',
+      description:    `Payroll: ${payrollNum}`,
+      reference_type: 'payroll',
+      reference_id:   payroll.id as UUID,
+      lines:          payrollLines,
+    });
+    if (!jeResult.ok) return engineFail(jeResult.error!);
+
+    // Record cash outflow
+    const cashResult = await cashEngine.recordMovement(ctx, {
+      branch_id:       cmd.branch_id,
+      transaction_type:'cash_out',
+      amount:          netPay,
+      payment_method:  cmd.payment_method,
+      reference_type:  'payroll',
+      reference_id:    payroll.id as UUID,
+      description:     `Payroll payment: ${payrollNum}`,
+    });
+    if (!cashResult.ok) return engineFail(cashResult.error!);
+
+    await db.payroll()
+      .update({ journal_entry_id: jeResult.data!.journal_entry_id, updated_by: ctx.user_id })
+      .eq('id', payroll.id);
+
+    const result: PayrollResult = {
+      payroll_id:       payroll.id as UUID,
+      payroll_number:   payroll.payroll_number as string,
+      net_pay:          Number(payroll.net_pay),
+      status:           payroll.status as string,
+      journal_entry_id: jeResult.data!.journal_entry_id,
+    };
+
+    await auditEngine.log(ctx, {
+      table_name: 'payroll',
+      record_id:  payroll.id as UUID,
+      action:     'insert',
+      new_value:  { payroll_number: result.payroll_number, net_pay: result.net_pay },
+    });
+
+    if (cmd.idempotency_key) {
+      await markIdempotencyComplete(
+        ctx.business_id, ctx.user_id, cmd.idempotency_key, 'payroll',
         result as unknown as Record<string, unknown>
       );
     }

@@ -496,11 +496,43 @@ export async function listBranches(ctx: UserContext): Promise<ApiResult<BranchRe
 
 export async function createBranch(
   ctx: UserContext,
-  input: { name: string; address?: string; phone?: string }
+  input: { name: string; code?: string; address?: string; phone?: string }
 ): Promise<ApiResult<BranchRecord>> {
   try {
+    // Bug fix (Phase 6, item 2): the column is `is_main_branch`, not
+    // `is_main` - the previous insert silently dropped that field
+    // (PostgREST ignores unknown columns) so every branch was created as
+    // a non-main branch. fn_register_business() creates the business and
+    // owner user but never a branch, so the first branch a business
+    // creates through this path becomes its main branch.
+    // `code` is NOT NULL + UNIQUE per business in the schema
+    // (0001_stage1_foundation.sql) but was previously not even part of
+    // this function's declared input type - the value happened to reach
+    // the database anyway when called from BranchFormModal (which does
+    // collect it), but any caller relying on the type signature had no
+    // compile-time indication it was required. Default to a generated
+    // code so this function is safe to call without one too.
+    const { count, error: countError } = await supabase
+      .schema('imagecare')
+      .from('branches')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null);
+    if (countError) return fail(parseError(countError));
+
+    const code = input.code?.trim()
+      || input.name.trim().slice(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '') + '-' + ((count ?? 0) + 1).toString().padStart(2, '0');
+
     const { data, error } = await supabase.schema('imagecare').from('branches')
-      .insert({ ...input, business_id: ctx.business_id, is_active: true, is_main: false })
+      .insert({
+        name:           input.name,
+        code,
+        address:        input.address ?? null,
+        phone:          input.phone ?? null,
+        business_id:    ctx.business_id,
+        is_active:      true,
+        is_main_branch: (count ?? 0) === 0,
+      })
       .select().single();
     if (error) return fail(parseError(error));
     return ok(data as unknown as BranchRecord);

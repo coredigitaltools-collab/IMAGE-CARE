@@ -13,7 +13,7 @@
 // ============================================================
 
 import { db } from '../../lib/db';
-import type { UUID } from '../../types/database';
+import type { UUID, PaymentMethod } from '../../types/database';
 import type {
   EngineContext, EngineResult,
   CreatePurchaseCommand, ReceiveStockCommand, PurchaseResult,
@@ -22,6 +22,32 @@ import { engineOk, engineFail, makeError } from '../types';
 import { inventoryEngine } from '../inventory/inventoryEngine';
 import { accountingEngine } from '../accounting/accountingEngine';
 import { cashEngine } from '../cash/cashEngine';
+import { auditEngine } from '../audit/auditEngine';
+
+// ---- Supplier Payment Command --------------------------------
+// Not part of a purchase order's own receipt flow - a supplier
+// payment clears the running `suppliers.outstanding` balance
+// (there is no dedicated supplier "credit account" table the way
+// customers have credit_accounts; `outstanding` is maintained
+// directly on the suppliers row since no DB trigger does it).
+
+export interface RecordSupplierPaymentCommand {
+  supplier_id:      UUID;
+  branch_id:        UUID;
+  amount:           number;
+  payment_method:   PaymentMethod;
+  purchase_id?:     UUID;
+  reference_number?: string;
+  notes?:           string;
+  idempotency_key?: string;
+}
+
+export interface SupplierPaymentResult {
+  transaction_id:  UUID;
+  supplier_id:     UUID;
+  amount:          number;
+  new_outstanding: number;
+}
 
 async function nextPurchaseNumber(businessId: UUID): Promise<string> {
   const { count } = await db.purchases()
@@ -201,6 +227,29 @@ export class PurchasingEngine {
         description:     `Payment for purchase ${purchase.purchase_number}`,
       });
       if (!cashResult.ok) return engineFail(cashResult.error!);
+    } else if (purchase.supplier_id) {
+      // Bug fix (Phase 6, item 10: accounting balance fields not
+      // maintained): a credit purchase increases Accounts Payable
+      // (posted above) but nothing was incrementing the supplier's
+      // denormalized `outstanding` balance to match - only
+      // recordSupplierPayment() below ever decremented it. Left
+      // unfixed, `outstanding` starts at 0 and never reflects real
+      // debt, so the very first supplier payment against real unpaid
+      // purchases would incorrectly fail with "payment exceeds
+      // outstanding balance (0)".
+      const { data: supplier } = await db.suppliers()
+
+        .select('outstanding')
+        .eq('id', purchase.supplier_id)
+        .eq('business_id', ctx.business_id)
+        .single();
+
+      if (supplier) {
+        await db.suppliers()
+
+          .update({ outstanding: Number(supplier.outstanding) + Number(purchase.total_amount), updated_by: ctx.user_id })
+          .eq('id', purchase.supplier_id);
+      }
     }
 
     // Confirm the purchase
@@ -225,6 +274,150 @@ export class PurchasingEngine {
       total_amount:     Number(purchase.total_amount),
       status:           'confirmed',
       journal_entry_id: jeResult.data!.journal_entry_id,
+    });
+  }
+
+  // ---- recordSupplierPayment -------------------------------
+  // Records a cash outflow against a supplier's outstanding
+  // balance, posts Dr Accounts Payable / Cr Cash, and decrements
+  // suppliers.outstanding (no DB trigger maintains this column,
+  // unlike imagecare.fn_update_credit_balance for customer credit,
+  // so the engine is the sole authority here).
+  //
+  // Bug fix (found during Phase 12 E2E verification): this posted
+  // entry_type: 'supplier_payment', but imagecare.journal_entry_type
+  // is a Postgres ENUM whose only values are 'sale', 'purchase',
+  // 'payroll', 'expense', 'credit_payment', 'bank_deposit',
+  // 'bank_withdrawal', 'adjustment', 'opening_balance', 'transfer' -
+  // there is no 'supplier_payment' member. PostJournalCommand.entry_type
+  // is typed as a plain `string` in src/engines/types.ts, so TypeScript
+  // never caught this; every real supplier payment would fail at the
+  // database with error 22P02 (invalid input value for enum) the
+  // moment it tried to insert the journal entry, confirmed live against
+  // the Supabase project. Changed to 'purchase', the closest existing
+  // enum member (this journal entry is always tied to a purchase's
+  // payable), matching the entry_type already used by
+  // confirmPurchase()/receiveStock() above for the original purchase.
+
+  async recordSupplierPayment(
+    ctx: EngineContext,
+    cmd: RecordSupplierPaymentCommand,
+  ): Promise<EngineResult<SupplierPaymentResult>> {
+    if (cmd.amount <= 0) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Payment amount must be positive.', undefined, 'amount'));
+    }
+
+    const { data: supplier, error: supErr } = await db.suppliers()
+      .select('id, business_id, outstanding, name')
+      .eq('id', cmd.supplier_id)
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .single();
+
+    if (supErr || !supplier) {
+      return engineFail(makeError('RECORD_NOT_FOUND', 'Supplier not found.'));
+    }
+
+    const outstanding = Number(supplier.outstanding);
+
+    if (cmd.amount > outstanding) {
+      return engineFail(makeError(
+        'OVERPAYMENT',
+        `Payment amount (${cmd.amount}) exceeds outstanding balance (${outstanding}) for this supplier.`,
+        undefined, 'amount',
+      ));
+    }
+
+    // Post accounting: Dr Accounts Payable, Cr Cash
+    const payableAcct = await accountingEngine.resolveAccountCode(ctx.business_id, '2000');
+    let cashCode = '1100';
+    if (cmd.payment_method === 'mobile_money') cashCode = '1120';
+    else if (cmd.payment_method === 'bank_transfer' || cmd.payment_method === 'card') cashCode = '1130';
+    const cashAcct = await accountingEngine.resolveAccountCode(ctx.business_id, cashCode);
+
+    const jeResult = await accountingEngine.postJournal(ctx, {
+      branch_id:      cmd.branch_id,
+      entry_type:     'purchase',
+      description:    `Payment to supplier: ${supplier.name}`,
+      reference_type: 'supplier_payment',
+      reference_id:   cmd.purchase_id ?? cmd.supplier_id,
+      lines: [
+        {
+          account_code:  '2000',
+          account_name:  payableAcct.ok ? payableAcct.data!.account_name : 'Accounts Payable',
+          account_type:  'liability',
+          account_id:    payableAcct.ok ? payableAcct.data!.id : undefined,
+          debit_amount:  cmd.amount,
+          credit_amount: 0,
+          description:   'Payment clears payable',
+        },
+        {
+          account_code:  cashCode,
+          account_name:  cashAcct.ok ? cashAcct.data!.account_name : 'Cash',
+          account_type:  'asset',
+          account_id:    cashAcct.ok ? cashAcct.data!.id : undefined,
+          debit_amount:  0,
+          credit_amount: cmd.amount,
+        },
+      ],
+    });
+    if (!jeResult.ok) return engineFail(jeResult.error!);
+
+    // Record cash outflow
+    const cashResult = await cashEngine.recordMovement(ctx, {
+      branch_id:       cmd.branch_id,
+      transaction_type:'cash_out',
+      amount:          cmd.amount,
+      payment_method:  cmd.payment_method,
+      reference_type:  'supplier_payment',
+      reference_id:    cmd.purchase_id ?? cmd.supplier_id,
+      description:     `Payment to supplier: ${supplier.name}`,
+      notes:           cmd.notes,
+    });
+    if (!cashResult.ok) return engineFail(cashResult.error!);
+
+    // Decrement the supplier's running outstanding balance
+    const newOutstanding = outstanding - cmd.amount;
+    const { error: updErr } = await db.suppliers()
+      .update({ outstanding: newOutstanding, updated_by: ctx.user_id })
+      .eq('id', cmd.supplier_id)
+      .eq('business_id', ctx.business_id);
+
+    if (updErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Failed to update supplier balance.', updErr.message));
+    }
+
+    // If tied to a specific purchase, clear its balance_due too
+    if (cmd.purchase_id) {
+      const { data: purchase } = await db.purchases()
+        .select('amount_paid, balance_due')
+        .eq('id', cmd.purchase_id)
+        .eq('business_id', ctx.business_id)
+        .single();
+
+      if (purchase) {
+        await db.purchases()
+          .update({
+            amount_paid: Number(purchase.amount_paid) + cmd.amount,
+            balance_due: Math.max(0, Number(purchase.balance_due) - cmd.amount),
+            updated_by:  ctx.user_id,
+          })
+          .eq('id', cmd.purchase_id);
+      }
+    }
+
+    await auditEngine.log(ctx, {
+      table_name: 'suppliers',
+      record_id:  cmd.supplier_id,
+      action:     'update',
+      new_value:  { outstanding: newOutstanding },
+    });
+
+    return engineOk({
+      transaction_id:  cashResult.data!.transaction_id,
+      supplier_id:     cmd.supplier_id,
+      amount:          cmd.amount,
+      new_outstanding: newOutstanding,
     });
   }
 }

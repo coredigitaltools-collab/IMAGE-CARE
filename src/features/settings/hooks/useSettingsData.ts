@@ -44,7 +44,7 @@ export function useBranches(_userId?: string) {
 export function useCreateBranch(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (input: { name: string; address?: string; phone?: string }) => createBranch(ctx, input).then(unwrap), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'branches'] }) });
+  return useMutation({ mutationFn: (input: Parameters<typeof createBranch>[1]) => createBranch(ctx, input).then(unwrap), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'branches'] }) });
 }
 
 export function useUpdateBranch(_userId?: string) {

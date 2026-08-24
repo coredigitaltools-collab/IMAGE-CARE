@@ -151,7 +151,22 @@ export async function register(input: RegisterInput): Promise<ApiResult<LoginRes
     });
 
     if (regError || !regData) {
-      return fail({ code: 'SERVER_ERROR', message: 'Could not set up your business. Please try again.' });
+      // The full Postgres/PostgREST error is never shown in the UI, but it
+      // is logged here so the person running the app can diagnose it via
+      // devtools (e.g. the migration not having been run yet in Supabase -
+      // see database/migrations/0020_stage7_pin_auth.sql).
+      console.error('fn_register_business failed:', regError);
+      const notDeployed = regError && (
+        regError.code === 'PGRST202' ||
+        regError.code === '42883' ||
+        /function .*fn_register_business.* does not exist|could not find the function/i.test(regError.message ?? '')
+      );
+      return fail({
+        code: 'SERVER_ERROR',
+        message: notDeployed
+          ? 'Registration is not set up yet on this database - the 0020_stage7_pin_auth.sql migration has not been run in Supabase. Contact your administrator.'
+          : 'Could not set up your business. Please try again.',
+      });
     }
 
     const businessId = (regData as { business_id: UUID }).business_id;

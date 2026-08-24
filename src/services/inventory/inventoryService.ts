@@ -7,7 +7,7 @@
 //          All changes go through the Business Engine.
 // ============================================================
 
-import { supabase, rpc } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { canDo } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -16,6 +16,17 @@ import type { InventoryMovement, UUID } from '../../types/database';
 import type { StockSummaryRow } from '../../types/database';
 import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
+import { inventoryEngine } from '../../engines';
+import type { EngineContext } from '../../engines/types';
+
+function toEngineContext(ctx: UserContext, branchId?: UUID): EngineContext {
+  return {
+    business_id: ctx.business_id,
+    branch_id:   branchId ?? ctx.branch_id ?? null,
+    user_id:     ctx.user_id,
+    user_ctx:    ctx,
+  };
+}
 
 // ---- Get Stock ---------------------------------------------
 
@@ -155,38 +166,38 @@ export async function getInventoryMovements(
   }
 
   try {
+    // fn_list_inventory_movements_cursor does not exist live or in any
+    // tracked migration (confirmed by Phase 1 verification) - replaced with
+    // a direct offset-paginated query against inventory_movements.
     const pageSize = Math.min(
       pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE,
       APP_CONSTANTS.MAX_PAGE_SIZE
     );
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
 
-    const { data, error } = await rpc('fn_list_inventory_movements_cursor', {
-      p_business_id: ctx.business_id,
-      p_branch_id:   filter.branch_id,
-      p_product_id:  filter.product_id  ?? null,
-      p_type:        filter.movement_type ?? null,
-      p_from_date:   filter.date?.from   ?? null,
-      p_to_date:     filter.date?.to     ?? null,
-      p_cursor_date: pagination.cursor_date ?? null,
-      p_cursor_id:   pagination.cursor_id   ?? null,
-      p_limit:       pageSize + 1,
-    });
+    let query = supabase.schema('imagecare').from('inventory_movements')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .eq('branch_id', filter.branch_id)
+      .range(offset, offset + pageSize - 1)
+      .order('moved_at', { ascending: false });
 
+    if (filter.product_id)     query = query.eq('product_id', filter.product_id);
+    if (filter.movement_type)  query = query.eq('movement_type', filter.movement_type);
+    if (filter.date?.from)     query = query.gte('moved_at', filter.date.from);
+    if (filter.date?.to)       query = query.lte('moved_at', filter.date.to);
+
+    const { data, error, count } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load movements.', { requestId });
 
-    const rows = (data ?? []) as InventoryMovement[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1] as InventoryMovement;
-
     return serviceOk<PagedResponse<InventoryMovement>>({
-      items,
+      items: (data ?? []) as InventoryMovement[],
       pagination: {
-        total_count:      0,
+        total_count:      count ?? 0,
         page_size:        pageSize,
-        has_more:         hasMore,
-        next_cursor_date: hasMore ? last?.moved_at ?? null : null,
-        next_cursor_id:   hasMore ? last?.id ?? null : null,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
       },
     }, requestId);
   } catch {
@@ -224,23 +235,38 @@ export async function createStockAdjustment(
   }
 
   try {
-    const { error } = await rpc('engine_stock_adjustment', {
-      p_business_id:     ctx.business_id,
-      p_branch_id:       request.branch_id,
-      p_product_id:      request.product_id,
-      p_quantity:        request.quantity,
-      p_reason:          request.reason,
-      p_user_id:         ctx.user_id,
-      p_notes:           request.notes ?? null,
-      p_idempotency_key: request.idempotency_key ?? uuidv4(),
+    // engine_stock_adjustment does not exist live or in any tracked
+    // migration (confirmed by Phase 1 verification) - replaced with a
+    // direct call to the real inventoryEngine.recordMovement(), which is
+    // the single authoritative place inventory movements are written.
+    const { data: product, error: productError } = await supabase
+      .schema('imagecare')
+      .from('products')
+      .select('cost_price')
+      .eq('id', request.product_id)
+      .eq('business_id', ctx.business_id)
+      .single();
+
+    if (productError || !product) {
+      return serviceFail('RESOURCE_NOT_FOUND', 'Product not found.', { requestId });
+    }
+
+    const result = await inventoryEngine.recordMovement(toEngineContext(ctx, request.branch_id), {
+      branch_id:        request.branch_id,
+      product_id:       request.product_id,
+      movement_type:    request.quantity > 0 ? 'adjustment_in' : 'adjustment_out',
+      quantity:         Math.abs(request.quantity),
+      unit_cost:        Number(product.cost_price ?? 0),
+      reference_type:   'adjustment',
+      notes:            request.notes ? `${request.reason} - ${request.notes}` : request.reason,
+      idempotency_key:  request.idempotency_key ?? uuidv4(),
     });
 
-    if (error) {
-      const appErr = { message: error.message };
-      if (error.message.includes('INSUFFICIENT_STOCK')) {
+    if (result.error) {
+      if (result.error.code === 'INSUFFICIENT_STOCK') {
         return serviceFail('BUSINESS_RULE_VIOLATION', 'Insufficient stock for this adjustment.', { requestId });
       }
-      return serviceFail('INTERNAL_ERROR', appErr.message, { requestId });
+      return serviceFail('INTERNAL_ERROR', result.error.message, { requestId });
     }
 
     return serviceOk(undefined, requestId);
@@ -284,73 +310,69 @@ export async function createStockTransfer(
   }
 
   try {
+    // stock_transfers / stock_transfer_items tables and the
+    // engine_dispatch_transfer / engine_receive_transfer RPCs do not exist
+    // live or in any tracked migration (confirmed by Phase 1 verification).
+    // The real inventoryEngine.transferStock() only supports a single,
+    // atomic transfer_out + transfer_in pair with no persistent "transfer"
+    // entity - so a multi-line transfer request is applied as one atomic
+    // movement pair per line, with no pending/in-transit intermediate
+    // state. This is a deliberate simplification (documented in the final
+    // report) rather than inventing new tables for a two-phase workflow.
     const transferId = uuidv4();
+    const engineCtx = toEngineContext(ctx, request.from_branch_id);
 
-    // Create transfer header
-    const { error: headerError } = await supabase
-      .schema('imagecare')
-      .from('stock_transfers')
-      .insert({
-        id:              transferId,
-        business_id:     ctx.business_id,
+    for (const item of request.items) {
+      let unitCost = item.unit_cost;
+      if (unitCost === undefined) {
+        const { data: product } = await supabase
+          .schema('imagecare')
+          .from('products')
+          .select('cost_price')
+          .eq('id', item.product_id)
+          .eq('business_id', ctx.business_id)
+          .single();
+        unitCost = Number(product?.cost_price ?? 0);
+      }
+
+      const result = await inventoryEngine.transferStock(engineCtx, {
         from_branch_id:  request.from_branch_id,
         to_branch_id:    request.to_branch_id,
-        transfer_number: 'AUTO',
-        status:          'pending',
-        notes:           request.notes ?? null,
-        created_by:      ctx.user_id,
+        product_id:      item.product_id,
+        quantity:        item.quantity,
+        unit_cost:       unitCost,
+        reference_type:  'transfer',
+        reference_id:    transferId,
+        idempotency_key: request.idempotency_key ? `${request.idempotency_key}:${item.product_id}` : uuidv4(),
+        notes:           request.notes,
       });
 
-    if (headerError) return serviceFail('INTERNAL_ERROR', 'Failed to create transfer.', { requestId });
-
-    // Insert items
-    const items = request.items.map(item => ({
-      id:          uuidv4(),
-      transfer_id: transferId,
-      business_id: ctx.business_id,
-      product_id:  item.product_id,
-      quantity:    item.quantity,
-      unit_cost:   item.unit_cost ?? 0,
-    }));
-
-    const { error: itemsError } = await supabase
-      .schema('imagecare')
-      .from('stock_transfer_items')
-      .insert(items);
-
-    if (itemsError) return serviceFail('INTERNAL_ERROR', 'Failed to add transfer items.', { requestId });
-
-    // Dispatch (deduct from source)
-    const { error: dispatchError } = await rpc('engine_dispatch_transfer', {
-      p_transfer_id:     transferId,
-      p_user_id:         ctx.user_id,
-      p_idempotency_key: request.idempotency_key ?? uuidv4(),
-    });
-
-    if (dispatchError) {
-      return serviceFail('BUSINESS_RULE_VIOLATION', dispatchError.message, { requestId });
+      if (result.error) {
+        if (result.error.code === 'INSUFFICIENT_STOCK') {
+          return serviceFail('BUSINESS_RULE_VIOLATION', result.error.message, { requestId });
+        }
+        return serviceFail('INTERNAL_ERROR', result.error.message, { requestId });
+      }
     }
-
-    const { data: transfer } = await supabase
-      .schema('imagecare')
-      .from('stock_transfers')
-      .select('transfer_number, status')
-      .eq('id', transferId)
-      .single();
 
     return serviceOk<StockTransferResult>({
       transfer_id:     transferId,
-      transfer_number: transfer?.transfer_number ?? '',
-      status:          transfer?.status ?? 'dispatched',
+      transfer_number: `TRF-${transferId.slice(0, 8).toUpperCase()}`,
+      status:          'completed',
     }, requestId);
   } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to create transfer.', { requestId });
   }
 }
 
+// receiveStockTransfer is retained for API compatibility but is now a
+// no-op: createStockTransfer() applies transfer_out + transfer_in
+// atomically (see comment above), so there is no separate pending/receive
+// step to perform. Not currently called anywhere in the frontend
+// (confirmed by repo-wide search).
 export async function receiveStockTransfer(
   ctx: UserContext,
-  transferId: UUID
+  _transferId: UUID
 ): Promise<ServiceResponse<void>> {
   const requestId = makeRequestId();
 
@@ -358,16 +380,5 @@ export async function receiveStockTransfer(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to receive transfers.', { requestId });
   }
 
-  try {
-    const { error } = await rpc('engine_receive_transfer', {
-      p_transfer_id: transferId,
-      p_user_id:     ctx.user_id,
-      p_idempotency_key: uuidv4(),
-    });
-
-    if (error) return serviceFail('BUSINESS_RULE_VIOLATION', error.message, { requestId });
-    return serviceOk(undefined, requestId);
-  } catch {
-    return serviceFail('INTERNAL_ERROR', 'Failed to receive transfer.', { requestId });
-  }
+  return serviceOk(undefined, requestId);
 }
