@@ -93,7 +93,7 @@ export function ProductFormModal({
   })
 
   return (
-    <Modal title={isEditing ? 'Edit product' : 'Add product'} onClose={onClose}>
+    <Modal title={isEditing ? 'Edit product' : 'Add product'} onClose={onClose} size="lg">
       <form onSubmit={submit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
         <div className="flex items-center gap-3">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">

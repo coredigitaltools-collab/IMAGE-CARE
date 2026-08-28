@@ -108,7 +108,7 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
   const isLastStep = step === STEPS.length - 1
 
   return (
-    <Modal title="Add product" onClose={onClose}>
+    <Modal title="Add product" onClose={onClose} size="lg">
       {/* Step indicator */}
       <div className="mb-5 flex items-center">
         {STEPS.map((s, i) => (
