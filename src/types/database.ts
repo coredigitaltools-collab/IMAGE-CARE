@@ -599,23 +599,31 @@ export interface Database {
       current_stock:            AnyRow<CurrentStock>;
       vw_stock_summary:         AnyRow<StockSummaryRow>;
     };
+    // ------------------------------------------------------------
+    // Functions accuracy audit (2026-08-27, deployment-blocker repair pass):
+    // queried pg_proc directly against the live ImageCare Supabase project.
+    // The imagecare schema has exactly 20 functions, none named like the
+    // "engine_*" transaction procedures or "fn_list_*_cursor"/"fn_get_*"
+    // reporting RPCs this file used to declare. Every entry that had zero
+    // remaining call sites (already replaced by direct-table queries or by
+    // the real src/engines/* layer in an earlier pass) was removed outright
+    // rather than left as a misleading "this exists" signal:
+    //   fn_get_dashboard_kpis, fn_list_sales_cursor, fn_list_purchases_cursor,
+    //   engine_process_supplier_payment, fn_list_inventory_movements_cursor,
+    //   engine_stock_adjustment, engine_dispatch_transfer,
+    //   engine_receive_transfer, fn_list_expenses_cursor, fn_get_cash_position,
+    //   fn_get_account_balance, fn_list_audit_logs_cursor, engine_post_sale,
+    //   engine_post_purchase, engine_post_expense,
+    //   engine_process_credit_repayment, engine_process_payroll.
+    // The entries below are KEPT only because live code still calls them via
+    // src/lib/supabase.ts's rpc() wrapper - removing the type would just move
+    // the compile error to the caller. None of these are confirmed to exist
+    // in the live database either; every call site will fail at runtime with
+    // Postgres 42883 until it is replaced with a real implementation (either
+    // a new migration, or a direct-table rewrite like listSales/listPurchases
+    // already got). Do not add new callers of these names.
     Functions: {
-      fn_get_dashboard_kpis: {
-        Args: { p_business_id: UUID; p_branch_id: UUID | null; p_from_date: string; p_to_date: string };
-        Returns: DashboardKPIs;
-      };
-      fn_list_sales_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_status: string | null; p_customer_id: UUID | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
       engine_return_sale: { Args: { p_sale_id: UUID; p_user_id: UUID; p_reason: string; p_items: string; p_idempotency_key: string }; Returns: unknown };
-      fn_list_purchases_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_supplier_id: UUID | null; p_status: string | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
-      engine_process_supplier_payment: { Args: { p_business_id: UUID; p_branch_id: UUID; p_supplier_id: UUID; p_amount: number; p_payment_method: string; p_user_id: UUID; p_reference_notes: string | null; p_idempotency_key: string }; Returns: unknown };
-      fn_list_inventory_movements_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID; p_product_id: UUID | null; p_type: MovementType | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
-      engine_stock_adjustment: { Args: { p_business_id: UUID; p_branch_id: UUID; p_product_id: UUID; p_quantity: number; p_reason: string; p_user_id: UUID; p_notes: string | null; p_idempotency_key: string }; Returns: unknown };
-      engine_dispatch_transfer: { Args: { p_transfer_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
-      engine_receive_transfer: { Args: { p_transfer_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
-      fn_list_expenses_cursor: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_category: string | null; p_from_date: string | null; p_to_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
-      fn_get_cash_position: { Args: { p_business_id: UUID; p_branch_id: UUID | null }; Returns: unknown };
-      fn_get_account_balance: { Args: { p_business_id: UUID; p_account_code: string; p_year: number | null; p_month: number | null; p_branch_id: UUID | null }; Returns: number };
-      fn_list_audit_logs_cursor: { Args: { p_business_id: UUID; p_table_name: string | null; p_user_id: UUID | null; p_action: string | null; p_from_date: string | null; p_cursor_date: string | null; p_cursor_id: UUID | null; p_limit: number }; Returns: unknown[] };
       fn_get_sales_by_period: { Args: { p_business_id: UUID; p_from_date: string; p_to_date: string; p_group_by: 'day' | 'week' | 'month'; p_branch_id: UUID | null }; Returns: unknown[] };
       fn_get_top_products: { Args: { p_business_id: UUID; p_from_date: string; p_to_date: string; p_limit: number; p_order_by: 'revenue' | 'quantity' | 'profit'; p_branch_id: UUID | null }; Returns: unknown[] };
       fn_get_outstanding_credit_summary: { Args: { p_business_id: UUID; p_branch_id: UUID | null }; Returns: unknown[] };
@@ -627,11 +635,6 @@ export interface Database {
       fn_register_upload: { Args: { p_business_id: UUID; p_branch_id: UUID | null; p_uploaded_by: UUID; p_bucket_name: string; p_entity_type: string; p_entity_id: UUID; p_original_name: string; p_mime_type: string; p_file_size: number; p_category: string; p_checksum: string | null; p_expires_hours: number | null }; Returns: unknown };
       fn_log_file_access: { Args: { p_file_id: UUID; p_user_id: UUID; p_action: string; p_success: boolean }; Returns: unknown };
       fn_soft_delete_file: { Args: { p_file_id: UUID; p_user_id: UUID; p_reason: string }; Returns: unknown };
-      engine_post_sale: { Args: { p_sale_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
-      engine_post_purchase: { Args: { p_purchase_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
-      engine_post_expense: { Args: { p_expense_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
-      engine_process_credit_repayment: { Args: { p_business_id: UUID; p_branch_id: UUID; p_customer_id: UUID; p_amount: number; p_payment_method: string; p_user_id: UUID; p_reference_notes: string | null; p_idempotency_key: string }; Returns: unknown };
-      engine_process_payroll: { Args: { p_payroll_id: UUID; p_user_id: UUID; p_idempotency_key: string }; Returns: unknown };
     };
   };
 }

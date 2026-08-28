@@ -139,39 +139,42 @@ export async function listSales(
   }
 
   try {
+    // fn_list_sales_cursor does not exist live or in any tracked migration
+    // (confirmed 2026-08-27 by direct inspection of the ImageCare Supabase
+    // project's imagecare schema functions) - replaced with a direct
+    // offset-paginated query, matching the pattern already used by
+    // listPurchases/listInventory in this codebase.
     const pageSize = Math.min(
       pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE,
       APP_CONSTANTS.MAX_PAGE_SIZE
     );
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
 
-    const { data, error } = await rpc('fn_list_sales_cursor', {
-      p_business_id:  ctx.business_id,
-      p_branch_id:    filter.branch_id   ?? null,
-      p_status:       filter.status      ?? null,
-      p_customer_id:  filter.customer_id ?? null,
-      p_from_date:    filter.date?.from  ?? null,
-      p_to_date:      filter.date?.to    ?? null,
-      p_cursor_date:  pagination.cursor_date ?? null,
-      p_cursor_id:    pagination.cursor_id   ?? null,
-      p_limit:        pageSize + 1,       // fetch one extra to detect has_more
-    });
+    let q = supabase.schema('imagecare').from('sales')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .range(offset, offset + pageSize - 1)
+      .order('sale_date', { ascending: false });
 
+    if (filter.branch_id)      q = q.eq('branch_id', filter.branch_id);
+    if (filter.customer_id)    q = q.eq('customer_id', filter.customer_id);
+    if (filter.status)         q = q.eq('status', filter.status);
+    if (filter.payment_method) q = q.eq('payment_method', filter.payment_method);
+    if (filter.date?.from)     q = q.gte('sale_date', filter.date.from);
+    if (filter.date?.to)       q = q.lte('sale_date', filter.date.to);
+
+    const { data, error, count } = await q;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load sales.', { requestId });
 
-    const rows = (data ?? []) as Sale[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const last = items[items.length - 1] as any;
-
     return serviceOk<PagedResponse<Sale>>({
-      items,
+      items: (data ?? []) as Sale[],
       pagination: {
-        total_count:      0,    // cursor pagination - no total count
+        total_count:      count ?? 0,
         page_size:        pageSize,
-        has_more:         hasMore,
-        next_cursor_date: hasMore ? last?.next_cursor_date ?? null : null,
-        next_cursor_id:   hasMore ? last?.next_cursor_id   ?? null : null,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
       },
     }, requestId);
   } catch {
