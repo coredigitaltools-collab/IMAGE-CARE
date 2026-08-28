@@ -10,6 +10,7 @@ import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
@@ -44,10 +45,15 @@ export function PurchaseDashboardPage() {
     .filter((o) => o.status === 'pending_approval' || o.status === 'approved' || o.status === 'sent' || o.status === 'partially_received')
     .slice(0, 6)
 
-  const quickActions = [
-    { label: 'New requisition', icon: ClipboardList, onClick: () => setIsReqOpen(true) },
-    { label: 'New order', icon: ShoppingCart, onClick: () => setIsPoOpen(true) },
-    { label: 'Record invoice', icon: FileText, onClick: () => navigate('/purchasing/invoices') },
+  // "New order" is the direct, everyday path (buy something from a
+  // supplier right now). "New requisition" is the internal ask-for-
+  // approval-first workflow, useful for bigger businesses with staff who
+  // aren't allowed to buy directly, but it's an extra step most small
+  // businesses don't need, so it stays available but doesn't compete for
+  // top billing with the action a first-time owner is actually looking for.
+  const secondaryActions = [
+    { label: 'Request approval to buy', icon: ClipboardList, onClick: () => setIsReqOpen(true) },
+    { label: 'Record supplier invoice', icon: FileText, onClick: () => navigate('/purchasing/invoices') },
     { label: 'Reports', icon: Package, onClick: () => navigate('/purchasing/reports') },
   ]
 
@@ -56,13 +62,18 @@ export function PurchaseDashboardPage() {
       <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Purchasing' }]} />
       <PurchasingTabs />
 
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Purchasing</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Requisitions, orders, receiving, and supplier spend.</p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Purchasing</h1>
+          <p className="mt-0.5 text-sm text-ink-500">Orders, receiving, and what you owe suppliers.</p>
+        </div>
+        <Button onClick={() => setIsPoOpen(true)}>
+          <ShoppingCart size={15} /> Record a purchase
+        </Button>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {quickActions.map(({ label, icon: Icon, onClick }) => (
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        {secondaryActions.map(({ label, icon: Icon, onClick }) => (
           <button
             key={label}
             onClick={onClick}

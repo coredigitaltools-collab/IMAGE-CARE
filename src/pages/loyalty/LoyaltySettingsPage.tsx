@@ -38,7 +38,7 @@ export function LoyaltySettingsPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Loyalty Settings</h1>
-        <p className="mt-0.5 text-sm text-ink-500">The Points Engine, how points are earned, redeemed, and expired.</p>
+        <p className="mt-0.5 text-sm text-ink-500">How customers earn points on a sale, and how those points can be redeemed later.</p>
       </div>
 
       {settingsQuery.isLoading ? (
@@ -93,10 +93,10 @@ export function LoyaltySettingsPage() {
       )}
 
       <Card className="mt-4 p-5">
-        <h2 className="mb-2 text-sm font-semibold text-ink-900">Process expirations</h2>
+        <h2 className="mb-2 text-sm font-semibold text-ink-900">Expire old points</h2>
         <p className="mb-3 text-xs text-ink-500">
-          There's no background job in this offline-first app, expiring points is a deliberate, logged action you run when you want it, never
-          silent.
+          Points don't expire automatically in the background. Run this whenever you want to apply the expiry rule above, it's logged so you can
+          always see what changed and when.
         </p>
         <Button
           variant="secondary"

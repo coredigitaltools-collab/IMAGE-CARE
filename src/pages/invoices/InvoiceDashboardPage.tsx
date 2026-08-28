@@ -42,7 +42,7 @@ export function InvoiceDashboardPage() {
 
   const quickActions = [
     {
-      label: 'New invoice',
+      label: 'Invoice a sale',
       icon: Plus,
       onClick: () => {
         setGenError(undefined)

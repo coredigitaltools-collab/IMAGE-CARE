@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { CreditCard, Sliders, Wallet, XCircle } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { CreditCard, Sliders, UserPlus, Wallet, XCircle } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CreditTabs } from '../../components/credit/CreditTabs'
 import { Card } from '../../components/ui/Card'
@@ -21,6 +21,7 @@ import type { CreditAccountRow } from '../../services/creditService'
 export function CreditAccountsPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const accountsQuery = useCreditAccounts()
   const recordPayment = useRecordPayment(user.id)
@@ -47,20 +48,28 @@ export function CreditAccountsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Credit Accounts</h1>
-          <p className="mt-0.5 text-sm text-ink-500">Every customer with an approved limit or a balance owed.</p>
+          <p className="mt-0.5 text-sm text-ink-500">Every customer with a credit limit or a balance owed.</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-ink-700">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => {
-              if (e.target.checked) setSearchParams({ overdue: '1' })
-              else setSearchParams({})
-            }}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
-          />
-          Overdue only
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-ink-700">
+            <input
+              type="checkbox"
+              checked={overdueOnly}
+              onChange={(e) => {
+                if (e.target.checked) setSearchParams({ overdue: '1' })
+                else setSearchParams({})
+              }}
+              className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            />
+            Overdue only
+          </label>
+          <button
+            onClick={() => navigate('/customers/directory')}
+            className="flex items-center gap-1.5 rounded-md bg-brand-blue-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue-900"
+          >
+            <UserPlus size={15} /> Give a customer credit
+          </button>
+        </div>
       </div>
 
       <Card className="p-5">
@@ -77,8 +86,9 @@ export function CreditAccountsPage() {
             description={
               overdueOnly
                 ? 'No account is currently past its payment terms.'
-                : 'Accounts appear here once a customer has an approved credit limit or an outstanding balance.'
+                : 'Accounts appear here once a customer has a credit limit set or an outstanding balance. Open a customer’s profile and use "Set credit limit" on their Credit tab to get started.'
             }
+            action={overdueOnly ? undefined : { label: 'Go to Customers', onClick: () => navigate('/customers/directory') }}
           />
         ) : (
           <ul className="divide-y divide-ink-100">
@@ -111,7 +121,7 @@ export function CreditAccountsPage() {
                     />
                     <RowActionButton
                       icon={Sliders}
-                      label="Approve limit"
+                      label="Set credit limit"
                       onClick={() => setModalState({ mode: 'limit', account })}
                     />
                     <RowActionButton

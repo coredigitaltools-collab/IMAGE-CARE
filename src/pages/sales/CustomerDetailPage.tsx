@@ -297,7 +297,7 @@ export function CustomerDetailPage() {
                   <Wallet size={14} /> Record payment
                 </Button>
                 <Button variant="secondary" onClick={() => setCreditModal('limit')}>
-                  <Sliders size={14} /> Approve limit
+                  <Sliders size={14} /> Set credit limit
                 </Button>
                 <Button
                   variant="danger"
@@ -313,7 +313,7 @@ export function CustomerDetailPage() {
             </div>
             {customer.creditLimit === 0 && (
               <p className="rounded-md bg-warning-100/40 px-3 py-2 text-xs text-warning-700">
-                No credit limit has been approved for this customer yet, credit sales are blocked until one is.
+                No credit limit is set for this customer yet, credit sales are blocked until you set one using "Set credit limit" above.
               </p>
             )}
           </Card>

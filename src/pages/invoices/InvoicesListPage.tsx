@@ -53,7 +53,7 @@ export function InvoicesListPage() {
             setIsGenerateOpen(true)
           }}
         >
-          <Plus size={15} /> New invoice
+          <Plus size={15} /> Invoice a sale
         </Button>
       </div>
 

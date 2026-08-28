@@ -57,10 +57,10 @@ export function CrmDashboardPage() {
     showToast('Customers exported.', 'success')
   }
 
-  const quickActions = [
+  const quickActions: { label: string; icon: typeof Search; onClick: () => void; comingSoon?: boolean }[] = [
     { label: 'Search', icon: Search, onClick: () => navigate('/customers/directory') },
     { label: 'Add', icon: UserPlus, onClick: () => setIsAddOpen(true) },
-    { label: 'Import', icon: Upload, onClick: () => showToast('CSV import is coming in a future update.') },
+    { label: 'Import', icon: Upload, onClick: () => showToast('CSV import is coming in a future update.'), comingSoon: true },
     { label: 'Export', icon: Download, onClick: exportCsv },
   ]
 
@@ -79,13 +79,28 @@ export function CrmDashboardPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {quickActions.map(({ label, icon: Icon, onClick }) => (
+        {quickActions.map(({ label, icon: Icon, onClick, comingSoon }) => (
           <button
             key={label}
             onClick={onClick}
-            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
+            className={
+              comingSoon
+                ? 'group relative flex flex-col items-center gap-1.5 rounded-card border border-dashed border-ink-100 bg-white px-3 py-3 text-center opacity-70 transition-all duration-200 hover:opacity-100'
+                : 'group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]'
+            }
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
+            {comingSoon && (
+              <span className="absolute -top-2 right-1.5 rounded-full bg-ink-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-500">
+                Soon
+              </span>
+            )}
+            <span
+              className={
+                comingSoon
+                  ? 'flex h-8 w-8 items-center justify-center rounded-full bg-ink-50 text-ink-400'
+                  : 'flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white'
+              }
+            >
               <Icon size={16} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>

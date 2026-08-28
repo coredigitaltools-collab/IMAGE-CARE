@@ -50,7 +50,7 @@ export function CreateTargetModal({ branches, staff, onClose, onSubmit, submitEr
       <div className="space-y-4">
         <div>
           <label htmlFor="tg-scope" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Scope
+            Who is this target for?
           </label>
           <select
             id="tg-scope"

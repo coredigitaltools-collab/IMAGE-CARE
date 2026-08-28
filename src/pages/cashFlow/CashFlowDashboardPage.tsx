@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Landmark, TrendingUp, ListChecks, LineChart, ClipboardCheck } from 'lucide-react'
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Landmark, TrendingUp, ListChecks, LineChart, ClipboardCheck, Plus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CashFlowTabs } from '../../components/cashFlow/CashFlowTabs'
 import { KpiCard } from '../../components/dashboard/KpiCard'
@@ -12,6 +12,7 @@ export function CashFlowDashboardPage() {
   const data = kpisQuery.data
 
   const quickActions = [
+    { label: 'Record cash movement', icon: Plus, onClick: () => navigate('/accounting') },
     { label: 'Cash ledger', icon: ListChecks, onClick: () => navigate('/cash-flow/ledger') },
     { label: 'Forecast', icon: LineChart, onClick: () => navigate('/cash-flow/forecast') },
     { label: 'Reconciliation', icon: ClipboardCheck, onClick: () => navigate('/cash-flow/reconciliation') },
@@ -27,7 +28,7 @@ export function CashFlowDashboardPage() {
         <p className="mt-0.5 text-sm text-ink-500">Where cash came from, where it went, and what's left.</p>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {quickActions.map(({ label, icon: Icon, onClick }) => (
           <button
             key={label}

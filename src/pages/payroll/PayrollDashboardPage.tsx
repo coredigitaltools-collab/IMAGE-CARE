@@ -15,7 +15,7 @@ export function PayrollDashboardPage() {
   const quickActions = [
     { label: 'Employees', icon: Users, onClick: () => navigate('/payroll/employees') },
     { label: 'Allowances & deductions', icon: SlidersHorizontal, onClick: () => navigate('/payroll/components') },
-    { label: 'Payroll runs', icon: ListChecks, onClick: () => navigate('/payroll/periods') },
+    { label: 'Payroll periods', icon: ListChecks, onClick: () => navigate('/payroll/periods') },
     { label: 'Reports', icon: BarChart3, onClick: () => navigate('/payroll/reports') },
   ]
 
@@ -26,7 +26,7 @@ export function PayrollDashboardPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Payroll</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Employee compensation, payroll runs, and workforce cost.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Employee compensation, payroll periods, and workforce cost.</p>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">

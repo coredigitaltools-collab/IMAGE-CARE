@@ -51,7 +51,14 @@ export function OfflineStatusDashboardPage() {
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Financial summary</h2>
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard label="Sales" value={data ? formatCurrency(data.salesUgx, 'UGX') : '-'} icon={TrendingUp} tone="blue" isLoading={kpisQuery.isLoading} />
-        <KpiCard label="COGS" value={data ? formatCurrency(data.cogsUgx, 'UGX') : '-'} icon={Receipt} tone="neutral" isLoading={kpisQuery.isLoading} />
+        <KpiCard
+          label="COGS"
+          value={data ? formatCurrency(data.cogsUgx, 'UGX') : '-'}
+          hint="Cost of goods sold"
+          icon={Receipt}
+          tone="neutral"
+          isLoading={kpisQuery.isLoading}
+        />
         <KpiCard
           label="Gross profit"
           value={data ? formatCurrency(data.grossProfitUgx, 'UGX') : '-'}

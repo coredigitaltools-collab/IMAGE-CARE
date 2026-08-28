@@ -61,6 +61,7 @@ export function DailyDashboardPage() {
         <KpiCard
           label="COGS"
           value={financials ? formatCurrency(financials.cogsUgx, 'UGX') : '-'}
+          hint="Cost of goods sold, what you paid for what was sold today"
           icon={Receipt}
           tone="neutral"
           isLoading={financialsQuery.isLoading}
@@ -68,7 +69,7 @@ export function DailyDashboardPage() {
         <KpiCard
           label="Gross profit"
           value={financials ? formatCurrency(financials.grossProfitUgx, 'UGX') : '-'}
-          hint="Revenue minus COGS"
+          hint="Revenue minus cost of goods sold"
           icon={BadgeDollarSign}
           tone={financials && financials.grossProfitUgx >= 0 ? 'success' : 'red'}
           isLoading={financialsQuery.isLoading}

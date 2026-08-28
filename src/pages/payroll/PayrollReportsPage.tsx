@@ -29,14 +29,14 @@ export function PayrollReportsPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Payroll Reports</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Cost per payroll run, for periods that have actually been paid.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Cost per payroll period, for periods that have actually been paid.</p>
       </div>
 
       <Card className="p-5">
         {periodsQuery.isLoading || payslipsQuery.isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : costByPeriod.length === 0 ? (
-          <EmptyState icon={BarChart3} title="No paid payroll runs yet" description="This fills in once a payroll period is fully paid." />
+          <EmptyState icon={BarChart3} title="No paid payroll periods yet" description="This fills in once a payroll period is fully paid." />
         ) : (
           <ul className="divide-y divide-ink-100">
             {costByPeriod.map(({ period, totalNetPay, employeeCount }) => (

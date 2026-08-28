@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { FileText, Wallet, XCircle } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { FileText, Plus, Wallet, XCircle } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { BillsTabs } from '../../components/bills/BillsTabs'
 import { InvoicePaymentModal } from '../../components/purchasing/InvoicePaymentModal'
@@ -23,6 +23,7 @@ const STATUS_LABELS = { unpaid: 'Unpaid', partially_paid: 'Partially Paid', paid
 export function PayablesRegisterPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const billsQuery = useBills()
   const suppliersQuery = useSuppliers()
@@ -52,15 +53,23 @@ export function PayablesRegisterPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Payables Register</h1>
           <p className="mt-0.5 text-sm text-ink-500">Every bill recorded from a supplier invoice.</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-ink-700">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => (e.target.checked ? setSearchParams({ overdue: '1' }) : setSearchParams({}))}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
-          />
-          Overdue only
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-ink-700">
+            <input
+              type="checkbox"
+              checked={overdueOnly}
+              onChange={(e) => (e.target.checked ? setSearchParams({ overdue: '1' }) : setSearchParams({}))}
+              className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            />
+            Overdue only
+          </label>
+          <button
+            onClick={() => navigate('/purchasing/invoices')}
+            className="flex items-center gap-1.5 rounded-md bg-brand-blue-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue-900"
+          >
+            <Plus size={15} /> Record a bill
+          </button>
+        </div>
       </div>
 
       <Card className="p-5">
@@ -74,7 +83,8 @@ export function PayablesRegisterPage() {
           <EmptyState
             icon={FileText}
             title={overdueOnly ? 'Nothing overdue' : 'No bills yet'}
-            description={overdueOnly ? 'No bill is currently past its due date.' : 'Record a supplier invoice under Purchasing to see it here.'}
+            description={overdueOnly ? 'No bill is currently past its due date.' : 'Record a supplier invoice to see it here as a bill you owe.'}
+            action={overdueOnly ? undefined : { label: 'Record a bill', onClick: () => navigate('/purchasing/invoices') }}
           />
         ) : (
           <ul className="divide-y divide-ink-100">

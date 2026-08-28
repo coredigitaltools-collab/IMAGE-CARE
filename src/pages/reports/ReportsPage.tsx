@@ -68,10 +68,10 @@ function OverviewReport() {
           {plQuery.isLoading
             ? <Skeleton className="h-48 w-full" />
             : <>
-                <StatRow label="Revenue (4000)"       value={formatCurrency(revenue, 'UGX')}     tone="green" />
-                <StatRow label="COGS (5000)"          value={formatCurrency(cogs, 'UGX')}        tone="red" />
+                <StatRow label="Revenue"              value={formatCurrency(revenue, 'UGX')}     tone="green" />
+                <StatRow label="Cost of goods sold"   value={formatCurrency(cogs, 'UGX')}        tone="red" />
                 <StatRow label="Gross Profit"         value={formatCurrency(grossProfit, 'UGX')} tone={grossProfit >= 0 ? 'green' : 'red'} />
-                <StatRow label="Expenses (6000)"      value={formatCurrency(expTotal, 'UGX')}    tone="red" />
+                <StatRow label="Expenses"             value={formatCurrency(expTotal, 'UGX')}    tone="red" />
                 <StatRow label="Net Profit"           value={formatCurrency(netProfit, 'UGX')}   tone={netProfit >= 0 ? 'green' : 'red'} />
                 <StatRow label="Outstanding Credit"   value={formatCurrency(creditKpis.data?.totalOutstandingUgx ?? 0, 'UGX')} />
               </>}
@@ -290,7 +290,6 @@ const TAB_ICONS: Record<ReportTab, React.ElementType> = {
 
 export function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('Overview')
-  const ctx    = useUserContext()
   const branch = useActiveBranch()
 
   return (
@@ -300,9 +299,7 @@ export function ReportsPage() {
         <div>
           <h1 className="text-xl font-semibold text-ink-900">Reports</h1>
           <p className="text-sm text-ink-500">
-            Live data from your backend.{' '}
-            {branch ? 'Filtered to active branch.' : 'All branches.'}
-            {` Business: ${ctx.business_id?.slice(0, 8) ?? ''}...`}
+            {branch ? 'Showing your active branch.' : 'Showing all branches.'}
           </p>
         </div>
       </div>

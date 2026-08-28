@@ -52,7 +52,9 @@ export function LoyaltyDashboardPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Loyalty Programme</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Points, rewards, and repeat-customer engagement.</p>
+        <p className="mt-0.5 text-sm text-ink-500">
+          Every customer is enrolled automatically, they start earning points the moment they make their first sale. Nothing to set up per customer.
+        </p>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">

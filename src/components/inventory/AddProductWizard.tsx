@@ -154,8 +154,18 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
             </div>
             <FormField label="Product name" {...register('name')} error={errors.name?.message} />
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="SKU" {...register('sku')} error={errors.sku?.message} />
-              <FormField label="Barcode" {...register('barcode')} error={errors.barcode?.message} />
+              <FormField
+                label="SKU"
+                {...register('sku')}
+                error={errors.sku?.message}
+                hint="A short code you use to identify this product. Filled in for you, feel free to change it."
+              />
+              <FormField
+                label="Barcode (optional)"
+                {...register('barcode')}
+                error={errors.barcode?.message}
+                hint="Only needed if you scan products at checkout."
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <CategoryQuickSelect
@@ -186,7 +196,13 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
               <FormField label="Selling price (UGX)" type="number" {...register('sellingPrice', { valueAsNumber: true })} error={errors.sellingPrice?.message} />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="Reorder level" type="number" {...register('reorderLevel', { valueAsNumber: true })} error={errors.reorderLevel?.message} />
+              <FormField
+                label="Reorder level"
+                type="number"
+                {...register('reorderLevel', { valueAsNumber: true })}
+                error={errors.reorderLevel?.message}
+                hint="You'll be alerted to restock once stock falls to or below this number."
+              />
               <FormField label="Opening stock" type="number" {...register('openingStock', { valueAsNumber: true })} error={errors.openingStock?.message} />
             </div>
           </>

@@ -39,7 +39,7 @@ import { UnlockPage } from '../features/auth/UnlockPage';
 import { ForgotPinPage } from '../features/auth/ForgotPinPage';
 
 // ---- Lazy-loaded module pages --------------------------------
-const DashboardPage     = lazy(() => import('../features/dashboard/DashboardPage'));
+const DashboardPage     = lazy(() => import('../pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const NotFoundPage      = lazy(() => import('../features/NotFoundPage'));
 const UnauthorizedPage  = lazy(() => import('../features/UnauthorizedPage'));
 
