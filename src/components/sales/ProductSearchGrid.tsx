@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Package, PackageX, Search } from 'lucide-react'
+import { Package, PackageX, Plus, Search } from 'lucide-react'
 import { formatCurrency } from '../../lib/format'
 import type { Category, Product } from '../../types/inventory'
 
@@ -64,16 +64,21 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
 
   return (
     <div className="flex h-full flex-col">
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold text-ink-900">Products</h2>
+        <p className="text-xs text-ink-500">Search or tap a product to add it to the sale.</p>
+      </div>
+
       <div className="relative mb-3">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+        <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search or scan barcode... (F2)"
+          placeholder="Search product or scan barcode... (F2)"
           autoFocus
-          className="w-full rounded-md border border-ink-100 bg-white py-2.5 pl-9 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
+          className="w-full rounded-md border border-ink-200 bg-white py-3 pl-10 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500 focus:ring-2 focus:ring-brand-blue-100"
         />
       </div>
 
@@ -113,9 +118,13 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
             <p className="max-w-xs text-xs text-ink-500">Add your first product to get started, it'll show up here right away.</p>
           </div>
         ) : filtered.length === 0 ? (
-          <p className="col-span-full py-8 text-center text-sm text-ink-500">
-            {query ? `No products match "${query}".` : 'No products in this category.'}
-          </p>
+          <div className="col-span-full flex flex-col items-center justify-center gap-2 py-12 text-center">
+            <Search size={22} className="text-ink-300" />
+            <p className="text-sm font-medium text-ink-900">
+              {query ? `No products match "${query}"` : 'No products in this category'}
+            </p>
+            <p className="max-w-xs text-xs text-ink-500">Try a different search term, or choose "All" to browse every product.</p>
+          </div>
         ) : (
           filtered.map((product) => {
             const outOfStock = product.currentStock === 0
@@ -133,6 +142,14 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
                       <PackageX size={11} /> Out of stock
                     </span>
                   </div>
+                )}
+                {!outOfStock && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-colors group-hover:bg-brand-blue-700 group-hover:text-white"
+                  >
+                    <Plus size={13} strokeWidth={2.5} />
+                  </span>
                 )}
                 <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-ink-50">
                   {product.imageDataUrl ? (

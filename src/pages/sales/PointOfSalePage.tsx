@@ -274,6 +274,11 @@ export function PointOfSalePage() {
         </div>
 
         <div className="flex min-h-0 flex-col gap-3 rounded-card border border-ink-100 bg-white p-4 shadow-card">
+          <div>
+            <h2 className="text-sm font-semibold text-ink-900">Current sale</h2>
+            <p className="text-xs text-ink-500">Walk-in customer by default, add items to get started.</p>
+          </div>
+
           <CustomerSelector
             customers={(customersQuery.data ?? []).filter((c) => c.is_active)}
             selectedCustomer={selectedCustomer}
@@ -281,45 +286,16 @@ export function PointOfSalePage() {
             onSelect={setSelectedCustomer}
             onAddNew={() => setIsCustomerModalOpen(true)}
           />
-          <div>
-            <label htmlFor="pos-branch" className="mb-1 block text-xs font-medium text-ink-500">
-              Branch
-            </label>
-            <select
-              id="pos-branch"
-              value={branchId ?? ''}
-              onChange={(e) => setBranchId(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-            >
-              {(branchesQuery.data ?? [])
-                .filter((b) => b.is_active)
-                .map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="pos-sold-by" className="mb-1 block text-xs font-medium text-ink-500">
-              Sold by (optional)
-            </label>
-            <select
-              id="pos-sold-by"
-              value={salesPersonId ?? ''}
-              onChange={(e) => setSalesPersonId(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-            >
-              <option value="">Unassigned</option>
-              {(staffQuery.data ?? [])
-                .filter((s) => s.is_active)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName}
-                  </option>
-                ))}
-            </select>
-          </div>
+
+          <SaleDetailsToggle
+            branches={(branchesQuery.data ?? []).filter((b) => b.is_active)}
+            branchId={branchId}
+            onBranchChange={setBranchId}
+            staff={(staffQuery.data ?? []).filter((s) => s.is_active)}
+            salesPersonId={salesPersonId}
+            onSalesPersonChange={setSalesPersonId}
+          />
+
           <div className="min-h-0 flex-1">
             <CartPanel
               items={cart}
@@ -380,5 +356,90 @@ export function PointOfSalePage() {
         />
       )}
     </div>
+  )
+}
+
+// ---- Branch / Sold by ----------------------------------------------
+// Both matter, but neither is part of the "find product -> cart -> pay"
+// workflow a first-time cashier needs to grasp, so they live behind a
+// small disclosure instead of two full-width fields competing with the
+// customer/cart area for attention. When there's only one branch to
+// choose from anyway, the branch row is skipped entirely - there's
+// nothing for the cashier to decide.
+interface SaleDetailsToggleProps {
+  branches: { id: string; name: string }[]
+  branchId: string | null
+  onBranchChange: (id: string | null) => void
+  staff: { id: string; fullName: string }[]
+  salesPersonId: string | null
+  onSalesPersonChange: (id: string | null) => void
+}
+
+function SaleDetailsToggle({
+  branches,
+  branchId,
+  onBranchChange,
+  staff,
+  salesPersonId,
+  onSalesPersonChange,
+}: SaleDetailsToggleProps) {
+  const showBranchPicker = branches.length > 1
+  const activeBranchName = branches.find((b) => b.id === branchId)?.name
+  const soldByName = staff.find((s) => s.id === salesPersonId)?.fullName
+
+  if (!showBranchPicker && staff.length === 0) return null
+
+  return (
+    <details className="group rounded-md border border-ink-100">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 py-2 text-xs font-medium text-ink-500">
+        <span>
+          Sale details
+          {activeBranchName && <span className="text-ink-400"> · {activeBranchName}</span>}
+          <span className="text-ink-400"> · Sold by {soldByName ?? 'unassigned'}</span>
+        </span>
+        <span className="text-ink-400 transition-transform group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="space-y-2 px-2.5 pb-2.5">
+        {showBranchPicker && (
+          <div>
+            <label htmlFor="pos-branch" className="mb-1 block text-xs font-medium text-ink-500">
+              Branch
+            </label>
+            <select
+              id="pos-branch"
+              value={branchId ?? ''}
+              onChange={(e) => onBranchChange(e.target.value || null)}
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {staff.length > 0 && (
+          <div>
+            <label htmlFor="pos-sold-by" className="mb-1 block text-xs font-medium text-ink-500">
+              Sold by (optional)
+            </label>
+            <select
+              id="pos-sold-by"
+              value={salesPersonId ?? ''}
+              onChange={(e) => onSalesPersonChange(e.target.value || null)}
+              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            >
+              <option value="">Unassigned</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.fullName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </details>
   )
 }
