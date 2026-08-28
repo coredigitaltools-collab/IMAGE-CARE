@@ -75,6 +75,22 @@ export function AppShell({ children }: AppShellProps) {
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
+        // ROOT CAUSE FIX (2026-08-28): the sidebar is `position: fixed`, so it
+        // is removed from this flex row entirely - this main wrapper is the
+        // ONLY item .app-shell's flex layout sees. Without flex-grow it kept
+        // its default `flex: 0 1 auto`, so it sized to its own content
+        // (shrink-to-fit) instead of filling the space left of the sidebar.
+        // That's what produced the narrow content column with a large empty
+        // area on the right across every module (Sales/POS, Payroll,
+        // Inventory, etc.) - confirmed by an isolated reproduction of this
+        // exact markup/CSS before applying this fix. `flex: 1 1 0%` makes it
+        // fill the remaining width (flexbox correctly subtracts the
+        // margin-left offset when distributing that space); `minWidth: 0`
+        // stops it from being kept artificially wide by its own content
+        // (e.g. a wide table), which is what allows horizontal scrolling to
+        // work inside pages instead of pushing the whole layout wider.
+        flex: '1 1 0%',
+        minWidth: 0,
       }}>
         <Header onMenuToggle={() => setSidebarOpen(o => !o)} />
         <OfflineBanner isOnline={isOnline} />
