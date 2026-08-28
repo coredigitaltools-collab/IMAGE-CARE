@@ -14,7 +14,7 @@ interface KpiGridProps {
 // Engine Correction v1.0), every figure here reads from that one
 // engine, never a locally re-derived number.
 export function KpiGrid({ summary, lowStock, isSummaryLoading, isLowStockLoading }: KpiGridProps) {
-  const currency = summary?.currency ?? 'KES'
+  const currency = summary?.currency ?? 'UGX'
   const lowStockCount = lowStock?.length ?? 0
 
   return (
