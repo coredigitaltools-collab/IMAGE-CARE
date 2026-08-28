@@ -12,6 +12,19 @@
   --color-ink-900: #0F172A;  /* = Primary Navy #0F172A */
   --color-ink-700: #334155;
   --color-ink-500: #64748B;
+  /* ink-400 was missing from this scale entirely (jumped 500 -> 300), so
+     every `text-ink-400` / `placeholder:text-ink-400` in the app (icons,
+     placeholder-adjacent hints, muted labels - 24 usages across 16 files,
+     confirmed absent from the deployed CSS: no `.text-ink-400` rule and no
+     `--color-ink-400` variable at all) silently compiled to nothing and
+     fell back to the inherited dark body text color. That's what made the
+     search icons in Sales/POS (and every other muted-gray icon using this
+     token) render bold and dark instead of a subtle gray, which is what
+     made them look like they were overlapping the placeholder text next to
+     them. Value matches the rest of this scale, which is Tailwind's slate
+     palette under different names (900/700/500/300/100/50 above are exact
+     slate matches) - slate-400 is #94A3B8. */
+  --color-ink-400: #94A3B8;
   --color-ink-300: #CBD5E1;
   --color-ink-100: #E2E8F0;
   --color-ink-50:  #F8FAFC;  /* Workspace background */
