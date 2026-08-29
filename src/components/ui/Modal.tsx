@@ -10,17 +10,29 @@ interface ModalProps {
   // the product add/edit forms) and were visibly cramped at that width -
   // 'lg' gives those forms the room their own grid-cols-2 rows need,
   // without changing the ~30 other call sites still using the default.
-  size?: 'md' | 'lg'
+  // 'xl' is for the few multi-section workflows (e.g. Record Sale) that
+  // pack a product picker, a cart, and payment details into one modal.
+  size?: 'md' | 'lg' | 'xl'
 }
 
 const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
   md: 'max-w-lg',
   lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
 }
 
 export function Modal({ title, onClose, children, size = 'md' }: ModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    // z-index comes from the app's own design-system scale (globals.css)
+    // rather than an arbitrary Tailwind z-*: the sidebar and header use
+    // this same scale via var(--z-sticky)/var(--z-dropdown), and
+    // var(--z-modal) already existed there for exactly this purpose but
+    // this component was never wired to it. Without it, this modal (used
+    // by every dialog in the app) painted at z-50, underneath the
+    // sidebar's z-200 - so on any page the sidebar covered, part of every
+    // modal's content rendered invisibly behind the sidebar rather than
+    // on top of it.
+    <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 'var(--z-modal)' }}>
       <div className="absolute inset-0 bg-navy-900/50 backdrop-blur-[2px] animate-[fadeIn_150ms_ease-out]" onClick={onClose} aria-hidden="true" />
       <div
         role="dialog"

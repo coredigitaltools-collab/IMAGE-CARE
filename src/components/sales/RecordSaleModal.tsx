@@ -113,12 +113,12 @@ export function RecordSaleModal({
   isSubmitting,
 }: RecordSaleModalProps) {
   return (
-    <Modal title="Record sale" onClose={onClose} size="lg">
-      <div className="max-h-[75vh] space-y-4 overflow-y-auto pr-1">
+    <Modal title="Record sale" onClose={onClose} size="xl">
+      <div className="max-h-[78vh] space-y-5 overflow-y-auto pr-1">
         <ProductPicker ref={productPickerRef} products={products} onAdd={onAddToCart} />
 
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-ink-700">Customer</label>
+          <label className="mb-1.5 block text-sm font-medium text-ink-700">Customer</label>
           <CustomerSelector
             customers={customers}
             selectedCustomer={selectedCustomer}
@@ -137,8 +137,8 @@ export function RecordSaleModal({
           onSalesPersonChange={onSalesPersonChange}
         />
 
-        <div className="rounded-md border border-ink-100 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">Cart</p>
+        <div className="rounded-md border border-ink-100 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Cart</p>
           <CartPanel
             items={cart}
             onIncrement={onIncrement}
