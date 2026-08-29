@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from './FormField'
+import { FormRow } from './FormRow'
 import { RoleQuickSelect } from './RoleQuickSelect'
 import { Button } from '../ui/Button'
 import type { BranchRecord, RoleDefinition, StaffInput, StaffMember } from '../../types/settings'
@@ -56,11 +57,13 @@ export function StaffFormModal({ branches, roles, userId, initial, onClose, onSu
   }
 
   return (
-    <Modal title={initial ? 'Edit staff member' : 'Add staff member'} onClose={onClose}>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <Modal title={initial ? 'Edit staff member' : 'Add staff member'} onClose={onClose} size="lg">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <FormField label="Full name" {...register('fullName')} error={errors.fullName?.message} />
-        <FormField label="Username" {...register('username')} error={errors.username?.message} />
-        <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
+        <FormRow>
+          <FormField label="Username" {...register('username')} error={errors.username?.message} />
+          <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
+        </FormRow>
 
         <RoleQuickSelect
           id="role"

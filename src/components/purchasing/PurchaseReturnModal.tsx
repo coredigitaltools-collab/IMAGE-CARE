@@ -39,9 +39,11 @@ export function PurchaseReturnModal({ suppliers, products, onClose, onSubmit, su
   }
 
   return (
-    <Modal title="Return goods to supplier" onClose={onClose}>
-      <div className="space-y-4">
-        <div>
+    <Modal title="Return goods to supplier" onClose={onClose} size="xl">
+      {/* size="xl" gives the line-item editor the same room as the
+          Purchase Order form's identical editor. */}
+      <div className="space-y-5">
+        <div className="max-w-sm">
           <label htmlFor="ret-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
             Supplier
           </label>
@@ -49,7 +51,7 @@ export function PurchaseReturnModal({ suppliers, products, onClose, onSubmit, su
             id="ret-supplier"
             value={supplierId}
             onChange={(e) => setSupplierId(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             {suppliers.length === 0 && <option value="">No suppliers yet</option>}
             {suppliers.map((s) => (
@@ -71,9 +73,9 @@ export function PurchaseReturnModal({ suppliers, products, onClose, onSubmit, su
             id="ret-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            rows={2}
+            rows={3}
             placeholder="e.g. Damaged on arrival, wrong item shipped"
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}

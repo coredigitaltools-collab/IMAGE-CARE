@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
+import { FormRow } from '../settings/FormRow'
 import { Button } from '../ui/Button'
 import type { Supplier, SupplierInput } from '../../types/inventory'
 
@@ -43,37 +44,38 @@ export function SupplierFormModal({ initial, onClose, onSubmit }: SupplierFormMo
   })
 
   return (
-    <Modal title={initial ? 'Edit supplier' : 'Add supplier'} onClose={onClose}>
-      <form onSubmit={handleSubmit(onSubmit)} className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+    <Modal title={initial ? 'Edit supplier' : 'Add supplier'} onClose={onClose} size="lg">
+      {/* Modal.tsx now provides the scrollable body itself. */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         <FormField label="Supplier name" {...register('name')} error={errors.name?.message} />
-        <div className="grid grid-cols-2 gap-3">
+        <FormRow>
           <FormField label="Contact name" {...register('contactName')} error={errors.contactName?.message} />
           <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+        </FormRow>
+        <FormRow>
           <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
           <FormField label="TIN" {...register('tin')} error={errors.tin?.message} />
-        </div>
+        </FormRow>
         <FormField label="Address" {...register('address')} error={errors.address?.message} />
+        <div className="max-w-[240px]">
+          <label htmlFor="sf-status" className="mb-1.5 block text-sm font-medium text-ink-700">Status</label>
+          <select
+            id="sf-status"
+            {...register('status')}
+            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
         <div>
           <label htmlFor="sf-notes" className="mb-1.5 block text-sm font-medium text-ink-700">Notes</label>
           <textarea
             id="sf-notes"
             {...register('notes')}
-            rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            rows={3}
+            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
-        </div>
-        <div>
-          <label htmlFor="sf-status" className="mb-1.5 block text-sm font-medium text-ink-700">Status</label>
-          <select
-            id="sf-status"
-            {...register('status')}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

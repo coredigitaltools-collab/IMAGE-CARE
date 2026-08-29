@@ -114,7 +114,11 @@ export function RecordSaleModal({
 }: RecordSaleModalProps) {
   return (
     <Modal title="Record sale" onClose={onClose} size="xl">
-      <div className="max-h-[78vh] space-y-5 overflow-y-auto pr-1">
+      {/* Modal.tsx now owns the scrollable-body/fixed-header sizing itself
+          (max-h-[90vh] with an internal flex-1 overflow-y-auto body), so
+          this no longer needs its own max-h/overflow wrapper - keeping one
+          here too would just nest two scroll containers. */}
+      <div className="space-y-5">
         <ProductPicker ref={productPickerRef} products={products} onAdd={onAddToCart} />
 
         <div>

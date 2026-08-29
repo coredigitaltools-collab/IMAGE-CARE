@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { FormRow } from '../settings/FormRow'
 import { ProductLineItemsEditor } from './ProductLineItemsEditor'
 import { formatCurrency } from '../../lib/format'
 import type { LineItemRow } from './ProductLineItemsEditor'
@@ -54,43 +55,47 @@ export function PurchaseOrderFormModal({ suppliers, products, requisitionId, ini
   }
 
   return (
-    <Modal title="New purchase order" onClose={onClose}>
-      <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
-        <div>
-          <label htmlFor="po-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Supplier
-          </label>
-          <select
-            id="po-supplier"
-            value={supplierId}
-            onChange={(e) => setSupplierId(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-          >
-            {suppliers.length === 0 && <option value="">No suppliers yet, add one under Inventory → Suppliers</option>}
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
+    <Modal title="New purchase order" onClose={onClose} size="xl">
+      {/* Modal.tsx now provides the scrollable body itself. size="xl" gives
+          the line-item editor (product/qty/unit-cost columns) real width
+          instead of squeezing it into the old default max-w-lg. */}
+      <div className="space-y-5">
+        <FormRow>
+          <div>
+            <label htmlFor="po-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
+              Supplier
+            </label>
+            <select
+              id="po-supplier"
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+              className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            >
+              {suppliers.length === 0 && <option value="">No suppliers yet, add one under Inventory → Suppliers</option>}
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="po-delivery" className="mb-1.5 block text-sm font-medium text-ink-700">
+              Expected delivery date (optional)
+            </label>
+            <input
+              id="po-delivery"
+              type="date"
+              value={expectedDeliveryDate}
+              onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+              className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            />
+          </div>
+        </FormRow>
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-ink-700">Line items</label>
           <ProductLineItemsEditor products={products} rows={rows} onChange={setRows} quantityLabel="Quantity ordered" />
-        </div>
-
-        <div>
-          <label htmlFor="po-delivery" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Expected delivery date (optional)
-          </label>
-          <input
-            id="po-delivery"
-            type="date"
-            value={expectedDeliveryDate}
-            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-          />
         </div>
 
         <div>
@@ -101,8 +106,8 @@ export function PurchaseOrderFormModal({ suppliers, products, requisitionId, ini
             id="po-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            rows={3}
+            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
 

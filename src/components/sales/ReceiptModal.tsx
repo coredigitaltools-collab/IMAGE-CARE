@@ -18,7 +18,10 @@ interface ReceiptModalProps {
 
 export function ReceiptModal({ sale, customer, businessName, receiptSettings, cashierName, onClose, onNewSale }: ReceiptModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:p-0">
+    // Same z-index fix as the shared Modal.tsx: this uses var(--z-modal)
+    // instead of an arbitrary z-50 so the receipt also paints above the
+    // fixed sidebar (var(--z-sticky)) instead of underneath it.
+    <div className="fixed inset-0 flex items-center justify-center p-4 print:static print:p-0" style={{ zIndex: 'var(--z-modal)' }}>
       <div className="absolute inset-0 bg-ink-900/40 print:hidden" onClick={onClose} aria-hidden="true" />
       <div
         role="dialog"
