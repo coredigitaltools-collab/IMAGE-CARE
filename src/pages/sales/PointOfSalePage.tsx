@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, Receipt, RotateCcw, Search, TrendingUp } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
-import { ProductSearchGrid, type ProductSearchGridHandle } from '../../components/sales/ProductSearchGrid'
-import { CartPanel } from '../../components/sales/CartPanel'
-import { CustomerSelector } from '../../components/sales/CustomerSelector'
+import { Card } from '../../components/ui/Card'
+import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
+import { Skeleton } from '../../components/ui/Skeleton'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { RowActionButton } from '../../components/ui/RowActionButton'
+import { KpiCard } from '../../components/dashboard/KpiCard'
+import { RecordSaleModal } from '../../components/sales/RecordSaleModal'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
 import { ParkedSalesButton } from '../../components/sales/ParkedSalesButton'
 import { ReceiptModal } from '../../components/sales/ReceiptModal'
+import type { ProductPickerHandle } from '../../components/sales/ProductPicker'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
-import { useCategories, useProducts } from '../../features/inventory/hooks/useInventoryData'
+import { useUserContext } from '../../context/AppContext'
+import { useProducts } from '../../features/inventory/hooks/useInventoryData'
 import { useTaxRates, useStaff, useBranches } from '../../features/settings/hooks/useSettingsData'
 import { useReceiptSettings, useSalesSettings } from '../../features/settings/hooks/useSettingsData'
 import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
@@ -18,9 +26,11 @@ import {
   useCustomers,
   useDeleteParkedSale,
   useParkedSales,
+  useRefundSale,
   useResumeParkedSale,
   useSales,
 } from '../../features/sales/hooks/useSalesData'
+import { getSale } from '../../services/sales/salesService'
 import {
   CreditLimitExceededError,
   CreditRequiresCustomerError,
@@ -33,16 +43,100 @@ import {
   PaymentReferenceRequiredError,
 } from '../../services/salesService'
 import { ArchivedProductError } from '../../services/productService'
+import { formatCurrency } from '../../lib/format'
+import { PAYMENT_METHOD_LABELS } from '../../types/sales'
 import type { Product } from '../../types/inventory'
-import type { CartItem, Customer, PaymentMethod, Sale } from '../../types/sales'
+import type { CartItem, Customer, PaymentMethod, Sale, SaleLineItem, SaleStatus } from '../../types/sales'
+
+// ---------------------------------------------------------------------
+// Sales <-> real backend field mapping
+// ---------------------------------------------------------------------
+// listSales()/getSale() (src/services/sales/salesService.ts) return raw,
+// snake_case database rows (Sale/SaleItem in types/database.ts). Every
+// UI piece reused here - CartPanel, ReceiptModal, ParkedSalesButton -
+// was built against the camelCase Sale/CartItem/SaleLineItem shapes in
+// types/sales.ts instead. Nothing in this module ever mapped between the
+// two before this fix (the same "never exercised against live data" gap
+// documented for the Dashboard in the UX audit log), so completing a
+// sale, opening Parked, or resuming a parked sale all worked with
+// undefined fields - completing a sale in particular threw the moment
+// ReceiptModal tried to read sale.items. These helpers close that one
+// gap; they do not change what checkout, park, or refund actually do.
+
+function mapStatus(status: string): SaleStatus {
+  if (status === 'confirmed') return 'completed'
+  if (status === 'draft') return 'parked'
+  return 'refunded' // cancelled / voided
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRawSaleRow(raw: any): Sale {
+  const paymentMethod = (raw.payment_method ?? 'cash') as PaymentMethod
+  return {
+    id: raw.id,
+    reference: raw.sale_number ?? '',
+    branchId: raw.branch_id ?? null,
+    customerId: raw.customer_id ?? null,
+    salesPersonId: raw.served_by ?? null,
+    items: [], // listSales() never returns line items, only getSale() does
+    subtotal: raw.subtotal ?? 0,
+    discountPercent: 0, // only the resulting amount is stored on the row
+    discountAmount: raw.discount_amount ?? 0,
+    taxRateId: null,
+    taxAmount: raw.tax_amount ?? 0,
+    totalAmount: raw.total_amount ?? 0,
+    paymentMethod,
+    amountTendered: paymentMethod === 'cash' ? (raw.amount_paid ?? null) : null,
+    changeDue: paymentMethod === 'cash' ? (raw.change_given ?? null) : null,
+    paymentReference: raw.notes ?? null,
+    status: mapStatus(raw.status),
+    refundReason: null,
+    createdAt: raw.created_at ?? raw.sale_date ?? '',
+    createdBy: raw.served_by_name ?? '',
+    syncStatus: 'synced',
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRawSaleItems(rawItems: any[] | undefined, products: Product[]): SaleLineItem[] {
+  return (rawItems ?? []).map((i) => {
+    const product = products.find((p) => p.id === i.product_id)
+    return {
+      productId: i.product_id,
+      productName: product?.name ?? 'Item',
+      sku: product?.sku ?? '',
+      unitPrice: i.unit_price ?? 0,
+      unitCost: i.unit_cost ?? 0,
+      quantity: i.quantity ?? 0,
+      lineTotal: i.line_total ?? (i.unit_price ?? 0) * (i.quantity ?? 0),
+    }
+  })
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function unwrapOrThrow(r: { data?: any; error?: any }): any {
+  if (r.error) throw new Error(r.error?.message ?? 'Could not load this sale.')
+  return r.data
+}
+
+const STATUS_LABEL: Record<SaleStatus, string> = {
+  completed: 'Completed',
+  parked: 'Parked',
+  refunded: 'Refunded',
+}
+const STATUS_TONE: Record<SaleStatus, 'success' | 'warning' | 'danger'> = {
+  completed: 'success',
+  parked: 'warning',
+  refunded: 'danger',
+}
 
 export function PointOfSalePage() {
   const { user } = useAuth()
+  const ctx = useUserContext()
   const { showToast } = useToast()
-  const searchRef = useRef<ProductSearchGridHandle>(null)
+  const productPickerRef = useRef<ProductPickerHandle>(null)
 
   const productsQuery = useProducts()
-  const categoriesQuery = useCategories()
   const taxRatesQuery = useTaxRates()
   const customersQuery = useCustomers()
   const salesQuery = useSales()
@@ -55,7 +149,9 @@ export function PointOfSalePage() {
   const createCustomer = useCreateCustomer(user.id)
   const resumeParked = useResumeParkedSale()
   const deleteParked = useDeleteParkedSale()
+  const refundSale = useRefundSale(user.id)
 
+  const [isRecordSaleOpen, setIsRecordSaleOpen] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [salesPersonId, setSalesPersonId] = useState<string | null>(null)
@@ -77,24 +173,48 @@ export function PointOfSalePage() {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all')
+
   const salesSettings = salesSettingsQuery.data
   const defaultTaxRate = taxRatesQuery.data?.find((r) => r.isDefault)
 
+  const sales = useMemo(() => (salesQuery.data ?? []).map(mapRawSaleRow), [salesQuery.data])
+  const customerName = (id: string | null) => (id ? (customersQuery.data ?? []).find((c) => c.id === id)?.name ?? 'Unknown customer' : 'Walk-in customer')
+
+  const filteredSales = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return sales.filter((s) => {
+      if (statusFilter !== 'all' && s.status !== statusFilter) return false
+      if (!q) return true
+      return s.reference.toLowerCase().includes(q) || customerName(s.customerId).toLowerCase().includes(q)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sales, statusFilter, searchQuery, customersQuery.data])
+
+  const filteredTotal = filteredSales.reduce((sum, s) => sum + s.totalAmount, 0)
+  const completedCount = filteredSales.filter((s) => s.status === 'completed').length
+
   const lastPurchaseAt = useMemo(() => {
     if (!selectedCustomer) return null
-    const match = (salesQuery.data ?? []).find((s) => s.customerId === selectedCustomer.id && s.status === 'completed')
+    const match = sales.find((s) => s.customerId === selectedCustomer.id && s.status === 'completed')
     return match?.createdAt ?? null
-  }, [salesQuery.data, selectedCustomer])
+  }, [sales, selectedCustomer])
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, quantity = 1) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === product.id)
       if (existing) {
-        if (existing.quantity >= product.currentStock) {
+        const nextQty = existing.quantity + quantity
+        if (nextQty > product.currentStock) {
           showToast(`Only ${product.currentStock} in stock.`)
           return prev
         }
-        return prev.map((i) => (i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i))
+        return prev.map((i) => (i.productId === product.id ? { ...i, quantity: nextQty } : i))
+      }
+      if (quantity > product.currentStock) {
+        showToast(`Only ${product.currentStock} in stock.`)
+        return prev
       }
       return [
         ...prev,
@@ -103,7 +223,7 @@ export function PointOfSalePage() {
           productName: product.name,
           sku: product.sku,
           unitPrice: product.sellingPrice,
-          quantity: 1,
+          quantity,
           availableStock: product.currentStock,
         },
       ]
@@ -157,6 +277,8 @@ export function PointOfSalePage() {
       err instanceof CreditLimitExceededError
     ) {
       showToast(err.message)
+    } else if (err instanceof Error) {
+      showToast(err.message)
     } else {
       showToast('Something went wrong completing this sale.')
     }
@@ -164,7 +286,7 @@ export function PointOfSalePage() {
 
   const handleComplete = async () => {
     try {
-      const sale = await checkout.mutateAsync({
+      const result = await checkout.mutateAsync({
         customerId: selectedCustomer?.id ?? null,
         salesPersonId,
         branchId,
@@ -176,7 +298,17 @@ export function PointOfSalePage() {
         paymentReference: paymentMethod === 'mobile_money' || paymentMethod === 'card' ? paymentReference : null,
         status: 'completed',
       })
-      setReceiptSale(sale)
+      // The checkout mutation only returns the bare result of creating the
+      // sale (id/reference/total) - fetch the full record so the receipt
+      // has real line items instead of crashing on an empty list.
+      const full = await getSale(ctx, result.sale_id).then(unwrapOrThrow)
+      setReceiptSale({
+        ...mapRawSaleRow(full),
+        items: mapRawSaleItems(full.items, productsQuery.data ?? []),
+        discountPercent,
+        taxRateId,
+      })
+      setIsRecordSaleOpen(false)
     } catch (err) {
       handleError(err)
     }
@@ -198,6 +330,7 @@ export function PointOfSalePage() {
       })
       showToast('Sale parked.', 'success')
       resetPOS()
+      setIsRecordSaleOpen(false)
     } catch (err) {
       handleError(err)
     }
@@ -205,8 +338,9 @@ export function PointOfSalePage() {
 
   const handleResumeParked = async (sale: Sale) => {
     const resumed = await resumeParked.mutateAsync(sale.id)
+    const items = mapRawSaleItems(resumed.items, productsQuery.data ?? [])
     setCart(
-      resumed.items.map((i) => ({
+      items.map((i) => ({
         productId: i.productId,
         productName: i.productName,
         sku: i.sku,
@@ -217,24 +351,51 @@ export function PointOfSalePage() {
     )
     setDiscountPercent(resumed.discountPercent)
     setTaxRateId(resumed.taxRateId)
-    setPaymentMethod(resumed.paymentMethod)
+    setPaymentMethod((resumed.paymentMethod ?? 'cash') as PaymentMethod)
     if (resumed.customerId) {
       const cust = customersQuery.data?.find((c) => c.id === resumed.customerId)
       setSelectedCustomer(cust ?? null)
     }
+    setIsRecordSaleOpen(true)
     showToast('Parked sale resumed.', 'success')
   }
 
+  const handleRefund = async (sale: Sale) => {
+    const reason = window.prompt('Reason for this refund?')
+    if (!reason) return
+    try {
+      await refundSale.mutateAsync({ saleId: sale.id, reason })
+      showToast('Sale refunded, stock reversed.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not refund this sale.')
+    }
+  }
+
+  const [isReceiptLoading, setIsReceiptLoading] = useState(false)
+  const openReceipt = async (sale: Sale) => {
+    setIsReceiptLoading(true)
+    try {
+      const full = await getSale(ctx, sale.id).then(unwrapOrThrow)
+      setReceiptSale({ ...mapRawSaleRow(full), items: mapRawSaleItems(full.items, productsQuery.data ?? []) })
+    } catch {
+      showToast('Could not load this receipt.')
+    } finally {
+      setIsReceiptLoading(false)
+    }
+  }
+
+  const openRecordSale = () => setIsRecordSaleOpen(true)
+
   // Keyboard shortcuts for desktop cashiers: F2 search, F9 complete,
-  // F10 park, Esc clears the cart. Ignored while a modal is open or the
-  // shortcut would conflict with normal typing (only F-keys and Escape
-  // are global; nothing here hijacks letter/number keys used in inputs).
+  // F10 park, Esc clears the cart. Only active while the Record Sale
+  // modal is open, and ignored while another modal is open or the
+  // shortcut would conflict with normal typing.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (isCustomerModalOpen || receiptSale) return
+      if (!isRecordSaleOpen || isCustomerModalOpen || receiptSale) return
       if (e.key === 'F2') {
         e.preventDefault()
-        searchRef.current?.focusSearch()
+        productPickerRef.current?.focusSearch()
       } else if (e.key === 'F9') {
         e.preventDefault()
         if (cart.length > 0 && !checkout.isPending) handleComplete()
@@ -248,84 +409,175 @@ export function PointOfSalePage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart, isCustomerModalOpen, receiptSale, checkout.isPending, discountPercent, taxRateId, paymentMethod, amountTendered, paymentReference, selectedCustomer])
+  }, [isRecordSaleOpen, cart, isCustomerModalOpen, receiptSale, checkout.isPending, discountPercent, taxRateId, paymentMethod, amountTendered, paymentReference, selectedCustomer])
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-8rem)] max-w-6xl flex-col">
+    <div className="mx-auto max-w-5xl">
       <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Sales' }]} />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Sales / POS</h1>
-          <p className="mt-0.5 text-sm text-ink-500">Search products, build the cart, and check out.</p>
+          <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Sales</h1>
+          <p className="mt-0.5 text-sm text-ink-500">Every sale recorded, latest first.</p>
         </div>
         <div className="flex items-center gap-2">
-          <p className="hidden text-xs text-ink-400 lg:block">F2 search · F9 complete · F10 park · Esc clear</p>
           <ParkedSalesButton
-            parkedSales={parkedSalesQuery.data ?? []}
+            parkedSales={(parkedSalesQuery.data ?? []).map(mapRawSaleRow)}
             onResume={handleResumeParked}
             onDelete={(id) => deleteParked.mutate(id)}
           />
+          <Button onClick={openRecordSale}>
+            <Plus size={15} /> Record sale
+          </Button>
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
-        <div className="min-h-0 rounded-card border border-ink-100 bg-white p-4 shadow-card">
-          <ProductSearchGrid ref={searchRef} products={productsQuery.data ?? []} categories={categoriesQuery.data ?? []} onAdd={addToCart} />
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <KpiCard
+          label="Filtered sales"
+          value={formatCurrency(filteredTotal, 'UGX')}
+          hint={`${filteredSales.length} transaction${filteredSales.length === 1 ? '' : 's'}`}
+          icon={TrendingUp}
+          tone="success"
+          isLoading={salesQuery.isLoading}
+        />
+        <KpiCard
+          label="Completed sales"
+          value={String(completedCount)}
+          hint="in this filter"
+          icon={Receipt}
+          tone="blue"
+          isLoading={salesQuery.isLoading}
+        />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1">
+          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by reference or customer..."
+            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-8 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
+          />
         </div>
-
-        <div className="flex min-h-0 flex-col gap-3 rounded-card border border-ink-100 bg-white p-4 shadow-card">
-          <div>
-            <h2 className="text-sm font-semibold text-ink-900">Current sale</h2>
-            <p className="text-xs text-ink-500">Walk-in customer by default, add items to get started.</p>
-          </div>
-
-          <CustomerSelector
-            customers={(customersQuery.data ?? []).filter((c) => c.is_active)}
-            selectedCustomer={selectedCustomer}
-            lastPurchaseAt={lastPurchaseAt}
-            onSelect={setSelectedCustomer}
-            onAddNew={() => setIsCustomerModalOpen(true)}
-          />
-
-          <SaleDetailsToggle
-            branches={(branchesQuery.data ?? []).filter((b) => b.is_active)}
-            branchId={branchId}
-            onBranchChange={setBranchId}
-            staff={(staffQuery.data ?? []).filter((s) => s.is_active)}
-            salesPersonId={salesPersonId}
-            onSalesPersonChange={setSalesPersonId}
-          />
-
-          <div className="min-h-0 flex-1">
-            <CartPanel
-              items={cart}
-              onIncrement={increment}
-              onDecrement={decrement}
-              onRemove={remove}
-              discountPercent={discountPercent}
-              onDiscountChange={setDiscountPercent}
-              discountsAllowed={salesSettings?.allowDiscounts ?? true}
-              maxDiscountPercent={salesSettings?.maxDiscountPercent ?? 100}
-              taxRates={taxRatesQuery.data ?? []}
-              taxRateId={taxRateId}
-              onTaxRateChange={setTaxRateId}
-              paymentMethod={paymentMethod}
-              onPaymentMethodChange={setPaymentMethod}
-              amountTendered={amountTendered}
-              onAmountTenderedChange={setAmountTendered}
-              paymentReference={paymentReference}
-              onPaymentReferenceChange={setPaymentReference}
-              subtotal={subtotal}
-              discountAmount={discountAmount}
-              taxAmount={taxAmount}
-              totalAmount={totalAmount}
-              onPark={handlePark}
-              onComplete={handleComplete}
-              isSubmitting={checkout.isPending}
-            />
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(['all', 'completed', 'parked', 'refunded'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={
+                statusFilter === s
+                  ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
+                  : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+              }
+            >
+              {s === 'all' ? 'All' : STATUS_LABEL[s]}
+            </button>
+          ))}
         </div>
       </div>
+
+      <Card className="overflow-hidden">
+        {salesQuery.isLoading ? (
+          <div className="space-y-3 p-5">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-14 w-full" />
+            ))}
+          </div>
+        ) : filteredSales.length === 0 ? (
+          <EmptyState
+            icon={Receipt}
+            title={sales.length === 0 ? 'No sales recorded yet' : 'No sales match this filter'}
+            description={sales.length === 0 ? 'Record your first sale to see it here.' : 'Try a different search term or status.'}
+            action={sales.length === 0 ? { label: 'Record sale', onClick: openRecordSale } : undefined}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-100 text-left text-xs font-medium uppercase tracking-wide text-ink-500">
+                  <th className="px-4 py-2.5">Date</th>
+                  <th className="px-4 py-2.5">Reference</th>
+                  <th className="px-4 py-2.5">Customer</th>
+                  <th className="px-4 py-2.5">Payment</th>
+                  <th className="px-4 py-2.5 text-right">Total</th>
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {filteredSales.map((sale) => (
+                  <tr key={sale.id} className="hover:bg-ink-50/60">
+                    <td className="whitespace-nowrap px-4 py-3 text-ink-500">{new Date(sale.createdAt).toLocaleDateString('en-UG')}</td>
+                    <td className="px-4 py-3 font-medium text-ink-900">{sale.reference}</td>
+                    <td className="px-4 py-3 text-ink-700">{customerName(sale.customerId)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <Badge tone="info">{PAYMENT_METHOD_LABELS[sale.paymentMethod]}</Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-ink-900">{formatCurrency(sale.totalAmount, 'UGX')}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <Badge tone={STATUS_TONE[sale.status]}>{STATUS_LABEL[sale.status]}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1">
+                        <RowActionButton icon={Receipt} label="View receipt" onClick={() => openReceipt(sale)} />
+                        {sale.status === 'completed' && (
+                          <RowActionButton icon={RotateCcw} label="Refund" tone="danger" onClick={() => handleRefund(sale)} />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {isRecordSaleOpen && (
+        <RecordSaleModal
+          onClose={() => setIsRecordSaleOpen(false)}
+          products={productsQuery.data ?? []}
+          onAddToCart={addToCart}
+          productPickerRef={productPickerRef}
+          customers={(customersQuery.data ?? []).filter((c) => c.is_active)}
+          selectedCustomer={selectedCustomer}
+          lastPurchaseAt={lastPurchaseAt}
+          onSelectCustomer={setSelectedCustomer}
+          onAddNewCustomer={() => setIsCustomerModalOpen(true)}
+          branches={(branchesQuery.data ?? []).filter((b) => b.is_active)}
+          branchId={branchId}
+          onBranchChange={setBranchId}
+          staff={(staffQuery.data ?? []).filter((s) => s.is_active)}
+          salesPersonId={salesPersonId}
+          onSalesPersonChange={setSalesPersonId}
+          cart={cart}
+          onIncrement={increment}
+          onDecrement={decrement}
+          onRemove={remove}
+          discountPercent={discountPercent}
+          onDiscountChange={setDiscountPercent}
+          discountsAllowed={salesSettings?.allowDiscounts ?? true}
+          maxDiscountPercent={salesSettings?.maxDiscountPercent ?? 100}
+          taxRates={taxRatesQuery.data ?? []}
+          taxRateId={taxRateId}
+          onTaxRateChange={setTaxRateId}
+          paymentMethod={paymentMethod}
+          onPaymentMethodChange={setPaymentMethod}
+          amountTendered={amountTendered}
+          onAmountTenderedChange={setAmountTendered}
+          paymentReference={paymentReference}
+          onPaymentReferenceChange={setPaymentReference}
+          subtotal={subtotal}
+          discountAmount={discountAmount}
+          taxAmount={taxAmount}
+          totalAmount={totalAmount}
+          onPark={handlePark}
+          onComplete={handleComplete}
+          isSubmitting={checkout.isPending || isReceiptLoading}
+        />
+      )}
 
       {isCustomerModalOpen && (
         <CustomerFormModal
@@ -352,94 +604,10 @@ export function PointOfSalePage() {
           onNewSale={() => {
             setReceiptSale(null)
             resetPOS()
+            setIsRecordSaleOpen(true)
           }}
         />
       )}
     </div>
-  )
-}
-
-// ---- Branch / Sold by ----------------------------------------------
-// Both matter, but neither is part of the "find product -> cart -> pay"
-// workflow a first-time cashier needs to grasp, so they live behind a
-// small disclosure instead of two full-width fields competing with the
-// customer/cart area for attention. When there's only one branch to
-// choose from anyway, the branch row is skipped entirely - there's
-// nothing for the cashier to decide.
-interface SaleDetailsToggleProps {
-  branches: { id: string; name: string }[]
-  branchId: string | null
-  onBranchChange: (id: string | null) => void
-  staff: { id: string; fullName: string }[]
-  salesPersonId: string | null
-  onSalesPersonChange: (id: string | null) => void
-}
-
-function SaleDetailsToggle({
-  branches,
-  branchId,
-  onBranchChange,
-  staff,
-  salesPersonId,
-  onSalesPersonChange,
-}: SaleDetailsToggleProps) {
-  const showBranchPicker = branches.length > 1
-  const activeBranchName = branches.find((b) => b.id === branchId)?.name
-  const soldByName = staff.find((s) => s.id === salesPersonId)?.fullName
-
-  if (!showBranchPicker && staff.length === 0) return null
-
-  return (
-    <details className="group rounded-md border border-ink-100">
-      <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 py-2 text-xs font-medium text-ink-500">
-        <span>
-          Sale details
-          {activeBranchName && <span className="text-ink-400"> · {activeBranchName}</span>}
-          <span className="text-ink-400"> · Sold by {soldByName ?? 'unassigned'}</span>
-        </span>
-        <span className="text-ink-400 transition-transform group-open:rotate-180">⌄</span>
-      </summary>
-      <div className="space-y-2 px-2.5 pb-2.5">
-        {showBranchPicker && (
-          <div>
-            <label htmlFor="pos-branch" className="mb-1 block text-xs font-medium text-ink-500">
-              Branch
-            </label>
-            <select
-              id="pos-branch"
-              value={branchId ?? ''}
-              onChange={(e) => onBranchChange(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {staff.length > 0 && (
-          <div>
-            <label htmlFor="pos-sold-by" className="mb-1 block text-xs font-medium text-ink-500">
-              Sold by (optional)
-            </label>
-            <select
-              id="pos-sold-by"
-              value={salesPersonId ?? ''}
-              onChange={(e) => onSalesPersonChange(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
-            >
-              <option value="">Unassigned</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.fullName}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-    </details>
   )
 }

@@ -8,51 +8,62 @@
 
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard, ShoppingCart, Package, Truck, Users, CreditCard, FileText, ClipboardList,
+  Receipt, Wallet, Landmark, BarChart3, Gift, Target, Boxes, Calendar, CalendarDays, CalendarRange,
+  Building2, Building, WifiOff, BookOpen, Settings as SettingsIcon, Menu, ChevronLeft, ChevronRight,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { usePermission } from '../../hooks/usePermission';
 import { BranchSelector } from './BranchSelector';
 import { UserMenu } from './UserMenu';
 import { OfflineBanner } from '../feedback/ServiceStates';
 import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 // ---- Nav item definition -----------------------------------
 
 interface NavItem {
   label:    string;
   path:     string;
-  icon:     string;
+  icon:     LucideIcon;
   module:   string;
   children?: { label: string; path: string }[];
 }
 
+// Every icon here is a lucide-react icon, the same set the rest of the
+// app already uses for buttons/cards/empty states - the sidebar
+// previously rendered raw emoji characters instead (🛒📦🚚 etc.), which
+// look inconsistent with the app's design system and render differently
+// across operating systems.
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',   path: '/dashboard',  icon: '▦',  module: 'reports' },
-  { label: 'Sales',       path: '/sales',      icon: '🛒', module: 'sales' },
-  { label: 'Inventory',   path: '/inventory',  icon: '📦', module: 'inventory' },
-  { label: 'Purchasing',  path: '/purchasing', icon: '🚚', module: 'purchases' },
-  { label: 'Customers',   path: '/customers',  icon: '👥', module: 'customers' },
-  { label: 'Credit',      path: '/credit',     icon: '💳', module: 'credit' },
-  { label: 'Invoices',    path: '/invoices',   icon: '📄', module: 'invoices' },
-  { label: 'Bills',       path: '/bills',      icon: '📋', module: 'bills' },
-  { label: 'Expenses',    path: '/expenses',   icon: '💸', module: 'expenses' },
-  { label: 'Payroll',     path: '/payroll',    icon: '💰', module: 'payroll' },
-  { label: 'Cash Flow',   path: '/cash-flow',  icon: '🏦', module: 'cash' },
-  { label: 'Reports',     path: '/reports',    icon: '📊', module: 'reports' },
+  { label: 'Dashboard',   path: '/dashboard',  icon: LayoutDashboard, module: 'reports' },
+  { label: 'Sales',       path: '/sales',      icon: ShoppingCart,    module: 'sales' },
+  { label: 'Inventory',   path: '/inventory',  icon: Package,         module: 'inventory' },
+  { label: 'Purchasing',  path: '/purchasing', icon: Truck,           module: 'purchases' },
+  { label: 'Customers',   path: '/customers',  icon: Users,           module: 'customers' },
+  { label: 'Credit',      path: '/credit',     icon: CreditCard,      module: 'credit' },
+  { label: 'Invoices',    path: '/invoices',   icon: FileText,        module: 'invoices' },
+  { label: 'Bills',       path: '/bills',      icon: ClipboardList,   module: 'bills' },
+  { label: 'Expenses',    path: '/expenses',   icon: Receipt,         module: 'expenses' },
+  { label: 'Payroll',     path: '/payroll',    icon: Wallet,          module: 'payroll' },
+  { label: 'Cash Flow',   path: '/cash-flow',  icon: Landmark,        module: 'cash' },
+  { label: 'Reports',     path: '/reports',    icon: BarChart3,       module: 'reports' },
   // Restored from the pre-reset 20-module frontend (commit 06972ff,
   // "Offline Pack") - these modules and their pages/routes still existed
   // in source, just weren't wired into this shell. See
   // Module-Inventory-Forensic-Report.md for the full history.
-  { label: 'Loyalty',             path: '/loyalty',             icon: '🎁', module: 'loyalty' },
-  { label: 'Sales Targets',       path: '/sales-targets',       icon: '🎯', module: 'salesTargets' },
-  { label: 'Stock Summary',       path: '/stock-summary',       icon: '🧮', module: 'stockSummary' },
-  { label: 'Daily Summary',       path: '/daily-summary',       icon: '📅', module: 'dailySummary' },
-  { label: 'Monthly Summary',     path: '/monthly-summary',     icon: '🗓', module: 'monthlySummary' },
-  { label: 'Annual Summary',      path: '/annual-summary',      icon: '📆', module: 'annualSummary' },
-  { label: 'Bank Reconciliation', path: '/bank-reconciliation', icon: '🏛', module: 'bank' },
-  { label: 'Branch Overview',     path: '/branch-overview',     icon: '🏢', module: 'branchOverview' },
-  { label: 'Offline Mode',        path: '/offline-mode',        icon: '📴', module: 'offlineMode' },
-  { label: 'Accounting',          path: '/accounting',          icon: '🧾', module: 'accounting' },
-  { label: 'Settings',    path: '/settings',   icon: '⚙',  module: 'settings' },
+  { label: 'Loyalty',             path: '/loyalty',             icon: Gift,          module: 'loyalty' },
+  { label: 'Sales Targets',       path: '/sales-targets',       icon: Target,        module: 'salesTargets' },
+  { label: 'Stock Summary',       path: '/stock-summary',       icon: Boxes,         module: 'stockSummary' },
+  { label: 'Daily Summary',       path: '/daily-summary',       icon: Calendar,      module: 'dailySummary' },
+  { label: 'Monthly Summary',     path: '/monthly-summary',     icon: CalendarDays,  module: 'monthlySummary' },
+  { label: 'Annual Summary',      path: '/annual-summary',      icon: CalendarRange, module: 'annualSummary' },
+  { label: 'Bank Reconciliation', path: '/bank-reconciliation', icon: Building2,     module: 'bank' },
+  { label: 'Branch Overview',     path: '/branch-overview',     icon: Building,      module: 'branchOverview' },
+  { label: 'Offline Mode',        path: '/offline-mode',        icon: WifiOff,       module: 'offlineMode' },
+  { label: 'Accounting',          path: '/accounting',          icon: BookOpen,      module: 'accounting' },
+  { label: 'Settings',    path: '/settings',   icon: SettingsIcon, module: 'settings' },
 ];
 
 // ---- Shell component ---------------------------------------
@@ -198,7 +209,7 @@ function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }
         }}
         title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
       >
-        {isOpen ? '◀' : '▶'}
+        {isOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
       </button>
     </nav>
   );
@@ -237,8 +248,8 @@ function SidebarNavItem({ item, isOpen }: { item: NavItem; isOpen: boolean }) {
         }
       }}
     >
-      <span style={{ fontSize: 16, flexShrink: 0, width: 20, textAlign: 'center' }}>
-        {item.icon}
+      <span style={{ display: 'flex', flexShrink: 0, width: 20, justifyContent: 'center' }}>
+        <item.icon size={17} strokeWidth={1.75} />
       </span>
       {isOpen && (
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -280,7 +291,7 @@ function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
         }}
         title="Toggle sidebar"
       >
-        ☰
+        <Menu size={18} />
       </button>
 
       <PageTitle />

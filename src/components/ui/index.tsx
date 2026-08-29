@@ -11,6 +11,8 @@ import React, {
   type TextareaHTMLAttributes,
   useEffect, useState,
 } from 'react';
+import { CheckCircle2, XCircle, AlertTriangle, Info, Search } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // ============================================================
 // BUTTON
@@ -580,11 +582,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const colors: Record<ToastType, { bg: string; border: string; icon: string }> = {
-    success: { bg: '#f0fdf4', border: '#bbf7d0', icon: '✓' },
-    error:   { bg: 'var(--color-error-50)', border: '#fca5a5', icon: '✕' },
-    warning: { bg: 'var(--color-warning-50)', border: '#fde68a', icon: '⚠' },
-    info:    { bg: 'var(--color-info-50)', border: '#bfdbfe', icon: 'ℹ' },
+  const colors: Record<ToastType, { bg: string; border: string; icon: LucideIcon; iconColor: string }> = {
+    success: { bg: '#f0fdf4', border: '#bbf7d0', icon: CheckCircle2, iconColor: '#16a34a' },
+    error:   { bg: 'var(--color-error-50)', border: '#fca5a5', icon: XCircle, iconColor: '#dc2626' },
+    warning: { bg: 'var(--color-warning-50)', border: '#fde68a', icon: AlertTriangle, iconColor: '#b45309' },
+    info:    { bg: 'var(--color-info-50)', border: '#bfdbfe', icon: Info, iconColor: '#2563eb' },
   };
 
   return (
@@ -606,7 +608,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               fontSize: 13, color: 'var(--color-text-primary)',
               animation: 'slideIn 0.2s ease',
             }}>
-              <span style={{ flexShrink: 0, fontWeight: 700 }}>{c.icon}</span>
+              <c.icon size={16} color={c.iconColor} style={{ flexShrink: 0, marginTop: 1 }} />
               <span style={{ lineHeight: 1.5 }}>{t.message}</span>
               <button
                 onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
@@ -661,10 +663,10 @@ interface SearchProps {
 export function SearchInput({ value, onChange, placeholder = 'Search...' }: SearchProps) {
   return (
     <div style={{ position: 'relative' }}>
-      <span style={{
+      <Search size={14} style={{
         position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-        color: 'var(--color-text-muted)', fontSize: 14, pointerEvents: 'none',
-      }}>🔍</span>
+        color: 'var(--color-text-muted)', pointerEvents: 'none',
+      }} />
       <input
         type="search"
         value={value}

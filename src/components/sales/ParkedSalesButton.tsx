@@ -45,7 +45,7 @@ export function ParkedSalesButton({ parkedSales, onResume, onDelete }: ParkedSal
                 <li key={sale.id} className="flex items-center justify-between gap-2 border-b border-ink-100 px-3 py-2 last:border-0">
                   <button onMouseDown={() => onResume(sale)} className="min-w-0 flex-1 text-left">
                     <p className="text-xs font-medium text-ink-900">
-                      {sale.items.length} item{sale.items.length === 1 ? '' : 's'} · {formatCurrency(sale.totalAmount, 'UGX')}
+                      {sale.reference || 'Parked sale'} · {formatCurrency(sale.totalAmount, 'UGX')}
                     </p>
                     <p className="text-xs text-ink-500">{formatRelativeTime(sale.createdAt)}</p>
                   </button>

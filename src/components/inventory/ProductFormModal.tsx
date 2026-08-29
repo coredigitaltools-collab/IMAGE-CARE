@@ -94,7 +94,7 @@ export function ProductFormModal({
 
   return (
     <Modal title={isEditing ? 'Edit product' : 'Add product'} onClose={onClose} size="lg">
-      <form onSubmit={submit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+      <form onSubmit={submit} className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
         <div className="flex items-center gap-3">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
             {imageDataUrl ? (
@@ -121,13 +121,13 @@ export function ProductFormModal({
             label="SKU"
             {...register('sku')}
             error={errors.sku?.message}
-            hint="A short code you use to identify this product. Filled in for you, feel free to change it."
+            hint="Auto-filled, editable."
           />
           <FormField
             label="Barcode (optional)"
             {...register('barcode')}
             error={errors.barcode?.message}
-            hint="Only needed if you scan products at checkout."
+            hint="For scanning at checkout."
           />
         </div>
 
@@ -219,7 +219,7 @@ export function ProductFormModal({
             type="number"
             {...register('reorderLevel', { valueAsNumber: true })}
             error={errors.reorderLevel?.message}
-            hint="You'll be alerted to restock once stock falls to or below this number."
+            hint="Alerts you to restock at or below this."
           />
           <FormField
             label={isEditing ? 'Opening stock (historical)' : 'Opening stock'}

@@ -136,7 +136,7 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
         ))}
       </div>
 
-      <form onSubmit={submit} className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+      <form onSubmit={submit} className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
         {step === 0 && (
           <>
             <div className="flex items-center gap-3">
@@ -158,13 +158,13 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
                 label="SKU"
                 {...register('sku')}
                 error={errors.sku?.message}
-                hint="A short code you use to identify this product. Filled in for you, feel free to change it."
+                hint="Auto-filled, editable."
               />
               <FormField
                 label="Barcode (optional)"
                 {...register('barcode')}
                 error={errors.barcode?.message}
-                hint="Only needed if you scan products at checkout."
+                hint="For scanning at checkout."
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -201,7 +201,7 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
                 type="number"
                 {...register('reorderLevel', { valueAsNumber: true })}
                 error={errors.reorderLevel?.message}
-                hint="You'll be alerted to restock once stock falls to or below this number."
+                hint="Alerts you to restock at or below this."
               />
               <FormField label="Opening stock" type="number" {...register('openingStock', { valueAsNumber: true })} error={errors.openingStock?.message} />
             </div>

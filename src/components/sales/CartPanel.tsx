@@ -71,7 +71,7 @@ export function CartPanel({
               <ShoppingCart size={22} className="text-ink-300" />
             </span>
             <p className="text-sm font-semibold text-ink-900">Your cart is empty</p>
-            <p className="max-w-[220px] text-xs text-ink-500">Search for a product or scan a barcode on the left to begin.</p>
+            <p className="max-w-[220px] text-xs text-ink-500">Search for a product above or scan a barcode to begin.</p>
           </div>
         ) : (
           <ul className="divide-y divide-ink-100">

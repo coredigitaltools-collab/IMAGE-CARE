@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 
 export default function UnauthorizedPage() {
   return (
@@ -16,7 +17,7 @@ export default function UnauthorizedPage() {
       height: '60vh',
       textAlign: 'center',
     }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+      <Lock size={40} style={{ marginBottom: 16, color: 'var(--color-text-muted)' }} />
       <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Access restricted</h2>
       <p style={{ color: 'var(--color-text-muted)', marginBottom: 24, fontSize: 14 }}>
         You do not have permission to view this page.

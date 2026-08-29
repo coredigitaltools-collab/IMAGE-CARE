@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Archive, Plus, Users } from 'lucide-react'
+import { Archive, Plus, Users, X } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PayrollTabs } from '../../components/payroll/PayrollTabs'
 import { AddEmployeeToPayrollModal } from '../../components/payroll/AddEmployeeToPayrollModal'
@@ -108,7 +108,7 @@ export function PayrollEmployeesPage() {
                             className="flex items-center gap-1"
                             title="Click to remove"
                           >
-                            {type?.name ?? 'Unknown'} ✕
+                            {type?.name ?? 'Unknown'} <X size={11} />
                           </button>
                         </Badge>
                       )
