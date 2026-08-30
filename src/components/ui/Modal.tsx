@@ -21,10 +21,19 @@ interface ModalProps {
   size?: 'md' | 'lg' | 'xl'
 }
 
+// Sized up one full step across the board (2026-08-30 "make it bigger and
+// comfortable" pass, user-reported the previous sizing still read as
+// small/cramped next to their reference): md/lg/xl each moved to the next
+// Tailwind max-w step, header/body/footer padding grew from px-6/py-5 to
+// px-7/py-6, the title and close target grew, and the corner radius (see
+// --radius-card in index.css, now 1rem instead of 0.75rem) got chunkier.
+// Every dialog in the app renders through this one component, so this
+// single change is what makes "bigger, more comfortable" apply everywhere
+// at once rather than needing a pass through all 36 dialogs individually.
 const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
-  md: 'max-w-lg',
-  lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
+  md: 'max-w-xl',
+  lg: 'max-w-3xl',
+  xl: 'max-w-5xl',
 }
 
 export function Modal({ title, onClose, children, footer, size = 'md' }: ModalProps) {
@@ -38,7 +47,7 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: ModalPr
     // sidebar's z-200 - so on any page the sidebar covered, part of every
     // modal's content rendered invisibly behind the sidebar rather than
     // on top of it.
-    <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6" style={{ zIndex: 'var(--z-modal)' }}>
+    <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-8" style={{ zIndex: 'var(--z-modal)' }}>
       <div className="absolute inset-0 bg-navy-900/50 backdrop-blur-[2px] animate-[fadeIn_150ms_ease-out]" onClick={onClose} aria-hidden="true" />
       {/*
         Header/body/footer are a flex column capped at 90vh, with only the
@@ -47,8 +56,7 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: ModalPr
         (some did, inconsistently; some didn't and just clipped). Doing it
         once here means every dialog - short or long - gets a header that
         stays put, a footer that stays put, and a body that scrolls exactly
-        when it needs to. Comfortable px-6/py-5 padding replaces the old
-        cramped p-5 wrapping everything in one box.
+        when it needs to.
       */}
       <div
         role="dialog"
@@ -56,15 +64,15 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: ModalPr
         aria-label={title}
         className={`relative flex max-h-[90vh] w-full ${SIZE_CLASSES[size]} flex-col animate-[modalIn_180ms_ease-out] rounded-card border border-ink-100 bg-white shadow-card-hover`}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-ink-100 px-6 py-5">
-          <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
-          <button onClick={onClose} className="rounded-md p-1.5 text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900" aria-label="Close">
-            <X size={18} />
+        <div className="flex shrink-0 items-center justify-between border-b border-ink-100 px-7 py-6">
+          <h2 className="text-xl font-semibold text-ink-900">{title}</h2>
+          <button onClick={onClose} className="rounded-lg p-2 text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900" aria-label="Close">
+            <X size={20} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="flex-1 overflow-y-auto px-7 py-6">{children}</div>
         {footer && (
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-ink-100 px-6 py-4">
+          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-ink-100 px-7 py-5">
             {footer}
           </div>
         )}

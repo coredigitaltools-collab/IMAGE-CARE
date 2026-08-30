@@ -141,7 +141,28 @@
 }
 
 /* ---- Reset ------------------------------------------------- */
-
+/*
+  2026-08-30 root-cause fix: this reset (and the h1-h6/p/a defaults
+  below) used to be plain, un-layered CSS. index.css's Tailwind utility
+  classes (@import "tailwindcss") all compile into `@layer utilities`,
+  specifically so a project's own CSS can override Tailwind's defaults.
+  But per the CSS spec, UN-LAYERED styles always win over ANY layered
+  style regardless of selector specificity or source order - so this
+  plain `* { margin: 0; padding: 0; }` was silently overriding EVERY
+  Tailwind spacing utility (p-*, px-*, py-*, m-*, space-y-*, etc.) on
+  every element in the entire app. Verified directly: before this fix,
+  `getComputedStyle()` on an element with class "p-5" (or "space-y-6",
+  or a button's "py-3") reported 0px padding/margin no matter what the
+  class said. This is almost certainly the real reason dialogs/forms
+  have looked "cramped" through every previous sizing pass - the
+  padding/spacing classes were correct in the code the whole time, but
+  this rule was cancelling them out before they ever reached the
+  screen. Wrapping this reset (and the typography defaults after it)
+  in `@layer base` - the same layer Tailwind's own reset uses - lets
+  Tailwind utility classes override it exactly as intended, without
+  changing anything else in this file.
+*/
+@layer base {
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -193,6 +214,7 @@ h1, h2, h3, h4, h5, h6 {
 p { line-height: var(--leading-relaxed); }
 a { color: var(--color-primary-600); text-decoration: none; }
 a:hover { text-decoration: underline; }
+} /* end @layer base - see root-cause fix note above */
 
 /* ---- Utility classes -------------------------------------- */
 .sr-only {

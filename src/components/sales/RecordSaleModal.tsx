@@ -118,11 +118,11 @@ export function RecordSaleModal({
           (max-h-[90vh] with an internal flex-1 overflow-y-auto body), so
           this no longer needs its own max-h/overflow wrapper - keeping one
           here too would just nest two scroll containers. */}
-      <div className="space-y-5">
+      <div className="space-y-6">
         <ProductPicker ref={productPickerRef} products={products} onAdd={onAddToCart} />
 
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink-700">Customer</label>
+          <label className="mb-2 block text-sm font-medium text-ink-700">Customer</label>
           <CustomerSelector
             customers={customers}
             selectedCustomer={selectedCustomer}
@@ -141,7 +141,7 @@ export function RecordSaleModal({
           onSalesPersonChange={onSalesPersonChange}
         />
 
-        <div className="rounded-md border border-ink-100 p-4">
+        <div className="rounded-lg border border-ink-100 p-5">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Cart</p>
           <CartPanel
             items={cart}
@@ -208,8 +208,8 @@ function SaleDetailsToggle({
   if (!showBranchPicker && staff.length === 0) return null
 
   return (
-    <details className="group rounded-md border border-ink-100">
-      <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 py-2 text-xs font-medium text-ink-500">
+    <details className="group rounded-lg border border-ink-100">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs font-medium text-ink-500">
         <span>
           Sale details
           {activeBranchName && <span className="text-ink-400"> · {activeBranchName}</span>}
@@ -217,17 +217,17 @@ function SaleDetailsToggle({
         </span>
         <span className="text-ink-400 transition-transform group-open:rotate-180">⌄</span>
       </summary>
-      <div className="space-y-2 px-2.5 pb-2.5">
+      <div className="space-y-3 px-4 pb-4">
         {showBranchPicker && (
           <div>
-            <label htmlFor="pos-branch" className="mb-1 block text-xs font-medium text-ink-500">
+            <label htmlFor="pos-branch" className="mb-1.5 block text-xs font-medium text-ink-500">
               Branch
             </label>
             <select
               id="pos-branch"
               value={branchId ?? ''}
               onChange={(e) => onBranchChange(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -239,14 +239,14 @@ function SaleDetailsToggle({
         )}
         {staff.length > 0 && (
           <div>
-            <label htmlFor="pos-sold-by" className="mb-1 block text-xs font-medium text-ink-500">
+            <label htmlFor="pos-sold-by" className="mb-1.5 block text-xs font-medium text-ink-500">
               Sold by (optional)
             </label>
             <select
               id="pos-sold-by"
               value={salesPersonId ?? ''}
               onChange={(e) => onSalesPersonChange(e.target.value || null)}
-              className="w-full rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               <option value="">Unassigned</option>
               {staff.map((s) => (

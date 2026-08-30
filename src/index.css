@@ -65,7 +65,11 @@
   --shadow-card-hover: 0 4px 12px 0 rgb(15 23 42 / 0.08), 0 2px 4px 0 rgb(15 23 42 / 0.06);
   --shadow-sidebar: 1px 0 0 0 rgb(15 23 42 / 0.06);
 
-  --radius-card: 0.75rem;
+  /* Bumped 0.75rem -> 1rem (2026-08-30 "make it bigger" pass): every
+     dialog/card corner in the app reads from this one token, so this is
+     the cheapest way to give the whole app the chunkier, more modern
+     corner radius the user's reference screenshot has. */
+  --radius-card: 1rem;
 }
 
 html {

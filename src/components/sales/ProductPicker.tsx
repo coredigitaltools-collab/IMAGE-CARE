@@ -73,14 +73,14 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
   }
 
   return (
-    <div className="rounded-md border border-ink-100 bg-ink-50/60 p-4">
+    <div className="rounded-lg border border-ink-100 bg-ink-50/60 p-5">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Add items to sale</p>
 
-      <label htmlFor="rs-product" className="mb-1.5 block text-sm font-medium text-ink-700">
+      <label htmlFor="rs-product" className="mb-2 block text-sm font-medium text-ink-700">
         Product
       </label>
       {selected ? (
-        <div className="flex items-center justify-between gap-2 rounded-md border border-brand-blue-100 bg-brand-blue-50 px-3 py-2">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-brand-blue-100 bg-brand-blue-50 px-4 py-3">
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-ink-900">{selected.name}</p>
             <p className="text-xs text-ink-500">
@@ -93,7 +93,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
         </div>
       ) : (
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+          <Search size={14} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             id="rs-product"
             ref={inputRef}
@@ -107,10 +107,10 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
             onKeyDown={handleKeyDown}
             placeholder="Search product or scan barcode..."
             autoFocus
-            className="w-full rounded-md border border-ink-100 bg-white py-2.5 pl-9 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-lg border border-ink-100 bg-white py-3.5 pl-10 pr-4 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
           />
           {isOpen && query.trim() && (
-            <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-ink-100 bg-white shadow-card-hover">
+            <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-ink-100 bg-white shadow-card-hover">
               {matches.length === 0 ? (
                 <p className="px-3 py-3 text-xs text-ink-500">
                   {sellable.length === 0 ? 'No products yet, add one from Inventory first.' : `No products match "${query}"`}
@@ -158,9 +158,9 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
       )}
 
       {selected && (
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-4 grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="rs-qty" className="mb-1.5 block text-sm font-medium text-ink-700">
+            <label htmlFor="rs-qty" className="mb-2 block text-sm font-medium text-ink-700">
               Qty
             </label>
             <input
@@ -170,19 +170,19 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
               max={selected.currentStock}
               value={qty}
               onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">Price / unit</label>
-            <div className="rounded-md border border-ink-100 bg-ink-50 px-3 py-2.5 text-sm text-ink-500">
+            <label className="mb-2 block text-sm font-medium text-ink-700">Price / unit</label>
+            <div className="rounded-lg border border-ink-100 bg-ink-50 px-4 py-3.5 text-sm text-ink-500">
               {formatCurrency(selected.sellingPrice, 'UGX')}
             </div>
           </div>
           {qty > selected.currentStock && (
             <p className="col-span-2 -mt-1 text-xs text-brand-red-700">Only {selected.currentStock} in stock.</p>
           )}
-          <div className="col-span-2 flex items-center justify-between gap-2 border-t border-ink-100 pt-3">
+          <div className="col-span-2 flex items-center justify-between gap-2 border-t border-ink-100 pt-4">
             <div>
               <p className="text-xs text-ink-500">Line total</p>
               <p className="text-base font-semibold text-ink-900">{formatCurrency(lineTotal, 'UGX')}</p>
@@ -190,7 +190,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
             <button
               onClick={handleAdd}
               disabled={!canAdd}
-              className="flex items-center gap-1.5 rounded-md bg-brand-blue-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-blue-900 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg bg-brand-blue-700 px-5 py-3 text-sm font-medium text-white hover:bg-brand-blue-900 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus size={14} /> Add item
             </button>
