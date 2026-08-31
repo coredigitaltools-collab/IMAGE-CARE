@@ -50,7 +50,12 @@ export function PurchaseReturnsPage() {
             ))}
           </div>
         ) : (returnsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={RotateCcw} title="No returns recorded" description="Goods returned to a supplier will appear here." />
+          <EmptyState
+            icon={RotateCcw}
+            title="No returns recorded"
+            description="Goods returned to a supplier will appear here, and stock updates automatically."
+            action={{ label: '+ New return', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}

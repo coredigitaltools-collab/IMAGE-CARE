@@ -119,9 +119,13 @@ function unwrapOrThrow(r: { data?: any; error?: any }): any {
   return r.data
 }
 
+// 2026-08-31: "Parked" was called out by name as ERP jargon a normal
+// business owner wouldn't recognize. "On Hold" is the same concept in
+// plain retail language - the internal status value (SaleStatus =
+// 'parked') is unchanged, only this display label.
 const STATUS_LABEL: Record<SaleStatus, string> = {
   completed: 'Completed',
-  parked: 'Parked',
+  parked: 'On Hold',
   refunded: 'Refunded',
 }
 const STATUS_TONE: Record<SaleStatus, 'success' | 'warning' | 'danger'> = {
@@ -168,7 +172,7 @@ export function PointOfSalePage() {
   const [discountPercent, setDiscountPercent] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
-  const [amountTendered, setAmountTendered] = useState('')
+  const [amountTendered, setAmountTendered] = useState(0)
   const [paymentReference, setPaymentReference] = useState('')
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
@@ -252,7 +256,7 @@ export function PointOfSalePage() {
     setDiscountPercent(0)
     setTaxRateId(defaultTaxRate?.id ?? null)
     setPaymentMethod('cash')
-    setAmountTendered('')
+    setAmountTendered(0)
     setPaymentReference('')
   }
 
@@ -294,7 +298,7 @@ export function PointOfSalePage() {
         discountPercent,
         taxRateId,
         paymentMethod,
-        amountTendered: paymentMethod === 'cash' ? Number(amountTendered) || 0 : null,
+        amountTendered: paymentMethod === 'cash' ? amountTendered : null,
         paymentReference: paymentMethod === 'mobile_money' || paymentMethod === 'card' ? paymentReference : null,
         status: 'completed',
       })
@@ -328,7 +332,7 @@ export function PointOfSalePage() {
         paymentReference: null,
         status: 'parked',
       })
-      showToast('Sale parked.', 'success')
+      showToast('Sale put on hold.', 'success')
       resetPOS()
       setIsRecordSaleOpen(false)
     } catch (err) {
@@ -357,7 +361,7 @@ export function PointOfSalePage() {
       setSelectedCustomer(cust ?? null)
     }
     setIsRecordSaleOpen(true)
-    showToast('Parked sale resumed.', 'success')
+    showToast('Held sale resumed.', 'success')
   }
 
   const handleRefund = async (sale: Sale) => {

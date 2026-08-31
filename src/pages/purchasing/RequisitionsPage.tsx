@@ -65,7 +65,12 @@ export function RequisitionsPage() {
             ))}
           </div>
         ) : (requisitionsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={ClipboardList} title="No requisitions yet" description="Staff requests to buy items will appear here." />
+          <EmptyState
+            icon={ClipboardList}
+            title="No requisitions yet"
+            description="Staff requests to buy items will appear here. Approved ones can be converted into a purchase order."
+            action={{ label: '+ New requisition', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(requisitionsQuery.data ?? []).map((req) => (

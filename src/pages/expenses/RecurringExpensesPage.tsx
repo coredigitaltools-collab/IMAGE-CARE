@@ -70,7 +70,12 @@ export function RecurringExpensesPage() {
         {templatesQuery.isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : activeTemplates.length === 0 ? (
-          <EmptyState icon={Repeat} title="No recurring expenses yet" description="Set up a template for anything that repeats." />
+          <EmptyState
+            icon={Repeat}
+            title="No recurring expenses yet"
+            description="Set up a template for anything that repeats, like rent or subscriptions."
+            action={{ label: '+ New template', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {activeTemplates.map((t) => (

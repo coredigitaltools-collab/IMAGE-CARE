@@ -1,13 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
-import { Check, Upload } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CategoryQuickSelect } from './CategoryQuickSelect'
 import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
-import { formatCurrency } from '../../lib/format'
 import type { Brand, Category, ProductInput, Supplier, UnitOfMeasure } from '../../types/inventory'
 
 const schema = z.object({
@@ -28,13 +28,6 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
-const STEPS = [
-  { title: 'Basic info', fields: ['name', 'sku', 'barcode', 'categoryId', 'brandId'] as const },
-  { title: 'Pricing & stock', fields: ['unitId', 'buyingPrice', 'sellingPrice', 'reorderLevel', 'openingStock'] as const },
-  { title: 'Supplier & details', fields: ['supplierId', 'description', 'notes'] as const },
-  { title: 'Review', fields: [] as const },
-]
-
 interface AddProductWizardProps {
   categories: Category[]
   brands: Brand[]
@@ -47,17 +40,24 @@ interface AddProductWizardProps {
   submitError?: string
 }
 
+// 2026-08-31: collapsed from a 4-step wizard (Basic Info -> Pricing & Stock
+// -> Supplier & Details -> Review, with Next/Back navigation) into one
+// scrollable form, at the user's explicit direction that adding a single
+// product shouldn't require understanding the app's internal step
+// structure first. All 13 fields are unchanged - only the navigation is
+// gone. Fields stay grouped under plain section labels (Product info /
+// Pricing & stock / Supplier & details) so the form is still easy to scan,
+// and the modal keeps its existing size (`size="lg"`, unchanged) with the
+// same scrollable-body pattern ProductFormModal already uses.
 export function AddProductWizard({ categories, brands, units, suppliers, generatedSku, userId, onClose, onSubmit, submitError }: AddProductWizardProps) {
-  const [step, setStep] = useState(0)
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
 
   const {
     register,
+    control,
     handleSubmit,
-    trigger,
-    watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -81,12 +81,6 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     if (generatedSku) setValue('sku', generatedSku)
   }, [generatedSku, setValue])
 
-  const values = watch()
-  const categoryName = categories.find((c) => c.id === values.categoryId)?.name ?? '-'
-  const brandName = brands.find((b) => b.id === values.brandId)?.name ?? 'None'
-  const unitName = units.find((u) => u.id === values.unitId)?.name ?? '-'
-  const supplierName = suppliers.find((s) => s.id === values.supplierId)?.name ?? 'None'
-
   const handleImageChange = (file: File | undefined) => {
     if (!file) return
     const reader = new FileReader()
@@ -94,51 +88,16 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     reader.readAsDataURL(file)
   }
 
-  const goNext = async () => {
-    const fieldsToValidate = STEPS[step].fields
-    const valid = fieldsToValidate.length === 0 ? true : await trigger(fieldsToValidate as unknown as (keyof FormValues)[])
-    if (valid) setStep((s) => Math.min(s + 1, STEPS.length - 1))
-  }
-  const goBack = () => setStep((s) => Math.max(s - 1, 0))
-
   const submit = handleSubmit(async (v) => {
     await onSubmit({ ...v, imageDataUrl, branch_id: null, taxRateId: null })
   })
 
-  const isLastStep = step === STEPS.length - 1
-
   return (
     <Modal title="Add product" onClose={onClose} size="lg">
-      {/* Step indicator */}
-      <div className="mb-5 flex items-center">
-        {STEPS.map((s, i) => (
-          <div key={s.title} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                  i < step
-                    ? 'bg-success-500 text-white'
-                    : i === step
-                      ? 'bg-brand-blue-700 text-white'
-                      : 'bg-ink-100 text-ink-500'
-                }`}
-              >
-                {i < step ? <Check size={13} /> : i + 1}
-              </div>
-              <span className={`hidden text-[10px] sm:block ${i === step ? 'font-medium text-brand-blue-700' : 'text-ink-500'}`}>
-                {s.title}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <div className={`mx-1 h-0.5 flex-1 ${i < step ? 'bg-success-500' : 'bg-ink-100'}`} />
-            )}
-          </div>
-        ))}
-      </div>
-
-      <form onSubmit={submit} className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
-        {step === 0 && (
-          <>
+      <form onSubmit={submit} className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+        <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Product info</p>
+          <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
                 {imageDataUrl ? (
@@ -168,13 +127,19 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <CategoryQuickSelect
-                id="w-category"
-                categories={categories}
-                value={watch('categoryId')}
-                onChange={(id) => setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
-                userId={userId}
-                error={errors.categoryId?.message}
+              <Controller
+                name="categoryId"
+                control={control}
+                render={({ field }) => (
+                  <CategoryQuickSelect
+                    id="w-category"
+                    categories={categories}
+                    value={field.value}
+                    onChange={field.onChange}
+                    userId={userId}
+                    error={errors.categoryId?.message}
+                  />
+                )}
               />
               <div>
                 <label htmlFor="w-brand" className="mb-1.5 block text-sm font-medium text-ink-700">Brand</label>
@@ -184,86 +149,82 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
                 </select>
               </div>
             </div>
-          </>
-        )}
+          </div>
+        </div>
 
-        {step === 1 && (
-          <>
+        <div className="border-t border-ink-100 pt-6">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Pricing &amp; stock</p>
+          <div className="space-y-4">
             {/* Unit is locked to Piece - not user-configurable */}
             <input type="hidden" {...register('unitId')} value={units[0]?.id ?? 'piece'} />
             <div className="grid grid-cols-2 gap-3">
-              <FormField label="Buying price (UGX)" type="number" {...register('buyingPrice', { valueAsNumber: true })} error={errors.buyingPrice?.message} />
-              <FormField label="Selling price (UGX)" type="number" {...register('sellingPrice', { valueAsNumber: true })} error={errors.sellingPrice?.message} />
+              <Controller
+                name="buyingPrice"
+                control={control}
+                render={({ field }) => (
+                  <NumberField label="Buying price (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.buyingPrice?.message} />
+                )}
+              />
+              <Controller
+                name="sellingPrice"
+                control={control}
+                render={({ field }) => (
+                  <NumberField label="Selling price (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.sellingPrice?.message} />
+                )}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <FormField
-                label="Reorder level"
-                type="number"
-                {...register('reorderLevel', { valueAsNumber: true })}
-                error={errors.reorderLevel?.message}
-                hint="Alerts you to restock at or below this."
+              <Controller
+                name="reorderLevel"
+                control={control}
+                render={({ field }) => (
+                  <NumberField
+                    label="Reorder level"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    error={errors.reorderLevel?.message}
+                    hint="Alerts you to restock at or below this."
+                  />
+                )}
               />
-              <FormField label="Opening stock" type="number" {...register('openingStock', { valueAsNumber: true })} error={errors.openingStock?.message} />
+              <Controller
+                name="openingStock"
+                control={control}
+                render={({ field }) => (
+                  <NumberField label="Opening stock" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.openingStock?.message} />
+                )}
+              />
             </div>
-          </>
-        )}
+          </div>
+        </div>
 
-        {step === 2 && (
-          <>
+        <div className="border-t border-ink-100 pt-6">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Supplier &amp; details</p>
+          <div className="space-y-4">
             <div>
-              <label htmlFor="w-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">Supplier</label>
+              <label htmlFor="w-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">Supplier (optional)</label>
               <select id="w-supplier" {...register('supplierId')} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500">
                 <option value="">None</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
-              <label htmlFor="w-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description</label>
+              <label htmlFor="w-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description (optional)</label>
               <textarea id="w-description" {...register('description')} rows={2} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500" />
             </div>
             <div>
-              <label htmlFor="w-notes" className="mb-1.5 block text-sm font-medium text-ink-700">Notes</label>
+              <label htmlFor="w-notes" className="mb-1.5 block text-sm font-medium text-ink-700">Notes (optional)</label>
               <textarea id="w-notes" {...register('notes')} rows={2} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500" />
             </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 rounded-md border border-ink-100 p-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-ink-50">
-                {imageDataUrl ? <img src={imageDataUrl} alt="" className="h-full w-full object-cover" /> : <Upload size={16} className="text-ink-300" />}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink-900">{values.name || 'Untitled product'}</p>
-                <p className="text-xs text-ink-500">{values.sku} · {categoryName} · {brandName}</p>
-              </div>
-            </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border border-ink-100 p-3 text-sm">
-              <div><dt className="text-xs text-ink-500">Buying price</dt><dd className="text-ink-900">{formatCurrency(values.buyingPrice || 0, 'UGX')}</dd></div>
-              <div><dt className="text-xs text-ink-500">Selling price</dt><dd className="text-ink-900">{formatCurrency(values.sellingPrice || 0, 'UGX')}</dd></div>
-              <div><dt className="text-xs text-ink-500">Opening stock</dt><dd className="text-ink-900">{values.openingStock} {unitName}</dd></div>
-              <div><dt className="text-xs text-ink-500">Reorder level</dt><dd className="text-ink-900">{values.reorderLevel}</dd></div>
-              <div><dt className="text-xs text-ink-500">Supplier</dt><dd className="text-ink-900">{supplierName}</dd></div>
-              <div><dt className="text-xs text-ink-500">Barcode</dt><dd className="text-ink-900">{values.barcode || '-'}</dd></div>
-            </dl>
-            {values.description && <p className="text-xs text-ink-500">{values.description}</p>}
           </div>
-        )}
+        </div>
 
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}
 
-        <div className="flex justify-between gap-2 pt-2">
-          {step > 0 ? (
-            <Button type="button" variant="secondary" onClick={goBack}>Back</Button>
-          ) : (
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          )}
-          {isLastStep ? (
-            <Button type="button" onClick={() => submit()}>Create product</Button>
-          ) : (
-            <Button type="button" onClick={goNext}>Next</Button>
-          )}
+        <div className="flex justify-end gap-2 border-t border-ink-100 pt-4">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving…' : 'Save product'}</Button>
         </div>
       </form>
     </Modal>

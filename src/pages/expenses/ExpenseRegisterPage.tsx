@@ -216,7 +216,12 @@ export function ExpenseRegisterPage() {
             {[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={FileMinus} title="No expenses found" description="Record a new expense to get started." />
+          <EmptyState
+            icon={FileMinus}
+            title={expenses.length === 0 ? 'No expenses yet' : 'No expenses match your search'}
+            description={expenses.length === 0 ? 'Record your first expense to get started.' : 'Try a different search term or month.'}
+            action={expenses.length === 0 ? { label: '+ Add expense', onClick: () => setIsAddOpen(true) } : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

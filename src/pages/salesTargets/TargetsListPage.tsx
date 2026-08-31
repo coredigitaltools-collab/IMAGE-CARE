@@ -86,7 +86,26 @@ export function TargetsListPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={Target} title="No targets found" description="Create a target to start tracking progress." />
+          <EmptyState
+            icon={Target}
+            title={scopeFilter === 'all' ? 'No targets yet' : 'No targets match this filter'}
+            description={
+              scopeFilter === 'all'
+                ? 'Set a business, branch, or staff target to start tracking progress.'
+                : 'Try a different scope filter, or view all targets.'
+            }
+            action={
+              scopeFilter === 'all'
+                ? {
+                    label: '+ New target',
+                    onClick: () => {
+                      setCreateError(undefined)
+                      setIsCreateOpen(true)
+                    },
+                  }
+                : { label: 'Show all targets', onClick: () => setScopeFilter('all') }
+            }
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {filtered.map((p) => (
@@ -135,6 +154,7 @@ export function TargetsListPage() {
         <CreateTargetModal
           branches={branches.filter((b) => b.is_active)}
           staff={staff.filter((s) => s.is_active)}
+          userId={user.id}
           submitError={createError}
           onClose={() => setIsCreateOpen(false)}
           onSubmit={async (input) => {

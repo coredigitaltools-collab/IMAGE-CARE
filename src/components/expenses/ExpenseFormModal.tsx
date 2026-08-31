@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Paperclip, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { MAX_ATTACHMENT_BYTES, AttachmentTooLargeError } from '../../services/expenseService'
 
 // 2026-08-31: simplified at the user's explicit request ("do away with the
@@ -126,14 +126,13 @@ export function ExpenseFormModal({
         </div>
 
         <div>
-          <FormField
+          <NumberField
             id="ex-amount"
             label={`Amount (UGX)${lockAmount ? ' - locked once recorded' : ''}`}
-            type="number"
             min={0}
             value={amount}
             disabled={lockAmount}
-            onChange={(e) => setAmount(Number(e.target.value))}
+            onChange={setAmount}
           />
           {lockAmount && (
             <p className="mt-1.5 text-xs text-ink-500">

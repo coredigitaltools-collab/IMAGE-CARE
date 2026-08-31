@@ -132,7 +132,7 @@ function SalesReport() {
         <div className="p-4">
           <SectionHeading>Sales Summary</SectionHeading>
           {salesQuery.isLoading ? <Skeleton className="h-40 w-full" /> : <>
-            <StatRow label="Confirmed Sales"  value={String(confirmed.length)} />
+            <StatRow label="Completed Sales"  value={String(confirmed.length)} />
             <StatRow label="Total Revenue"    value={formatCurrency(revenue, 'UGX')} tone="green" />
             {Object.entries(byMethod).map(([method, total]) => (
               <StatRow key={method} label={`  ${method}`} value={formatCurrency(total, 'UGX')} />

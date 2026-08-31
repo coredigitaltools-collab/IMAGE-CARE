@@ -111,6 +111,7 @@ export function SalesTargetsDashboardPage() {
         <CreateTargetModal
           branches={(branchesQuery.data ?? []).filter((b) => b.is_active)}
           staff={(staffQuery.data ?? []).filter((s) => s.is_active)}
+          userId={user.id}
           submitError={createError}
           onClose={() => setIsCreateOpen(false)}
           onSubmit={async (input) => {

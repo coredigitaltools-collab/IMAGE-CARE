@@ -81,7 +81,26 @@ export function InvoicesListPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={FileText} title="No invoices found" description="Invoices generated from completed sales will appear here." />
+          <EmptyState
+            icon={FileText}
+            title={statusFilter === 'all' ? 'No invoices yet' : 'No invoices match this filter'}
+            description={
+              statusFilter === 'all'
+                ? 'Generate an invoice from a completed sale to start tracking what customers owe.'
+                : 'Try a different status filter, or view all invoices.'
+            }
+            action={
+              statusFilter === 'all'
+                ? {
+                    label: '+ Invoice a sale',
+                    onClick: () => {
+                      setGenError(undefined)
+                      setIsGenerateOpen(true)
+                    },
+                  }
+                : { label: 'Show all invoices', onClick: () => setStatusFilter('all') }
+            }
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {filtered.map((inv) => {

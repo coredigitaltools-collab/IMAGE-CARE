@@ -65,7 +65,12 @@ export function StockAdjustmentsPage() {
         {adjustmentsQuery.isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : (adjustmentsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={ClipboardList} title="No adjustments yet" description="Adjustments you record will be listed here." />
+          <EmptyState
+            icon={ClipboardList}
+            title="No adjustments yet"
+            description="Record a stock correction when a count doesn't match, or stock is damaged, lost, or transferred."
+            action={{ label: '+ New adjustment', onClick: () => setIsOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(adjustmentsQuery.data ?? []).map((adj) => (

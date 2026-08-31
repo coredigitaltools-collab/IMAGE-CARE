@@ -74,7 +74,18 @@ export function PayrollEmployeesPage() {
             ))}
           </div>
         ) : activeEmployees.length === 0 ? (
-          <EmptyState icon={Users} title="No employees on payroll yet" description="Add staff from your Staff Master to start running payroll." />
+          <EmptyState
+            icon={Users}
+            title="No employees on payroll yet"
+            description="Add staff from your Staff Master to start running payroll."
+            action={{
+              label: '+ Add to payroll',
+              onClick: () => {
+                setAddError(undefined)
+                setIsAddOpen(true)
+              },
+            }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {activeEmployees.map((emp) => {
@@ -154,6 +165,7 @@ export function PayrollEmployeesPage() {
         <AssignComponentModal
           kind={assigningFor.kind}
           availableTypes={(assigningFor.kind === 'allowance' ? allowanceTypesQuery.data : deductionTypesQuery.data) ?? []}
+          userId={user.id}
           onClose={() => setAssigningFor(null)}
           onSubmit={async (componentTypeId, amountOverride) => {
             await assignComponent.mutateAsync({ employeeRecordId: assigningFor.employee.id, componentTypeId, kind: assigningFor.kind, amountOverride })

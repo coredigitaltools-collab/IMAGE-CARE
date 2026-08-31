@@ -1,5 +1,6 @@
 import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { NumberField } from '../ui/NumberField'
 import { formatCurrency } from '../../lib/format'
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '../../types/sales'
 import type { CartItem, PaymentMethod } from '../../types/sales'
@@ -19,8 +20,8 @@ interface CartPanelProps {
   onTaxRateChange: (id: string | null) => void
   paymentMethod: PaymentMethod
   onPaymentMethodChange: (method: PaymentMethod) => void
-  amountTendered: string
-  onAmountTenderedChange: (value: string) => void
+  amountTendered: number
+  onAmountTenderedChange: (value: number) => void
   paymentReference: string
   onPaymentReferenceChange: (value: string) => void
   subtotal: number
@@ -58,7 +59,7 @@ export function CartPanel({
   onComplete,
   isSubmitting,
 }: CartPanelProps) {
-  const tenderedNumber = Number(amountTendered) || 0
+  const tenderedNumber = amountTendered
   const changeDue = Math.max(0, tenderedNumber - totalAmount)
   const hasItems = items.length > 0
 
@@ -127,21 +128,16 @@ export function CartPanel({
               <span className="text-ink-400 transition-transform group-open:rotate-180">⌄</span>
             </summary>
             <div className="grid grid-cols-2 gap-3 px-4 pb-4">
-              <div>
-                <label htmlFor="pos-discount" className="mb-1.5 block text-xs font-medium text-ink-700">
-                  Discount %{!discountsAllowed && ' (off)'}
-                </label>
-                <input
-                  id="pos-discount"
-                  type="number"
-                  min={0}
-                  max={maxDiscountPercent}
-                  disabled={!discountsAllowed}
-                  value={discountPercent}
-                  onChange={(e) => onDiscountChange(Number(e.target.value))}
-                  className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card disabled:bg-ink-50 disabled:text-ink-300"
-                />
-              </div>
+              <NumberField
+                id="pos-discount"
+                label={`Discount %${!discountsAllowed ? ' (off)' : ''}`}
+                min={0}
+                max={maxDiscountPercent}
+                allowDecimal
+                disabled={!discountsAllowed}
+                value={discountPercent}
+                onChange={onDiscountChange}
+              />
               <div>
                 <label htmlFor="pos-tax" className="mb-1.5 block text-xs font-medium text-ink-700">
                   Tax
@@ -209,18 +205,12 @@ export function CartPanel({
           {/* Payment-method-specific fields */}
           {paymentMethod === 'cash' && (
             <div className="rounded-lg bg-ink-50 p-4">
-              <label htmlFor="pos-tendered" className="mb-1.5 block text-xs font-medium text-ink-700">
-                Amount received (UGX)
-              </label>
-              <input
+              <NumberField
                 id="pos-tendered"
-                type="number"
+                label="Amount received (UGX)"
                 min={0}
-                inputMode="numeric"
                 value={amountTendered}
-                onChange={(e) => onAmountTenderedChange(e.target.value)}
-                placeholder="0"
-                className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                onChange={onAmountTenderedChange}
               />
               {tenderedNumber > 0 && (
                 <p className={`mt-2 text-xs font-medium ${tenderedNumber >= totalAmount ? 'text-success-700' : 'text-brand-red-700'}`}>
@@ -267,7 +257,7 @@ export function CartPanel({
               disabled={isSubmitting}
               className="w-full py-2 text-center text-xs font-medium text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Park this sale for later <span className="text-ink-400">(F10)</span>
+              Hold this sale for later <span className="text-ink-400">(F10)</span>
             </button>
           </div>
         </div>

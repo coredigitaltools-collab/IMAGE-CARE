@@ -63,7 +63,12 @@ export function PurchaseOrdersPage() {
             ))}
           </div>
         ) : (ordersQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={ShoppingCart} title="No purchase orders yet" description="Create one directly, or approve a requisition and convert it." />
+          <EmptyState
+            icon={ShoppingCart}
+            title="No purchase orders yet"
+            description="Create one directly, or approve a requisition and convert it."
+            action={{ label: '+ New order', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(ordersQuery.data ?? []).map((order) => {

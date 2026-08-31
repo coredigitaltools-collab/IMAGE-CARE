@@ -1,18 +1,37 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Wallet, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Landmark, TrendingUp, ListChecks, LineChart, ClipboardCheck, Plus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CashFlowTabs } from '../../components/cashFlow/CashFlowTabs'
 import { KpiCard } from '../../components/dashboard/KpiCard'
+import { RecordCashMovementModal } from '../../components/accounting/RecordCashMovementModal'
+import { useToast } from '../../components/ui/toastContext'
+import { useAuth } from '../../hooks/useAuth'
+import { useBankAccounts } from '../../features/bankReconciliation/hooks/useBankReconciliationData'
 import { formatCurrency } from '../../lib/format'
-import { useCashFlowDashboardKpis } from '../../features/accounting/hooks/useAccountingData'
+import { useCashFlowDashboardKpis, useRecordCashMovement } from '../../features/accounting/hooks/useAccountingData'
 
 export function CashFlowDashboardPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { showToast } = useToast()
   const kpisQuery = useCashFlowDashboardKpis()
+  const bankAccountsQuery = useBankAccounts()
+  const recordMovement = useRecordCashMovement(user.id)
   const data = kpisQuery.data
 
+  const [isRecordOpen, setIsRecordOpen] = useState(false)
+  const [recordError, setRecordError] = useState<string | undefined>()
+
   const quickActions = [
-    { label: 'Record cash movement', icon: Plus, onClick: () => navigate('/accounting') },
+    {
+      label: 'Record cash movement',
+      icon: Plus,
+      onClick: () => {
+        setRecordError(undefined)
+        setIsRecordOpen(true)
+      },
+    },
     { label: 'Cash ledger', icon: ListChecks, onClick: () => navigate('/cash-flow/ledger') },
     { label: 'Forecast', icon: LineChart, onClick: () => navigate('/cash-flow/forecast') },
     { label: 'Reconciliation', icon: ClipboardCheck, onClick: () => navigate('/cash-flow/reconciliation') },
@@ -87,6 +106,23 @@ export function CashFlowDashboardPage() {
           isLoading={kpisQuery.isLoading}
         />
       </div>
+
+      {isRecordOpen && (
+        <RecordCashMovementModal
+          bankAccounts={(bankAccountsQuery.data ?? []).filter((a) => a.is_active)}
+          submitError={recordError}
+          onClose={() => setIsRecordOpen(false)}
+          onSubmit={async (type, amount, reason, bankAccountId) => {
+            try {
+              await recordMovement.mutateAsync({ type, amount, reason, bankAccountId })
+              showToast('Cash movement recorded.', 'success')
+              setIsRecordOpen(false)
+            } catch (err) {
+              setRecordError(err instanceof Error ? err.message : 'Could not record this movement.')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

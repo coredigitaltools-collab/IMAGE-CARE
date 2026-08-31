@@ -53,7 +53,11 @@ export function BarcodeManagementPage() {
 
       {results.length === 0 ? (
         <Card className="p-5">
-          <EmptyState icon={BarcodeIcon} title="No products found" description="Try a different search term." />
+          <EmptyState
+            icon={BarcodeIcon}
+            title={query ? 'No products found' : 'No active products yet'}
+            description={query ? 'Try a different search term.' : 'Add a product in Inventory, then its barcode label will be available here.'}
+          />
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 print:grid-cols-3">

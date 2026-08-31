@@ -63,7 +63,12 @@ export function SupplierInvoicesPage() {
             ))}
           </div>
         ) : (invoicesQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={FileText} title="No supplier invoices yet" description="Invoices you record from suppliers will appear here." />
+          <EmptyState
+            icon={FileText}
+            title="No supplier invoices yet"
+            description="Record an invoice a supplier has billed you, so you can track what's owed and pay it."
+            action={{ label: '+ Record invoice', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(invoicesQuery.data ?? []).map((inv) => {
@@ -104,6 +109,7 @@ export function SupplierInvoicesPage() {
         <SupplierInvoiceModal
           suppliers={activeSuppliers}
           orders={ordersQuery.data ?? []}
+          userId={user.id}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
             await createInvoice.mutateAsync(input)

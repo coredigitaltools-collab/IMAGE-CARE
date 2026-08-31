@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
+import { BranchFormModal } from '../settings/BranchFormModal'
+import { useCreateBranch } from '../../features/settings/hooks/useSettingsData'
 import { TARGET_SCOPE_LABELS } from '../../types/salesTargets'
 import type { SalesTargetInput, TargetScope } from '../../types/salesTargets'
 import type { BranchRecord, StaffMember } from '../../types/settings'
@@ -9,6 +11,7 @@ import type { BranchRecord, StaffMember } from '../../types/settings'
 interface CreateTargetModalProps {
   branches: BranchRecord[]
   staff: StaffMember[]
+  userId: string
   onClose: () => void
   onSubmit: (input: SalesTargetInput) => Promise<void>
   submitError?: string
@@ -16,7 +19,8 @@ interface CreateTargetModalProps {
 
 const SCOPES: TargetScope[] = ['business', 'branch', 'staff']
 
-export function CreateTargetModal({ branches, staff, onClose, onSubmit, submitError }: CreateTargetModalProps) {
+export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, submitError }: CreateTargetModalProps) {
+  const createBranch = useCreateBranch(userId)
   const today = new Date()
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
   const lastOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10)
@@ -28,6 +32,11 @@ export function CreateTargetModal({ branches, staff, onClose, onSubmit, submitEr
   const [periodEnd, setPeriodEnd] = useState(lastOfMonth)
   const [targetAmount, setTargetAmount] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // 2026-08-31: "No branches yet" used to be a dead end here - picking a
+  // branch scope with zero branches meant leaving this modal to go create
+  // one elsewhere. Now it can be created inline, without losing the rest
+  // of the target form already filled in.
+  const [isAddingBranch, setIsAddingBranch] = useState(false)
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
@@ -43,6 +52,19 @@ export function CreateTargetModal({ branches, staff, onClose, onSubmit, submitEr
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (isAddingBranch) {
+    return (
+      <BranchFormModal
+        onClose={() => setIsAddingBranch(false)}
+        onSubmit={async (input) => {
+          const created = await createBranch.mutateAsync(input)
+          setBranchId(created.id)
+          setIsAddingBranch(false)
+        }}
+      />
+    )
   }
 
   return (
@@ -71,19 +93,28 @@ export function CreateTargetModal({ branches, staff, onClose, onSubmit, submitEr
             <label htmlFor="tg-branch" className="mb-1.5 block text-sm font-medium text-ink-700">
               Branch
             </label>
-            <select
-              id="tg-branch"
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-            >
-              {branches.length === 0 && <option value="">No branches yet</option>}
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                id="tg-branch"
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              >
+                {branches.length === 0 && <option value="">No branches yet</option>}
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setIsAddingBranch(true)}
+                className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+              >
+                + New
+              </button>
+            </div>
           </div>
         )}
 
@@ -138,14 +169,7 @@ export function CreateTargetModal({ branches, staff, onClose, onSubmit, submitEr
           </div>
         </div>
 
-        <FormField
-          id="tg-amount"
-          label="Target amount (UGX)"
-          type="number"
-          min={0}
-          value={targetAmount}
-          onChange={(e) => setTargetAmount(Number(e.target.value))}
-        />
+        <NumberField id="tg-amount" label="Target amount (UGX)" min={0} value={targetAmount} onChange={setTargetAmount} />
 
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}
 

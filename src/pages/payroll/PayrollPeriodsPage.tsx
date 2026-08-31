@@ -54,7 +54,18 @@ export function PayrollPeriodsPage() {
             ))}
           </div>
         ) : (periodsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={CalendarRange} title="No payroll periods yet" description="Create your first payroll period to get started." />
+          <EmptyState
+            icon={CalendarRange}
+            title="No payroll periods yet"
+            description="Create your first payroll period to get started."
+            action={{
+              label: '+ New period',
+              onClick: () => {
+                setAddError(undefined)
+                setIsAddOpen(true)
+              },
+            }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(periodsQuery.data ?? []).map((period) => (

@@ -55,7 +55,12 @@ export function BankAccountsPage() {
         {accountsQuery.isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : activeAccounts.length === 0 ? (
-          <EmptyState icon={Building2} title="No bank accounts yet" description="Add the accounts the business actually banks with." />
+          <EmptyState
+            icon={Building2}
+            title="No bank accounts yet"
+            description="Add the accounts the business actually banks with."
+            action={{ label: '+ New account', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {activeAccounts.map((a) => (

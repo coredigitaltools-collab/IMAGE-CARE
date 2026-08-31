@@ -1,24 +1,34 @@
 import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { NumberField } from '../ui/NumberField'
+import { SupplierFormModal } from '../inventory/SupplierFormModal'
+import { useCreateSupplier } from '../../features/inventory/hooks/useInventoryData'
 import type { PurchaseOrder } from '../../types/purchasing'
 import type { Supplier } from '../../types/inventory'
 
 interface SupplierInvoiceModalProps {
   suppliers: Supplier[]
   orders: PurchaseOrder[]
+  userId: string
   onClose: () => void
   onSubmit: (input: { supplierId: string; purchaseOrderId: string | null; supplierInvoiceNumber: string; amount: number; dueDate: string | null }) => Promise<void>
   submitError?: string
 }
 
-export function SupplierInvoiceModal({ suppliers, orders, onClose, onSubmit, submitError }: SupplierInvoiceModalProps) {
+export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSubmit, submitError }: SupplierInvoiceModalProps) {
+  const createSupplier = useCreateSupplier(userId)
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
   const [purchaseOrderId, setPurchaseOrderId] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [amount, setAmount] = useState(0)
   const [dueDate, setDueDate] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // 2026-08-31: "No suppliers yet" used to be a dead end - recording a
+  // supplier invoice for a supplier that isn't in the system yet meant
+  // closing this modal and going to add one in Inventory first. Now it can
+  // be added inline, right here, without losing the rest of this form.
+  const [isAddingSupplier, setIsAddingSupplier] = useState(suppliers.length === 0)
 
   const relatedOrders = orders.filter((o) => o.supplierId === supplierId && o.status !== 'draft' && o.status !== 'cancelled')
 
@@ -31,6 +41,25 @@ export function SupplierInvoiceModal({ suppliers, orders, onClose, onSubmit, sub
     }
   }
 
+  if (isAddingSupplier) {
+    return (
+      <SupplierFormModal
+        onClose={() => {
+          if (suppliers.length === 0) {
+            onClose()
+          } else {
+            setIsAddingSupplier(false)
+          }
+        }}
+        onSubmit={async (input) => {
+          const created = await createSupplier.mutateAsync(input)
+          setSupplierId(created.id)
+          setIsAddingSupplier(false)
+        }}
+      />
+    )
+  }
+
   return (
     <Modal title="Record supplier invoice" onClose={onClose}>
       <div className="space-y-4">
@@ -38,22 +67,31 @@ export function SupplierInvoiceModal({ suppliers, orders, onClose, onSubmit, sub
           <label htmlFor="inv-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
             Supplier
           </label>
-          <select
-            id="inv-supplier"
-            value={supplierId}
-            onChange={(e) => {
-              setSupplierId(e.target.value)
-              setPurchaseOrderId('')
-            }}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-          >
-            {suppliers.length === 0 && <option value="">No suppliers yet</option>}
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              id="inv-supplier"
+              value={supplierId}
+              onChange={(e) => {
+                setSupplierId(e.target.value)
+                setPurchaseOrderId('')
+              }}
+              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            >
+              {suppliers.length === 0 && <option value="">No suppliers yet</option>}
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setIsAddingSupplier(true)}
+              className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+            >
+              + New
+            </button>
+          </div>
         </div>
         <div>
           <label htmlFor="inv-po" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -85,19 +123,7 @@ export function SupplierInvoiceModal({ suppliers, orders, onClose, onSubmit, sub
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="inv-amount" className="mb-1.5 block text-sm font-medium text-ink-700">
-              Amount (UGX)
-            </label>
-            <input
-              id="inv-amount"
-              type="number"
-              min={0}
-              value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-            />
-          </div>
+          <NumberField id="inv-amount" label="Amount (UGX)" min={0} value={amount} onChange={setAmount} />
           <div>
             <label htmlFor="inv-due" className="mb-1.5 block text-sm font-medium text-ink-700">
               Due date

@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { FileText, Plus, Wallet, XCircle } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { BillsTabs } from '../../components/bills/BillsTabs'
 import { InvoicePaymentModal } from '../../components/purchasing/InvoicePaymentModal'
+import { SupplierInvoiceModal } from '../../components/purchasing/SupplierInvoiceModal'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -14,6 +15,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import { useSuppliers } from '../../features/inventory/hooks/useInventoryData'
 import { useBills, useCancelBill, useRecordBillPayment } from '../../features/bills/hooks/useBillsData'
+import { useCreateSupplierInvoice, usePurchaseOrders } from '../../features/purchasing/hooks/usePurchasingData'
 import { PaymentExceedsInvoiceError } from '../../services/purchasingService'
 import type { SupplierInvoice } from '../../types/purchasing'
 
@@ -23,16 +25,21 @@ const STATUS_LABELS = { unpaid: 'Unpaid', partially_paid: 'Partially Paid', paid
 export function PayablesRegisterPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const billsQuery = useBills()
   const suppliersQuery = useSuppliers()
+  const ordersQuery = usePurchaseOrders()
   const recordPayment = useRecordBillPayment(user.id)
   const cancelBill = useCancelBill()
+  const createInvoice = useCreateSupplierInvoice(user.id)
 
   const overdueOnly = searchParams.get('overdue') === '1'
   const [payingBill, setPayingBill] = useState<SupplierInvoice | null>(null)
   const [payError, setPayError] = useState<string | undefined>()
+  // 2026-08-31: "Record a bill" used to fully navigate away to Purchasing's
+  // Supplier Invoices page to reach this same modal - the module's own
+  // namesake action lived entirely outside it. It now opens right here.
+  const [isRecordOpen, setIsRecordOpen] = useState(false)
 
   const supplierName = (id: string) => suppliersQuery.data?.find((s) => s.id === id)?.name ?? 'Unknown supplier'
 
@@ -64,7 +71,7 @@ export function PayablesRegisterPage() {
             Overdue only
           </label>
           <button
-            onClick={() => navigate('/purchasing/invoices')}
+            onClick={() => setIsRecordOpen(true)}
             className="flex items-center gap-1.5 rounded-md bg-brand-blue-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue-900"
           >
             <Plus size={15} /> Record a bill
@@ -84,7 +91,7 @@ export function PayablesRegisterPage() {
             icon={FileText}
             title={overdueOnly ? 'Nothing overdue' : 'No bills yet'}
             description={overdueOnly ? 'No bill is currently past its due date.' : 'Record a supplier invoice to see it here as a bill you owe.'}
-            action={overdueOnly ? undefined : { label: 'Record a bill', onClick: () => navigate('/purchasing/invoices') }}
+            action={overdueOnly ? undefined : { label: 'Record a bill', onClick: () => setIsRecordOpen(true) }}
           />
         ) : (
           <ul className="divide-y divide-ink-100">
@@ -152,6 +159,20 @@ export function PayablesRegisterPage() {
             } catch (err) {
               setPayError(err instanceof PaymentExceedsInvoiceError ? err.message : 'Could not record this payment.')
             }
+          }}
+        />
+      )}
+
+      {isRecordOpen && (
+        <SupplierInvoiceModal
+          suppliers={(suppliersQuery.data ?? []).filter((s) => s.status === 'active')}
+          orders={ordersQuery.data ?? []}
+          userId={user.id}
+          onClose={() => setIsRecordOpen(false)}
+          onSubmit={async (input) => {
+            await createInvoice.mutateAsync(input)
+            showToast('Bill recorded.', 'success')
+            setIsRecordOpen(false)
           }}
         />
       )}

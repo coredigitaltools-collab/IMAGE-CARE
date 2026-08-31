@@ -33,7 +33,12 @@ function ComponentList({ kind, title }: { kind: 'allowance' | 'deduction'; title
       {typesQuery.isLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : activeTypes.length === 0 ? (
-        <EmptyState icon={SlidersHorizontal} title={`No ${kind}s yet`} description={`Define your own ${kind} types, nothing preset.`} />
+        <EmptyState
+          icon={SlidersHorizontal}
+          title={`No ${kind}s yet`}
+          description={`Define your own ${kind} types, nothing preset.`}
+          action={{ label: '+ New', onClick: () => setIsAddOpen(true) }}
+        />
       ) : (
         <ul className="divide-y divide-ink-100">
           {activeTypes.map((t) => (
