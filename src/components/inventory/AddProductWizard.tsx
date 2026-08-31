@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Upload } from 'lucide-react'
@@ -51,13 +51,29 @@ interface AddProductWizardProps {
 // same scrollable-body pattern ProductFormModal already uses.
 export function AddProductWizard({ categories, brands, units, suppliers, generatedSku, userId, onClose, onSubmit, submitError }: AddProductWizardProps) {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
+  // 2026-08-31: when Save silently did nothing, the actual cause was this -
+  // categoryId/unitId defaulted from `categories`/`units` props at the
+  // instant this form first mounted. If those lists hadn't finished
+  // loading from the server yet (a real, observed race - confirmed live:
+  // zero POST /products requests ever fired on click, meaning validation
+  // was blocking submission before any network call), the field locked to
+  // an empty value forever. The dropdown then re-rendered with the real
+  // options a moment later and visually showed the first category name -
+  // looking selected - while react-hook-form's state still held '', so
+  // "Select a category." failed silently. `validationSummary` below makes
+  // ANY such block visible instead of silent, and the two effects after it
+  // backfill categoryId/unitId once their data actually arrives so this
+  // exact race no longer requires the user to notice or intervene.
+  const [validationSummary, setValidationSummary] = useState<string[]>([])
+  const scrollRef = useRef<HTMLFormElement>(null)
 
   const {
     register,
     control,
     handleSubmit,
     setValue,
-    formState: { errors, isSubmitting },
+    getValues,
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -81,6 +97,22 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     if (generatedSku) setValue('sku', generatedSku)
   }, [generatedSku, setValue])
 
+  // Backfill categoryId once the category list actually loads, if the form
+  // mounted before it did and the user hasn't picked one themselves yet.
+  useEffect(() => {
+    if (categories.length > 0 && !getValues('categoryId') && !dirtyFields.categoryId) {
+      setValue('categoryId', categories[0].id)
+    }
+  }, [categories, getValues, setValue, dirtyFields.categoryId])
+
+  // Same race, same fix, for the hidden unit field (locked to the first/
+  // only unit - not user-editable, so it can never be "dirty").
+  useEffect(() => {
+    if (units.length > 0 && !getValues('unitId')) {
+      setValue('unitId', units[0].id)
+    }
+  }, [units, getValues, setValue])
+
   const handleImageChange = (file: File | undefined) => {
     if (!file) return
     const reader = new FileReader()
@@ -88,13 +120,38 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     reader.readAsDataURL(file)
   }
 
-  const submit = handleSubmit(async (v) => {
-    await onSubmit({ ...v, imageDataUrl, branch_id: null, taxRateId: null })
-  })
+  const submit = handleSubmit(
+    async (v) => {
+      setValidationSummary([])
+      await onSubmit({ ...v, imageDataUrl, branch_id: null, taxRateId: null })
+    },
+    (formErrors) => {
+      // Validation blocked the save. Make that visible and obvious instead
+      // of leaving the button silently doing nothing - this is the fix for
+      // "I filled everything in and Save still doesn't work" when the
+      // actual invalid field is scrolled out of view.
+      setValidationSummary(
+        Object.values(formErrors)
+          .map((e) => e?.message)
+          .filter((m): m is string => Boolean(m)),
+      )
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    },
+  )
 
   return (
     <Modal title="Add product" onClose={onClose} size="lg">
-      <form onSubmit={submit} className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+      <form ref={scrollRef} onSubmit={submit} className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+        {validationSummary.length > 0 && (
+          <div className="rounded-lg border border-brand-red-200 bg-brand-red-50 px-4 py-3 text-sm text-brand-red-700">
+            <p className="font-medium">Fix the following before saving:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {validationSummary.map((message, i) => (
+                <li key={i}>{message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div>
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Product info</p>
           <div className="space-y-4">
@@ -155,8 +212,11 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
         <div className="border-t border-ink-100 pt-6">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Pricing &amp; stock</p>
           <div className="space-y-4">
-            {/* Unit is locked to Piece - not user-configurable */}
-            <input type="hidden" {...register('unitId')} value={units[0]?.id ?? 'piece'} />
+            {/* Unit is locked to the first/only unit - not user-configurable.
+                Value comes from defaultValues + the backfill effect above,
+                not a static override here (that used to fight react-hook-
+                form's own state and could desync from it). */}
+            <input type="hidden" {...register('unitId')} />
             <div className="grid grid-cols-2 gap-3">
               <Controller
                 name="buyingPrice"

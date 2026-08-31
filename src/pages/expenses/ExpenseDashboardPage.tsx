@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
-import { useCreateExpense, useExpenseDashboardKpis, useExpenses } from '../../features/expenses/hooks/useExpensesData'
+import { useCreateExpense, useExpenseCategories, useExpenseDashboardKpis, useExpenses } from '../../features/expenses/hooks/useExpensesData'
 
 // 2026-08-31: KPIs simplified along with the rest of the module - "Pending
 // approval" / "Approved, unpaid" / "Paid this month" all measured a
@@ -24,7 +24,9 @@ export function ExpenseDashboardPage() {
   const { showToast } = useToast()
   const kpisQuery = useExpenseDashboardKpis()
   const expensesQuery = useExpenses()
+  const categoriesQuery = useExpenseCategories()
   const createExpense = useCreateExpense(user.id)
+  const activeCategories = (categoriesQuery.data ?? []).filter((c) => c.is_active)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
 
@@ -82,6 +84,7 @@ export function ExpenseDashboardPage() {
         <ExpenseFormModal
           title="Add expense"
           submitLabel="Save"
+          categories={activeCategories}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input: ExpenseFormValues) => {
             await createExpense.mutateAsync({

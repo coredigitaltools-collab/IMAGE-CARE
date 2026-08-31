@@ -9,7 +9,7 @@ import { ExpenseFormModal } from '../../components/expenses/ExpenseFormModal'
 import type { ExpenseFormValues } from '../../components/expenses/ExpenseFormModal'
 import { useToast } from '../../components/ui/toastContext'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
-import { useDeleteExpense, useExpense, useUpdateExpense } from '../../features/expenses/hooks/useExpensesData'
+import { useDeleteExpense, useExpense, useExpenseCategories, useUpdateExpense } from '../../features/expenses/hooks/useExpensesData'
 
 // 2026-08-31: simplified along with the rest of the module - this used to
 // render Submit/Approve/Reject/Mark-paid/Cancel buttons for a draft/
@@ -25,8 +25,10 @@ export function ExpenseDetailPage() {
   const { showToast } = useToast()
 
   const expenseQuery = useExpense(id)
+  const categoriesQuery = useExpenseCategories()
   const updateExpense = useUpdateExpense()
   const deleteExpense = useDeleteExpense()
+  const activeCategories = (categoriesQuery.data ?? []).filter((c) => c.is_active)
 
   const [isEditOpen, setIsEditOpen] = useState(false)
 
@@ -111,6 +113,7 @@ export function ExpenseDetailPage() {
           title="Edit expense"
           submitLabel="Save changes"
           lockAmount
+          categories={activeCategories}
           initialValues={{
             category: expense.category,
             description: expense.description ?? '',

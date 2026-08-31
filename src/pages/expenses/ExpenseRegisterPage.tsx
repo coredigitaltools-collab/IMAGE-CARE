@@ -14,7 +14,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useStaff } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'
 import { toCsv, downloadCsv, parseCsv } from '../../lib/csv'
-import { useCreateExpense, useDeleteExpense, useExpenses, useUpdateExpense } from '../../features/expenses/hooks/useExpensesData'
+import { useCreateExpense, useDeleteExpense, useExpenseCategories, useExpenses, useUpdateExpense } from '../../features/expenses/hooks/useExpensesData'
 import type { Expense } from '../../types/database'
 
 // 2026-08-31: rebuilt at the user's explicit request - "do away with the
@@ -29,6 +29,7 @@ export function ExpenseRegisterPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const expensesQuery = useExpenses()
+  const categoriesQuery = useExpenseCategories()
   const staffQuery = useStaff()
   const createExpense = useCreateExpense(user.id)
   const updateExpense = useUpdateExpense(user.id)
@@ -58,9 +59,12 @@ export function ExpenseRegisterPage() {
     return staffNameById.get(userId) ?? '—'
   }
 
-  const categorySuggestions = useMemo(
-    () => Array.from(new Set(expenses.map((e) => e.category).filter(Boolean))).sort(),
-    [expenses],
+  // Real categories from Expenses -> Categories (not derived from past
+  // expense records - a category just created there must show up here
+  // immediately, even before it's ever been used on an expense).
+  const activeCategories = useMemo(
+    () => (categoriesQuery.data ?? []).filter((c) => c.is_active),
+    [categoriesQuery.data],
   )
 
   const monthOptions = useMemo(() => {
@@ -274,7 +278,7 @@ export function ExpenseRegisterPage() {
         <ExpenseFormModal
           title="Add expense"
           submitLabel="Save"
-          categorySuggestions={categorySuggestions}
+          categories={activeCategories}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input: ExpenseFormValues) => {
             await createExpense.mutateAsync({
@@ -294,7 +298,7 @@ export function ExpenseRegisterPage() {
           title="Edit expense"
           submitLabel="Save changes"
           lockAmount
-          categorySuggestions={categorySuggestions}
+          categories={activeCategories}
           initialValues={{
             category: editing.category,
             description: editing.description ?? '',

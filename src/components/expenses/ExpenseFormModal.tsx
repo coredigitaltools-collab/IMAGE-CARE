@@ -3,7 +3,9 @@ import { Paperclip, X } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { NumberField } from '../ui/NumberField'
+import { ExpenseCategorySelect } from './ExpenseCategorySelect'
 import { MAX_ATTACHMENT_BYTES, AttachmentTooLargeError } from '../../services/expenseService'
+import type { ExpenseCategory } from '../../types/expenses'
 
 // 2026-08-31: simplified at the user's explicit request ("do away with the
 // register section...without draft,approval etc.make it simple") - this used
@@ -12,6 +14,15 @@ import { MAX_ATTACHMENT_BYTES, AttachmentTooLargeError } from '../../services/ex
 // backend (businessEngine.ts CreateExpenseInput / RecordExpenseCommand) has
 // always taken category as a plain free-text string with no FK, so that
 // blocker was never actually necessary. Category is now a plain text field.
+//
+// 2026-08-31 (later same day): the free-text-with-autocomplete field below
+// was reported broken - a category created under Expenses -> Categories
+// never showed up here, because the autocomplete list was ever only drawn
+// from categories already used on past EXPENSES, not from the real
+// categories table. Category is still stored as plain text (no FK change),
+// but the input is now a real dropdown (ExpenseCategorySelect) sourced from
+// useExpenseCategories(), with an inline "+ Add new category" so a business
+// with zero categories yet is never blocked from recording its first expense.
 export interface ExpenseFormValues {
   category: string
   description: string
@@ -24,7 +35,7 @@ interface ExpenseFormModalProps {
   title?: string
   submitLabel?: string
   initialValues?: Partial<ExpenseFormValues>
-  categorySuggestions?: string[]
+  categories?: ExpenseCategory[]
   /** Amount/date are locked when editing an already-posted expense - see
       updateExpense() in financialServices.ts for why. */
   lockAmount?: boolean
@@ -36,7 +47,7 @@ export function ExpenseFormModal({
   title = 'Add expense',
   submitLabel = 'Save',
   initialValues,
-  categorySuggestions = [],
+  categories = [],
   lockAmount = false,
   onClose,
   onSubmit,
@@ -48,6 +59,15 @@ export function ExpenseFormModal({
   const [attachment, setAttachment] = useState<ExpenseFormValues['attachment']>(initialValues?.attachment ?? null)
   const [attachmentError, setAttachmentError] = useState<string | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // 2026-08-31: previously, if onSubmit's mutation rejected (permission
+  // denied, a business-rule violation, a network error), nothing caught it -
+  // the Saving... spinner just quietly reverted to "Save" with the modal
+  // still open and no explanation. That is indistinguishable from the
+  // button doing nothing, which matches exactly what was reported ("Save
+  // does not result in a visible saved expense"). Now the failure is always
+  // shown, in plain language, and the form/entered data is preserved so the
+  // user can just retry instead of re-typing everything.
+  const [submitError, setSubmitError] = useState<string | undefined>()
 
   const handleFile = (file: File) => {
     setAttachmentError(undefined)
@@ -66,9 +86,12 @@ export function ExpenseFormModal({
 
   const handleSubmit = async () => {
     if (!canSubmit) return
+    setSubmitError(undefined)
     setIsSubmitting(true)
     try {
       await onSubmit({ category: category.trim(), description: description.trim(), amount, expenseDate, attachment })
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message ? err.message : 'Unable to save this expense. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -77,6 +100,11 @@ export function ExpenseFormModal({
   return (
     <Modal title={title} onClose={onClose}>
       <div className="space-y-5">
+        {submitError && (
+          <div className="rounded-lg border border-brand-red-200 bg-brand-red-50 px-4 py-3 text-sm text-brand-red-700">
+            {submitError}
+          </div>
+        )}
         <div>
           <label htmlFor="ex-date" className="mb-2 block text-sm font-medium text-ink-700">
             Date
@@ -91,26 +119,7 @@ export function ExpenseFormModal({
           />
         </div>
 
-        <div>
-          <label htmlFor="ex-category" className="mb-2 block text-sm font-medium text-ink-700">
-            Category
-          </label>
-          <input
-            id="ex-category"
-            list="ex-category-suggestions"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="e.g. Utilities, Rent, Supplies"
-            className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-          />
-          {categorySuggestions.length > 0 && (
-            <datalist id="ex-category-suggestions">
-              {categorySuggestions.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          )}
-        </div>
+        <ExpenseCategorySelect id="ex-category" categories={categories} value={category} onChange={setCategory} />
 
         <div>
           <label htmlFor="ex-desc" className="mb-2 block text-sm font-medium text-ink-700">
