@@ -1,7 +1,8 @@
 // Stage 5: Expenses feature hooks - rewired to Stage 4 services.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
-import { createExpense, listExpenses } from '../../../services/financial/financialServices';
+import { createExpense, listExpenses, updateExpense, deleteExpense } from '../../../services/financial/financialServices';
+import type { UpdateExpenseInput } from '../../../services/financial/financialServices';
 import { listExpenseCategories, createExpenseCategory } from '../../../services/settings/settingsService';
 import type { UUID } from '../../../types/database';
 
@@ -70,7 +71,10 @@ export function useExpenseDashboardKpis(branchId?: UUID) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const thisMonth = monthExpenses.reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return { totalThisMonth: thisMonth, totalThisMonthUgx: thisMonth, countThisMonth: monthExpenses.length, totalOverall: items.reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0), pendingApproval: 0, pendingApprovalCount: 0, approvedUnpaidUgx: 0, paidThisMonthUgx: 0 };
+      const totalOverall = items.reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
+      // Draft/pending-approval/paid concepts removed 2026-08-31 - every recorded
+      // expense is final, so the only meaningful KPIs are totals and counts.
+      return { totalThisMonth: thisMonth, totalThisMonthUgx: thisMonth, countThisMonth: monthExpenses.length, totalOverall, totalOverallUgx: totalOverall, countOverall: items.length };
     },
   });
 }
@@ -86,82 +90,26 @@ export function useExpense(id: string | undefined, _userId?: string) {
   });
 }
 
-export function useApproveExpense(_userId?: string, _userName?: string) {
+// 2026-08-31: draft/pending-approval/approved/rejected/paid workflow removed
+// at the user's explicit request - expenses now record directly (see
+// engines/business/businessEngine.ts recordExpense, which already always
+// wrote status: 'confirmed'; the UI just used to pretend otherwise).
+// useApproveExpense/useRejectExpense/useSubmitExpense/useCancelExpense/
+// useMarkExpensePaid are gone; useUpdateExpense/useDeleteExpense replace them.
+export function useUpdateExpense(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to approve expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateExpenseInput }) => updateExpense(ctx, id, patch).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
   });
 }
-export function useRejectExpense(_userId?: string) {
+export function useDeleteExpense(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'cancelled', notes: `Rejected: ${reason}`, updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to reject expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-}
-export function useSubmitExpense(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      // In Stage 4, expenses go directly to confirmed. Submit marks as pending review.
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to submit expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-}
-export function useCancelExpense(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: string | { id: string; reason?: string }) => {
-      const id = typeof input === 'string' ? input : input.id;
-      const reason = typeof input === 'object' ? input.reason : undefined;
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'cancelled', notes: reason ? `Cancelled: ${reason}` : 'Cancelled', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to cancel expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-}
-export function useMarkExpensePaid(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to mark expense paid');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    mutationFn: (id: string) => deleteExpense(ctx, id).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
   });
 }
 export function useArchiveExpenseCategory(_userId?: string) {

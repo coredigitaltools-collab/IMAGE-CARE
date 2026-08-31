@@ -87,6 +87,68 @@ export async function listExpenses(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId }); }
 }
 
+// Fields intentionally NOT editable here: amount, tax_amount, payment_method.
+// recordExpense() (engines/business/businessEngine.ts) posts a real double-entry
+// journal entry (Dr Expense, Cr Cash) and a cash-out transaction at creation time,
+// keyed off those exact values. Changing them after the fact without also
+// reversing/reposting the linked journal entry and cash transaction would leave
+// the books unbalanced - that reversal/re-posting engine is out of scope here,
+// so this only touches the record-keeping fields that carry no accounting
+// impact. To correct an amount, delete the expense and record it again.
+export interface UpdateExpenseInput {
+  expense_date?: string;
+  category?: string;
+  description?: string;
+  notes?: string;
+}
+
+export async function updateExpense(
+  ctx: UserContext,
+  expenseId: UUID,
+  patch: UpdateExpenseInput
+): Promise<ServiceResponse<{ expense_id: UUID }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'expenses', 'edit')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to edit expenses.', { requestId });
+  }
+  try {
+    const { error } = await supabase
+      .schema('imagecare')
+      .from('expenses')
+      .update({ ...patch, updated_by: ctx.user_id })
+      .eq('id', expenseId)
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null);
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to update expense.', { requestId });
+    return serviceOk({ expense_id: expenseId }, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to update expense.', { requestId }); }
+}
+
+// Soft-delete only, matching the pattern already established for this table
+// (listExpenses already filters `deleted_at IS NULL`). This does not reverse
+// the posted journal entry / cash transaction - same scope note as
+// updateExpense above.
+export async function deleteExpense(
+  ctx: UserContext,
+  expenseId: UUID
+): Promise<ServiceResponse<{ expense_id: UUID }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'expenses', 'delete')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete expenses.', { requestId });
+  }
+  try {
+    const { error } = await supabase
+      .schema('imagecare')
+      .from('expenses')
+      .update({ deleted_at: new Date().toISOString(), updated_by: ctx.user_id })
+      .eq('id', expenseId)
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null);
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to delete expense.', { requestId });
+    return serviceOk({ expense_id: expenseId }, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to delete expense.', { requestId }); }
+}
+
 // ===========================================================
 // PAYROLL SERVICE
 // ===========================================================
