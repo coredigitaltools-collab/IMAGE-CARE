@@ -206,7 +206,18 @@ export function useCheckout(_userId?: string) {
         items: input.items.map(i => ({ product_id: i.productId as UUID, quantity: i.quantity, unit_price: i.unitPrice, unit_cost: i.costPrice ?? 0 })),
       }).then(unwrap);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sales'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      // 2026-09-01: 'recent-sales' is its own separate query key (see
+      // useRecentSales in useDashboardData.ts) - it was never invalidated
+      // here, so the Dashboard's Recent Sales list only picked up a just-
+      // completed sale after its own 60s refetchInterval happened to fire,
+      // not immediately. Needed now that Complete Sale navigates straight
+      // to the Dashboard to show the sale that was just recorded.
+      qc.invalidateQueries({ queryKey: ['recent-sales'] });
+    },
   });
 }
 
