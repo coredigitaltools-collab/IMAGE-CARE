@@ -8,7 +8,7 @@ import {
   listUnits, createUnit, updateUnit, archiveUnit,
   listSuppliers, createSupplier, updateSupplier, archiveSupplier,
 } from '../../../services/masterData/masterDataService';
-import { listInventory, getInventoryMovements, createStockAdjustment, createStockTransfer } from '../../../services/inventory/inventoryService';
+import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
 import type { UUID } from '../../../types/database';
 import type { Product as InventoryProduct } from '../../../types/inventory';
 import type { SupportedCurrency } from '../../../lib/currency';
@@ -56,43 +56,118 @@ export function useBrands() {
   return useQuery({ queryKey: ['inventory', 'brands'], queryFn: async () => [] as import('../../../types/inventory').Brand[], staleTime: Infinity });
 }
 
+// 2026-09-01: listProducts() only ever selected from the products table
+// (plus joined category/unit names) - it never included quantity_on_hand,
+// so `currentStock` fell back to 0 for every product, always, regardless
+// of any real movements (opening stock, purchases, sales, adjustments).
+// Stock is deliberately never a column on products (see inventoryEngine's
+// own rule) - it has to come from vw_stock_summary via listInventory(),
+// same view the Inventory dashboard already reads. Not branch-filtered
+// here (this list is company-wide across branches) - summed per product
+// so "in stock" reflects the real total, not always zero.
 export function useProducts(branchId?: UUID) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['inventory', 'products', ctx.business_id, branchId],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    queryFn: async () => (await listProducts(ctx).then(unwrap) as any[]).map(mapProduct),
+    queryFn: async () => {
+      const [products, stockRows] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listProducts(ctx).then(unwrap) as Promise<any[]>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listInventory(ctx, branchId ? { branch_id: branchId } : {}, { page_size: 500 }).then(unwrap) as Promise<any[]>,
+      ]);
+      const stockByProduct = new Map<string, number>();
+      for (const row of Array.isArray(stockRows) ? stockRows : []) {
+        const key = row.product_id as string;
+        stockByProduct.set(key, (stockByProduct.get(key) ?? 0) + Number(row.quantity_on_hand ?? 0));
+      }
+      return products.map((p) => mapProduct({ ...p, currentStock: stockByProduct.get(p.id) ?? 0 }));
+    },
   });
 }
 
 export function useProduct(id: string | undefined) {
   const ctx = useUserContext();
+  const branch = useActiveBranch();
   return useQuery({
-    queryKey: ['inventory', 'product', id],
-    queryFn: async () => { const p = await getProduct(ctx, id as UUID).then(unwrap); return p ? mapProduct(p) : null; },
+    queryKey: ['inventory', 'product', id, branch],
+    queryFn: async () => {
+      const p = await getProduct(ctx, id as UUID).then(unwrap);
+      if (!p) return null;
+      // getStock() legitimately "fails" with RESOURCE_NOT_FOUND when a
+      // product has zero movements yet - that's not an error, it just
+      // means zero stock, so this reads the result directly instead of
+      // going through unwrap() (which would throw on ANY error, turning
+      // a brand-new, never-moved product into a broken detail page).
+      let currentStock = 0;
+      if (branch) {
+        const stockResult = await getStock(ctx, id as UUID, branch as UUID);
+        if (stockResult.data) currentStock = Number(stockResult.data.quantity_on_hand ?? 0);
+      }
+      return mapProduct({ ...p, currentStock });
+    },
     enabled: Boolean(id),
   });
 }
 
 export function useCreateProduct(_userId?: string) {
   const ctx = useUserContext();
+  const branch = useActiveBranch();
   const qc = useQueryClient();
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: (input: any) => createProduct(ctx, {
-      name: input.name, sku: input.sku ?? null, barcode: input.barcode ?? null,
-      description: input.description ?? null,
-      category_id: (input.categoryId ?? input.category_id ?? null),
-      unit_id: (input.unitId ?? input.unit_id ?? null),
-      selling_price: input.sellingPrice ?? input.selling_price ?? 0,
-      cost_price: input.buyingPrice ?? input.cost_price ?? 0,
-      reorder_level: input.reorderLevel ?? input.reorder_level ?? 0,
-      is_stockable: true, is_sellable: true, is_purchasable: true,
-      is_active: true, track_expiry: false, tax_rate: 0,
-      metadata: { brand_id: input.brandId ?? null, supplier_id: input.supplierId ?? null },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'products'] }),
+    mutationFn: async (input: any) => {
+      const costPrice = input.buyingPrice ?? input.cost_price ?? 0;
+      const product = await createProduct(ctx, {
+        name: input.name, sku: input.sku ?? null, barcode: input.barcode ?? null,
+        description: input.description ?? null,
+        category_id: (input.categoryId ?? input.category_id ?? null),
+        unit_id: (input.unitId ?? input.unit_id ?? null),
+        selling_price: input.sellingPrice ?? input.selling_price ?? 0,
+        cost_price: costPrice,
+        reorder_level: input.reorderLevel ?? input.reorder_level ?? 0,
+        is_stockable: true, is_sellable: true, is_purchasable: true,
+        is_active: true, track_expiry: false, tax_rate: 0,
+        metadata: { brand_id: input.brandId ?? null, supplier_id: input.supplierId ?? null },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any).then(unwrap);
+
+      // 2026-09-01: Opening stock used to be silently dropped here - the
+      // product insert above has nowhere to put it (stock is derived from
+      // inventory_movements, never a column on products - see the engine's
+      // own rule). Every new product showed "0 in stock" right after being
+      // saved, no matter what was entered. This is the fix: if a non-zero
+      // opening count was entered, record it as a real opening_stock
+      // movement right after the product exists. Best-effort - the product
+      // itself is already saved and must not disappear if this part fails,
+      // so a failure here is swallowed rather than surfaced as "Save
+      // failed" for what is otherwise a successful product creation.
+      const openingStock = input.openingStock ?? input.opening_stock ?? 0;
+      const branchId = (input.branch_id ?? branch ?? ctx.branch_id) as UUID | null;
+      if (openingStock > 0 && branchId) {
+        try {
+          const stockResult = await recordOpeningStock(ctx, {
+            branch_id: branchId,
+            product_id: product.id as UUID,
+            quantity: openingStock,
+            unit_cost: costPrice,
+          });
+          if (stockResult.error) {
+            console.error('Opening stock was not recorded for new product', product.id, stockResult.error);
+          }
+        } catch (err) {
+          // Product already saved; stock can still be fixed via Stock
+          // Adjustments. Swallowed deliberately - see comment above.
+          console.error('Opening stock was not recorded for new product', product.id, err);
+        }
+      }
+
+      return product;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+      qc.invalidateQueries({ queryKey: ['inventory', 'movements'] });
+    },
   });
 }
 

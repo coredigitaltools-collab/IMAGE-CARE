@@ -205,6 +205,60 @@ export async function getInventoryMovements(
   }
 }
 
+// ---- Opening Stock -------------------------------------------
+// 2026-09-01: Add Product has always had an "Opening stock" field, but
+// nothing ever did anything with the value the user typed into it -
+// createProduct() only ever wrote to the products table, which (correctly,
+// per this engine's own rule at the top of this file) has no stock column
+// at all. Stock is derived entirely from inventory_movements, and nothing
+// created a movement for a brand-new product's starting count, so every
+// new product showed "0 in stock" immediately after being saved,
+// regardless of what was entered. Confirmed live: a product created with a
+// non-zero opening stock produced zero rows in inventory_movements.
+// This is the missing piece - called once, right after a product is
+// created, if (and only if) a non-zero opening stock was entered.
+
+export interface RecordOpeningStockRequest {
+  branch_id: UUID;
+  product_id: UUID;
+  quantity: number;
+  unit_cost: number;
+  idempotency_key?: string;
+}
+
+export async function recordOpeningStock(
+  ctx: UserContext,
+  request: RecordOpeningStockRequest
+): Promise<ServiceResponse<void>> {
+  const requestId = makeRequestId();
+
+  if (!canDo(ctx, 'inventory', 'create')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to create products.', { requestId });
+  }
+
+  if (request.quantity <= 0) {
+    return serviceFail('INVALID_INPUT', 'Opening stock quantity must be greater than zero.', { requestId, field: 'quantity' });
+  }
+
+  try {
+    const result = await inventoryEngine.recordMovement(toEngineContext(ctx, request.branch_id), {
+      branch_id:       request.branch_id,
+      product_id:      request.product_id,
+      movement_type:   'opening_stock',
+      quantity:        request.quantity,
+      unit_cost:       request.unit_cost,
+      reference_type:  'opening_stock',
+      notes:           'Opening stock at product creation',
+      idempotency_key: request.idempotency_key ?? uuidv4(),
+    });
+
+    if (result.error) return serviceFail('INTERNAL_ERROR', result.error.message, { requestId });
+    return serviceOk(undefined, requestId);
+  } catch {
+    return serviceFail('INTERNAL_ERROR', 'Failed to record opening stock.', { requestId });
+  }
+}
+
 // ---- Stock Adjustment --------------------------------------
 
 export interface StockAdjustmentRequest {
