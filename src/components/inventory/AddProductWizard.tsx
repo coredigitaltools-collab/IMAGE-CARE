@@ -5,7 +5,6 @@ import { z } from 'zod'
 import { Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CategoryQuickSelect } from './CategoryQuickSelect'
-import { UnitQuickSelect } from './UnitQuickSelect'
 import { FormField } from '../settings/FormField'
 import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
@@ -17,7 +16,7 @@ const schema = z.object({
   barcode: z.string().trim(),
   categoryId: z.string().min(1, 'Select a category.'),
   brandId: z.string(),
-  unitId: z.string().min(1, 'Select a unit.'),
+  unitId: z.string().min(1, 'Still setting up - please wait a moment and try again.'),
   buyingPrice: z.number().min(0, 'Must be 0 or higher.'),
   sellingPrice: z.number().min(0, 'Must be 0 or higher.'),
   reorderLevel: z.number().min(0, 'Must be 0 or higher.'),
@@ -106,16 +105,18 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     }
   }, [categories, getValues, setValue, dirtyFields.categoryId])
 
-  // Same backfill, for Unit. 2026-09-01: this used to be a hidden input
-  // silently defaulting to a fake non-uuid 'piece' value whenever the (also
-  // fake) units list had exactly one entry - see UnitQuickSelect for the
-  // full story. Units are real per-business data now, so - same as
-  // categoryId above - only backfill while the user hasn't chosen one.
+  // Unit stays invisible to the user by explicit, repeated direction - the
+  // system just runs on "pieces", no picker. 2026-09-01: this used to
+  // default to a fake non-uuid 'piece' value that was never a real row
+  // (see useEnsureDefaultUnit in useInventoryData.ts for the full story -
+  // that hook now silently creates one real "Piece" unit per business the
+  // first time it's needed). This effect just backfills the real id once
+  // it loads, same pattern as categoryId above, but with no UI for it.
   useEffect(() => {
-    if (units.length > 0 && !getValues('unitId') && !dirtyFields.unitId) {
+    if (units.length > 0 && !getValues('unitId')) {
       setValue('unitId', units[0].id)
     }
-  }, [units, getValues, setValue, dirtyFields.unitId])
+  }, [units, getValues, setValue])
 
   const handleImageChange = (file: File | undefined) => {
     if (!file) return
@@ -216,20 +217,8 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
         <div className="border-t border-ink-100 pt-6">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Pricing &amp; stock</p>
           <div className="space-y-4">
-            <Controller
-              name="unitId"
-              control={control}
-              render={({ field }) => (
-                <UnitQuickSelect
-                  id="w-unit"
-                  units={units}
-                  value={field.value}
-                  onChange={field.onChange}
-                  userId={userId}
-                  error={errors.unitId?.message}
-                />
-              )}
-            />
+            {/* No unit picker by design - see the effect above. */}
+            <input type="hidden" {...register('unitId')} />
             <div className="grid grid-cols-2 gap-3">
               <Controller
                 name="buyingPrice"

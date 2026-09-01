@@ -18,11 +18,11 @@ import {
   useCategories,
   useCreateProduct,
   useDuplicateProduct,
+  useEnsureDefaultUnit,
   useGeneratedSku,
   useProducts,
   useReactivateProduct,
   useSuppliers,
-  useUnits,
 } from '../../features/inventory/hooks/useInventoryData'
 import { DuplicateBarcodeError, DuplicateSkuError } from '../../services/productService'
 import type { ProductInput } from '../../types/inventory'
@@ -36,7 +36,11 @@ export function ProductsListPage() {
   const productsQuery = useProducts()
   const categoriesQuery = useCategories()
   const brandsQuery = useBrands()
-  const unitsQuery = useUnits()
+  // Units has no UI of its own here by design (the user's explicit,
+  // repeated direction: the system just runs on pieces, no unit picker) -
+  // this silently ensures one real "Piece" unit row exists the first time
+  // it's needed and returns it the same shape useUnits() would.
+  const unitsQuery = useEnsureDefaultUnit()
   const suppliersQuery = useSuppliers()
   const generatedSkuQuery = useGeneratedSku()
   const createProduct = useCreateProduct(user.id)

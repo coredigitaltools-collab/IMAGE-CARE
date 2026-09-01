@@ -1,5 +1,6 @@
 // Stage 5: Inventory feature hooks - rewired to Stage 4 services.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listProducts, getProduct, createProduct, updateProduct, softDeleteProduct,
@@ -150,6 +151,39 @@ export function useUnits() {
   // Now real, matching useCategories()/useSuppliers() exactly.
   const ctx = useUserContext();
   return useQuery({ queryKey: ['inventory', 'units', ctx.business_id], queryFn: () => listUnits(ctx).then(unwrap) });
+}
+
+// 2026-09-01: the user has said - repeatedly, and again after the first fix
+// attempt - that Units should not be a thing they ever see or manage: the
+// system just runs on pieces, full stop, no dropdown, no "add a unit"
+// prompt. Exposing UnitQuickSelect in the product form was the wrong fix
+// for the underlying bug (unit_id: 'piece' not being a real row) - it
+// solved the crash but reintroduced exactly the picker the user had
+// already asked to have removed. This hook is the actual fix: it silently
+// makes sure ONE real "Piece" unit row exists for the business the first
+// time it's needed, with no UI at all - product forms just use it via the
+// existing categoryId-style backfill effect, same as before this ever
+// became visible. Guarded with a ref so it only ever fires the create once
+// per mount, and becomes a no-op forever after that first row exists.
+export function useEnsureDefaultUnit(): UseQueryResult<import('../../../types/inventory').UnitOfMeasure[]> {
+  const unitsQuery = useUnits();
+  const createUnit = useCreateUnit();
+  const attempted = useRef(false);
+
+  useEffect(() => {
+    if (
+      unitsQuery.isSuccess &&
+      (unitsQuery.data ?? []).length === 0 &&
+      !attempted.current &&
+      !createUnit.isPending
+    ) {
+      attempted.current = true;
+      createUnit.mutate({ name: 'Piece', abbreviation: 'pcs' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitsQuery.isSuccess, unitsQuery.data]);
+
+  return unitsQuery;
 }
 
 export function useInventoryKpis(_currency?: SupportedCurrency) {
