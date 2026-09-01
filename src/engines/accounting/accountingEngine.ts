@@ -118,15 +118,25 @@ export class AccountingEngine {
       }
     }
 
-    // Resolve account IDs from the authoritative Chart of Accounts
-    const resolvedLines: Array<JournalLineInput & { account_id?: UUID }> = [];
-
-    for (const line of cmd.lines) {
-      const account = await resolveAccount(ctx.business_id, line.account_code);
-      // account_id is set when found; if not found the line still posts but
-      // the DB trigger will validate if account_id is provided.
-      resolvedLines.push({ ...line, account_id: account?.id });
-    }
+    // Resolve account IDs from the authoritative Chart of Accounts.
+    // 2026-09-01: every caller (buildSaleJournalLines, buildExpenseJournalLines,
+    // buildPurchaseJournalLines, reverseJournal) already resolves each
+    // account and attaches account_id before calling postJournal - this
+    // loop used to ignore that and re-query every single line by
+    // account_code again from scratch, one at a time, doubling the number
+    // of account lookups on every sale/expense/payroll save for no reason.
+    // Now it only queries when a line arrives without an account_id
+    // (kept as a fallback for any future caller that doesn't pre-resolve),
+    // and runs any lines that do need it in parallel rather than one by one.
+    const resolvedLines: Array<JournalLineInput & { account_id?: UUID }> = await Promise.all(
+      cmd.lines.map(async (line) => {
+        if (line.account_id) return line;
+        const account = await resolveAccount(ctx.business_id, line.account_code);
+        // account_id is set when found; if not found the line still posts but
+        // the DB trigger will validate if account_id is provided.
+        return { ...line, account_id: account?.id };
+      })
+    );
 
     const entryDate  = cmd.entry_date ?? new Date().toISOString();
     const entryMonth = new Date(entryDate).getMonth() + 1;
@@ -283,10 +293,14 @@ export class AccountingEngine {
       debitCode = '1100'; // Cash in Hand
     }
 
-    const debitAcct = await resolveAccount(ctx.business_id, debitCode);
-    const revenueAcct = await resolveAccount(ctx.business_id, '4000');
-    const cogsAcct = await resolveAccount(ctx.business_id, '5000');
-    const inventoryAcct = await resolveAccount(ctx.business_id, '1300');
+    // 2026-09-01: these four account lookups are independent of each other -
+    // run them together instead of one after another.
+    const [debitAcct, revenueAcct, cogsAcct, inventoryAcct] = await Promise.all([
+      resolveAccount(ctx.business_id, debitCode),
+      resolveAccount(ctx.business_id, '4000'),
+      resolveAccount(ctx.business_id, '5000'),
+      resolveAccount(ctx.business_id, '1300'),
+    ]);
 
     const lines: JournalLineInput[] = [];
 
@@ -351,8 +365,11 @@ export class AccountingEngine {
       creditCode = '1100'; // Cash
     }
 
-    const expenseAcct = await resolveAccount(ctx.business_id, '6000');
-    const payAcct     = await resolveAccount(ctx.business_id, creditCode);
+    // 2026-09-01: independent lookups, run together (see buildSaleJournalLines).
+    const [expenseAcct, payAcct] = await Promise.all([
+      resolveAccount(ctx.business_id, '6000'),
+      resolveAccount(ctx.business_id, creditCode),
+    ]);
 
     return engineOk([
       {
@@ -383,14 +400,16 @@ export class AccountingEngine {
   ): Promise<EngineResult<JournalLineInput[]>> {
     const { amount, paymentMethod, isPaid } = opts;
 
-    const inventoryAcct  = await resolveAccount(ctx.business_id, '1300');
-    const payableAcct    = await resolveAccount(ctx.business_id, '2000');
-
     let cashCode = '1100';
     if (paymentMethod === 'mobile_money')               cashCode = '1120';
     else if (['bank_transfer','card'].includes(paymentMethod)) cashCode = '1130';
 
-    const cashAcct = await resolveAccount(ctx.business_id, cashCode);
+    // 2026-09-01: independent lookups, run together (see buildSaleJournalLines).
+    const [inventoryAcct, payableAcct, cashAcct] = await Promise.all([
+      resolveAccount(ctx.business_id, '1300'),
+      resolveAccount(ctx.business_id, '2000'),
+      resolveAccount(ctx.business_id, cashCode),
+    ]);
 
     // Dr Inventory, Cr Payable (always - stock received)
     const lines: JournalLineInput[] = [

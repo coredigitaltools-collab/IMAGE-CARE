@@ -112,24 +112,27 @@ async function validateContext(
   ctx: EngineContext,
   branchId: UUID,
 ): Promise<EngineError | null> {
-  // Validate business is active
-  const { data: biz } = await db.businesses()
-    
-    .select('is_active')
-    .eq('id', ctx.business_id)
-    .single();
+  // 2026-09-01: business and branch are independent lookups (neither's
+  // result is needed to run the other's query) but used to run one after
+  // the other, adding a full extra network round trip to every sale,
+  // expense, and payroll save before any real work even started. Running
+  // them together with Promise.all cuts that wait roughly in half with no
+  // change in what's validated or how.
+  const [{ data: biz }, { data: branch }] = await Promise.all([
+    db.businesses()
+      .select('is_active')
+      .eq('id', ctx.business_id)
+      .single(),
+    db.branches()
+      .select('is_active, business_id')
+      .eq('id', branchId)
+      .eq('business_id', ctx.business_id)
+      .single(),
+  ]);
 
   if (!biz?.is_active) {
     return makeError('BUSINESS_INACTIVE', 'This business account is not active.');
   }
-
-  // Validate branch belongs to business and is active
-  const { data: branch } = await db.branches()
-    
-    .select('is_active, business_id')
-    .eq('id', branchId)
-    .eq('business_id', ctx.business_id)
-    .single();
 
   if (!branch) {
     return makeError('RECORD_NOT_FOUND', 'Branch not found or does not belong to this business.');
