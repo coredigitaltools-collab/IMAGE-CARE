@@ -85,12 +85,25 @@ export async function getSale(
   }
 
   try {
+    // 2026-09-01: 'sale_items' has two foreign keys into 'sales' - the
+    // real one, sale_items_sale_id_fkey, plus a legacy composite
+    // fk_s2_sale_items_biz_sale (same duplicate-FK pattern already fixed
+    // on the sale_items -> products embeds in businessEngine.ts and
+    // inventoryEngine.ts). The unqualified `sale_items(*)` embed here was
+    // ambiguous for the same reason and PostgREST rejected the whole
+    // query - which is why every "View receipt" click failed with a
+    // generic "Could not load this receipt." (the real PGRST201 error
+    // was being swallowed into that one generic message below). The
+    // `!sale_items_sale_id_fkey` hint tells PostgREST which relationship
+    // to use. `users!sales_served_by_fkey` already had this same kind of
+    // hint - 'sales' has three separate FKs into 'users' (created_by,
+    // served_by, updated_by), so it needed one for the same reason.
     const { data, error } = await supabase
       .schema('imagecare')
       .from('sales')
       .select(`
         *,
-        sale_items(*),
+        sale_items!sale_items_sale_id_fkey(*),
         customers(name),
         users!sales_served_by_fkey(first_name, last_name)
       `)
@@ -285,6 +298,13 @@ export async function getSaleReceipt(
   }
 
   try {
+    // 2026-09-01: same duplicate-FK ambiguity as getSale() above, on two
+    // more relationships this query embeds unqualified - 'sales' has two
+    // FKs into 'branches' (branch_id -> branches.id, plus a legacy
+    // composite fk_s2_sales_biz_branch), and 'sale_items' has two FKs
+    // into 'products' (see the fix in businessEngine.ts/inventoryEngine.ts
+    // for the full explanation). Both needed an explicit hint for
+    // PostgREST to accept the query instead of rejecting it outright.
     const { data, error } = await supabase
       .schema('imagecare')
       .from('sales')
@@ -293,12 +313,12 @@ export async function getSaleReceipt(
         subtotal, discount_amount, tax_amount,
         total_amount, amount_paid, change_given,
         customers(name),
-        branches(name),
+        branches!sales_branch_id_fkey(name),
         businesses(name),
         users!sales_served_by_fkey(first_name, last_name),
-        sale_items(
+        sale_items!sale_items_sale_id_fkey(
           quantity, unit_price, discount_amount, line_total,
-          products(name)
+          products!sale_items_product_id_fkey(name)
         )
       `)
       .eq('id', saleId)
