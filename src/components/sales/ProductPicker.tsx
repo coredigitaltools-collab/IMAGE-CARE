@@ -24,7 +24,16 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [selected, setSelected] = useState<Product | null>(null)
-  const [qty, setQty] = useState(1)
+  // 2026-09-01: qty used to be a plain number defaulting to 1, and every
+  // keystroke ran `Number(e.target.value) || 1` - so the instant the field
+  // was cleared to type a fresh value, the empty string became 0, `0 || 1`
+  // snapped it straight back to "1" before the next digit could even be
+  // typed. That's exactly the reported bug ("I tried deleting the 1 but
+  // it's not going"). qty is now allowed to sit empty (null) while the
+  // cashier is actively clearing/retyping it - only forced back to a valid
+  // 1 if the field is left empty on blur. Nothing about Add-item validation
+  // changed: canAdd still requires a real quantity above 0.
+  const [qty, setQty] = useState<number | null>(1)
   const inputRef = useRef<HTMLInputElement>(null)
   const qtyInputRef = useRef<HTMLInputElement>(null)
 
@@ -83,12 +92,12 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
     }
   }
 
-  const lineTotal = selected ? selected.sellingPrice * qty : 0
-  const canAdd = selected !== null && qty > 0 && qty <= selected.currentStock
+  const lineTotal = selected ? selected.sellingPrice * (qty ?? 0) : 0
+  const canAdd = selected !== null && (qty ?? 0) > 0 && (qty ?? 0) <= selected.currentStock
 
   const handleAdd = () => {
     if (!selected || !canAdd) return
-    onAdd(selected, qty)
+    onAdd(selected, qty ?? 1)
     setSelected(null)
     setQty(1)
     inputRef.current?.focus()
@@ -191,9 +200,15 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
               type="number"
               min={1}
               max={selected.currentStock}
-              value={qty}
-              onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+              value={qty ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value
+                setQty(raw === '' ? null : Math.max(0, Number(raw) || 0))
+              }}
               onFocus={(e) => e.target.select()}
+              onBlur={() => {
+                if (!qty || qty < 1) setQty(1)
+              }}
               className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
@@ -203,7 +218,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
               {formatCurrency(selected.sellingPrice, 'UGX')}
             </div>
           </div>
-          {qty > selected.currentStock && (
+          {(qty ?? 0) > selected.currentStock && (
             <p className="col-span-2 -mt-1 text-xs text-brand-red-700">Only {selected.currentStock} in stock.</p>
           )}
           <div className="col-span-2 flex items-center justify-between gap-2 border-t border-ink-100 pt-4">
