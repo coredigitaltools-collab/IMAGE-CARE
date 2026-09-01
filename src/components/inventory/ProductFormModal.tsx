@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
+import { UnitQuickSelect } from './UnitQuickSelect'
 import { Button } from '../ui/Button'
 import type { Brand, Category, ProductInput, Supplier, UnitOfMeasure } from '../../types/inventory'
 
@@ -34,6 +35,7 @@ interface ProductFormModalProps {
   initial?: Partial<FormValues> & { imageDataUrl?: string | null }
   isEditing?: boolean
   generatedSku?: string
+  userId: string
   onClose: () => void
   onSubmit: (input: ProductInput) => Promise<void>
   submitError?: string
@@ -47,6 +49,7 @@ export function ProductFormModal({
   initial,
   isEditing,
   generatedSku,
+  userId,
   onClose,
   onSubmit,
   submitError,
@@ -55,6 +58,7 @@ export function ProductFormModal({
 
   const {
     register,
+    control,
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting },
@@ -165,10 +169,24 @@ export function ProductFormModal({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div style={{ display: 'none' }}>
-            {/* Unit locked to Piece for Stage 5 */}
-            <input type="hidden" {...register('unitId')} value={units[0]?.id ?? 'piece'} />
-          </div>
+          {/* 2026-09-01: this used to be a hidden input hardcoded to
+              units[0]?.id ?? 'piece' - 'piece' is not a real unit id, and
+              sending it produced "invalid input syntax for type uuid:
+              'piece'" from Postgres on every save. See UnitQuickSelect. */}
+          <Controller
+            name="unitId"
+            control={control}
+            render={({ field }) => (
+              <UnitQuickSelect
+                id="pf-unit"
+                units={units}
+                value={field.value}
+                onChange={field.onChange}
+                userId={userId}
+                error={errors.unitId?.message}
+              />
+            )}
+          />
           <div>
             <label htmlFor="pf-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">Supplier</label>
             <select

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CategoryQuickSelect } from './CategoryQuickSelect'
+import { UnitQuickSelect } from './UnitQuickSelect'
 import { FormField } from '../settings/FormField'
 import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
@@ -105,13 +106,16 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     }
   }, [categories, getValues, setValue, dirtyFields.categoryId])
 
-  // Same race, same fix, for the hidden unit field (locked to the first/
-  // only unit - not user-editable, so it can never be "dirty").
+  // Same backfill, for Unit. 2026-09-01: this used to be a hidden input
+  // silently defaulting to a fake non-uuid 'piece' value whenever the (also
+  // fake) units list had exactly one entry - see UnitQuickSelect for the
+  // full story. Units are real per-business data now, so - same as
+  // categoryId above - only backfill while the user hasn't chosen one.
   useEffect(() => {
-    if (units.length > 0 && !getValues('unitId')) {
+    if (units.length > 0 && !getValues('unitId') && !dirtyFields.unitId) {
       setValue('unitId', units[0].id)
     }
-  }, [units, getValues, setValue])
+  }, [units, getValues, setValue, dirtyFields.unitId])
 
   const handleImageChange = (file: File | undefined) => {
     if (!file) return
@@ -212,11 +216,20 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
         <div className="border-t border-ink-100 pt-6">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Pricing &amp; stock</p>
           <div className="space-y-4">
-            {/* Unit is locked to the first/only unit - not user-configurable.
-                Value comes from defaultValues + the backfill effect above,
-                not a static override here (that used to fight react-hook-
-                form's own state and could desync from it). */}
-            <input type="hidden" {...register('unitId')} />
+            <Controller
+              name="unitId"
+              control={control}
+              render={({ field }) => (
+                <UnitQuickSelect
+                  id="w-unit"
+                  units={units}
+                  value={field.value}
+                  onChange={field.onChange}
+                  userId={userId}
+                  error={errors.unitId?.message}
+                />
+              )}
+            />
             <div className="grid grid-cols-2 gap-3">
               <Controller
                 name="buyingPrice"

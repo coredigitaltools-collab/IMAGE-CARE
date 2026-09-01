@@ -4,6 +4,7 @@ import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listProducts, getProduct, createProduct, updateProduct, softDeleteProduct,
   listCategories, createCategory, updateCategory, archiveCategory,
+  listUnits, createUnit, updateUnit, archiveUnit,
   listSuppliers, createSupplier, updateSupplier, archiveSupplier,
 } from '../../../services/masterData/masterDataService';
 import { listInventory, getInventoryMovements, createStockAdjustment, createStockTransfer } from '../../../services/inventory/inventoryService';
@@ -142,25 +143,13 @@ export function useArchiveSupplier(_userId?: string) {
 }
 
 export function useUnits() {
-  // Stage 5 policy: Piece is the only active stock unit.
-  // Unit conversion and configurable units are not supported.
-  return useQuery({
-    queryKey: ['inventory', 'units', 'piece-only'],
-    queryFn: async () => ([{
-      id:             'piece',
-      name:           'Piece',
-      abbreviation:   'pcs',
-      is_active:      true,
-      created_at:     '',
-      updated_at:     '',
-      created_by:     '',
-      updated_by:     '',
-      branch_id:      null as null,
-      sync_status:    'synced' as const,
-      last_synced_at: null as null,
-    }] as import('../../../types/inventory').UnitOfMeasure[]),
-    staleTime: Infinity,
-  });
+  // 2026-09-01: this used to hardcode a single fake "Piece" unit with
+  // id: 'piece' (not a real uuid, not a real row) instead of querying the
+  // real imagecare.units table - see the long comment on createUnit() in
+  // masterDataService.ts for how that silently broke every product save.
+  // Now real, matching useCategories()/useSuppliers() exactly.
+  const ctx = useUserContext();
+  return useQuery({ queryKey: ['inventory', 'units', ctx.business_id], queryFn: () => listUnits(ctx).then(unwrap) });
 }
 
 export function useInventoryKpis(_currency?: SupportedCurrency) {
@@ -277,8 +266,12 @@ export function useReactivateProduct(_userId?: string) {
   });
 }
 export function useCreateUnit(_userId?: string) {
+  const ctx = useUserContext();
   const qc = useQueryClient();
-  return useMutation({ mutationFn: async (input: { name: string; abbreviation?: string }) => ({ id: crypto.randomUUID(), ...input, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').UnitOfMeasure), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }) });
+  return useMutation({
+    mutationFn: (input: { name: string; abbreviation: string }) => createUnit(ctx, input).then(unwrap),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
+  });
 }
 export function useCreateAdjustment(_userId?: string) {
   const ctx = useUserContext();
@@ -352,8 +345,23 @@ export function useUpdateCategory(_userId?: string) {
   });
 }
 export function useMergeCategories(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ sourceId: _s, targetId: _t }: { sourceId: string; targetId: string }) => ({}), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'categories'] }) }); }
-export function useArchiveUnit(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }) }); }
-export function useUpdateUnit(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ id, input }: { id: string; input: { name: string } }) => ({ id, ...input }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }) }); }
+export function useArchiveUnit(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => archiveUnit(ctx, id as UUID).then(unwrap),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
+  });
+}
+export function useUpdateUnit(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { name?: string; abbreviation?: string } }) =>
+      updateUnit(ctx, id as UUID, input).then(unwrap),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
+  });
+}
 
 export function useCreateCategory(_userId?: string) {
   const ctx = useUserContext();

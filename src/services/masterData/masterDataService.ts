@@ -199,6 +199,56 @@ export async function listUnits(
   }
 }
 
+// 2026-09-01: listUnits() above was already real, but nothing ever created a
+// unit for it to return - useCreateUnit/useUpdateUnit/useArchiveUnit (see
+// useInventoryData.ts) were entirely fake client-side stubs that never
+// touched the database, and useUnits() didn't call listUnits() at all - it
+// returned a hardcoded single fake "Piece" option with id: 'piece' (a
+// literal string, not a uuid). Product forms took that id at face value,
+// so every single Add/Edit Product save sent unit_id: 'piece' to a uuid
+// column and failed with "invalid input syntax for type uuid: 'piece'" -
+// confirmed live via Supabase logs. Real CRUD, mirroring createCategory/
+// updateCategory/archiveCategory just above.
+export async function createUnit(
+  ctx: UserContext,
+  input: { name: string; abbreviation: string }
+): Promise<ApiResult<Unit>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('units')
+      .insert({ name: input.name, abbreviation: input.abbreviation, business_id: ctx.business_id, is_active: true })
+      .select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as Unit);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function updateUnit(
+  ctx: UserContext,
+  unitId: UUID,
+  input: { name?: string; abbreviation?: string }
+): Promise<ApiResult<Unit>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('units')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('id', unitId).eq('business_id', ctx.business_id).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as Unit);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function archiveUnit(
+  ctx: UserContext,
+  unitId: UUID
+): Promise<ApiResult<void>> {
+  try {
+    const { error } = await supabase.schema('imagecare').from('units')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', unitId).eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
 // ---- Customers ---------------------------------------------
 
 export interface CustomerListOptions {
