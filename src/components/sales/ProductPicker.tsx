@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Package, PackageX, Plus, Search } from 'lucide-react'
 import { formatCurrency } from '../../lib/format'
 import type { Product } from '../../types/inventory'
@@ -26,6 +26,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
   const [selected, setSelected] = useState<Product | null>(null)
   const [qty, setQty] = useState(1)
   const inputRef = useRef<HTMLInputElement>(null)
+  const qtyInputRef = useRef<HTMLInputElement>(null)
 
   useImperativeHandle(ref, () => ({
     focusSearch: () => inputRef.current?.focus(),
@@ -33,9 +34,16 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
 
   const sellable = useMemo(() => products.filter((p) => p.status === 'active'), [products])
 
+  // 2026-09-01: this used to return nothing at all until the cashier typed
+  // something, so the field looked like a plain text box with no hint that
+  // there was a product list behind it - the user's exact complaint
+  // ("one should not have to type the product again, there should be a
+  // dropdown from the products already in inventory"). Now an empty query
+  // browses the first 50 active products (still narrows as you type, same
+  // as before) so opening the field alone shows something to pick from.
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return []
+    if (!q) return sellable.slice(0, 50)
     return sellable
       .filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q))
       .slice(0, 8)
@@ -47,6 +55,20 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
     setIsOpen(false)
     setQty(1)
   }
+
+  // 2026-09-01: the Qty field always starts at 1, but nothing moved focus
+  // into it after picking a product, and even when the cashier clicked in
+  // manually the cursor landed AFTER the existing "1" - so typing "3" to
+  // record 3 units inserted after the 1 instead of replacing it, producing
+  // "13". Confirmed live: exactly the bug reported. Focusing and
+  // select()-ing the field the instant a product is chosen means the "1"
+  // is already highlighted, so the very next keystroke replaces it outright.
+  useEffect(() => {
+    if (selected) {
+      qtyInputRef.current?.focus()
+      qtyInputRef.current?.select()
+    }
+  }, [selected])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
@@ -109,7 +131,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
             autoFocus
             className="w-full rounded-lg border border-ink-100 bg-white py-3.5 pl-10 pr-4 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
           />
-          {isOpen && query.trim() && (
+          {isOpen && (
             <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-ink-100 bg-white shadow-card-hover">
               {matches.length === 0 ? (
                 <p className="px-3 py-3 text-xs text-ink-500">
@@ -165,11 +187,13 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
             </label>
             <input
               id="rs-qty"
+              ref={qtyInputRef}
               type="number"
               min={1}
               max={selected.currentStock}
               value={qty}
               onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+              onFocus={(e) => e.target.select()}
               className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
