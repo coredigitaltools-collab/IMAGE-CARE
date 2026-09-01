@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Plus, Receipt, RotateCcw, Search, Trash2, TrendingUp } from 'lucide-react'
+import { Pencil, Plus, Receipt, Search, Trash2, TrendingUp } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { KpiCard } from '../../components/dashboard/KpiCard'
 import { RecordSaleModal } from '../../components/sales/RecordSaleModal'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
@@ -25,8 +26,8 @@ import {
   useCreateCustomer,
   useCustomers,
   useDeleteParkedSale,
+  useDeleteSale,
   useParkedSales,
-  useRefundSale,
   useResumeParkedSale,
   useSales,
 } from '../../features/sales/hooks/useSalesData'
@@ -72,9 +73,29 @@ function mapStatus(status: string): SaleStatus {
   // sale was previously mapped to 'refunded' here, which showed a sale
   // that was discarded while still on hold (never charged) as
   // "Refunded" - confusing, since nothing was ever paid or returned.
-  // 'refunded' below stays reserved for a completed sale that's later
-  // genuinely reversed (see handleRefund/useRefundSale).
+  // 'refunded' is unused - deleting a completed sale now fully reverses
+  // it (see handleDeleteSale/useDeleteSale) and the sale becomes
+  // 'cancelled', the same status a discarded held sale gets. There is
+  // no partial "refund" state in this schema.
   return 'cancelled' // cancelled / voided - held sale discarded, never charged
+}
+
+// 2026-09-01: listSales() now embeds each sale's line items (just enough
+// to show a Product column - quantity and product name, not full pricing
+// detail) alongside the sale row. This builds just that minimal slice;
+// openReceipt() below still calls getSale() for the complete item list
+// with real pricing when a receipt is actually opened.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRawSaleListItems(rawItems: any[] | undefined): SaleLineItem[] {
+  return (rawItems ?? []).map((i) => ({
+    productId: '',
+    productName: i.products?.name ?? 'Item',
+    sku: '',
+    unitPrice: 0,
+    unitCost: 0,
+    quantity: i.quantity ?? 0,
+    lineTotal: 0,
+  }))
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,7 +107,7 @@ function mapRawSaleRow(raw: any): Sale {
     branchId: raw.branch_id ?? null,
     customerId: raw.customer_id ?? null,
     salesPersonId: raw.served_by ?? null,
-    items: [], // listSales() never returns line items, only getSale() does
+    items: mapRawSaleListItems(raw.sale_items),
     subtotal: raw.subtotal ?? 0,
     discountPercent: 0, // only the resulting amount is stored on the row
     discountAmount: raw.discount_amount ?? 0,
@@ -163,7 +184,7 @@ export function PointOfSalePage() {
   const createCustomer = useCreateCustomer(user.id)
   const resumeParked = useResumeParkedSale()
   const deleteParked = useDeleteParkedSale()
-  const refundSale = useRefundSale(user.id)
+  const deleteSale = useDeleteSale(user.id)
 
   const [isRecordSaleOpen, setIsRecordSaleOpen] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
@@ -186,6 +207,11 @@ export function PointOfSalePage() {
   const [paymentReference, setPaymentReference] = useState('')
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
+  // Completed sale awaiting a Delete confirmation. window.confirm()/
+  // window.prompt() can't be relabeled with the business's own name (see
+  // ConfirmDialog.tsx) - this branded dialog collects the required
+  // reason instead.
+  const [deleteSaleTarget, setDeleteSaleTarget] = useState<Sale | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all')
@@ -195,13 +221,29 @@ export function PointOfSalePage() {
 
   const sales = useMemo(() => (salesQuery.data ?? []).map(mapRawSaleRow), [salesQuery.data])
   const customerName = (id: string | null) => (id ? (customersQuery.data ?? []).find((c) => c.id === id)?.name ?? 'Unknown customer' : 'Walk-in customer')
+  // 2026-09-01: the Sales table now leads with what was sold, not the
+  // internal invoice number - a single-item sale shows the product name
+  // (with quantity if more than one), a multi-item sale shows a count,
+  // matching how other retail POS tools (e.g. Traxxo) show this column.
+  const productSummary = (sale: Sale) => {
+    if (sale.items.length === 0) return sale.reference
+    if (sale.items.length === 1) {
+      const item = sale.items[0]
+      return item.quantity > 1 ? `${item.quantity}x ${item.productName}` : item.productName
+    }
+    return `${sale.items.length} items`
+  }
 
   const filteredSales = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return sales.filter((s) => {
       if (statusFilter !== 'all' && s.status !== statusFilter) return false
       if (!q) return true
-      return s.reference.toLowerCase().includes(q) || customerName(s.customerId).toLowerCase().includes(q)
+      return (
+        s.reference.toLowerCase().includes(q) ||
+        customerName(s.customerId).toLowerCase().includes(q) ||
+        s.items.some((i) => i.productName.toLowerCase().includes(q))
+      )
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sales, statusFilter, searchQuery, customersQuery.data])
@@ -389,14 +431,14 @@ export function PointOfSalePage() {
     })
   }
 
-  const handleRefund = async (sale: Sale) => {
-    const reason = window.prompt('Reason for this refund?')
-    if (!reason) return
+  const handleDeleteSale = async (reason: string) => {
+    if (!deleteSaleTarget) return
     try {
-      await refundSale.mutateAsync({ saleId: sale.id, reason })
-      showToast('Sale refunded, stock reversed.', 'success')
+      await deleteSale.mutateAsync({ saleId: deleteSaleTarget.id, reason })
+      showToast('Sale deleted, stock and books reversed.', 'success')
+      setDeleteSaleTarget(null)
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not refund this sale.')
+      showToast(err instanceof Error ? err.message : 'Could not delete this sale.')
     }
   }
 
@@ -486,7 +528,7 @@ export function PointOfSalePage() {
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by reference or customer..."
+            placeholder="Search by product, reference or customer..."
             className="w-full rounded-md border border-ink-100 bg-white py-2 pl-8 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
@@ -527,7 +569,7 @@ export function PointOfSalePage() {
               <thead>
                 <tr className="border-b border-ink-100 text-left text-xs font-medium uppercase tracking-wide text-ink-500">
                   <th className="px-4 py-2.5">Date</th>
-                  <th className="px-4 py-2.5">Reference</th>
+                  <th className="px-4 py-2.5">Product</th>
                   <th className="px-4 py-2.5">Customer</th>
                   <th className="px-4 py-2.5">Payment</th>
                   <th className="px-4 py-2.5 text-right">Total</th>
@@ -539,7 +581,7 @@ export function PointOfSalePage() {
                 {filteredSales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-ink-50/60">
                     <td className="whitespace-nowrap px-4 py-3 text-ink-500">{new Date(sale.createdAt).toLocaleDateString('en-UG')}</td>
-                    <td className="px-4 py-3 font-medium text-ink-900">{sale.reference}</td>
+                    <td className="px-4 py-3 font-medium text-ink-900">{productSummary(sale)}</td>
                     <td className="px-4 py-3 text-ink-700">{customerName(sale.customerId)}</td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <Badge tone="info">{PAYMENT_METHOD_LABELS[sale.paymentMethod]}</Badge>
@@ -553,13 +595,13 @@ export function PointOfSalePage() {
                         {sale.status === 'completed' && (
                           <>
                             <RowActionButton icon={Receipt} label="View receipt" onClick={() => openReceipt(sale)} />
-                            <RowActionButton icon={RotateCcw} label="Refund" tone="danger" onClick={() => handleRefund(sale)} />
+                            <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => setDeleteSaleTarget(sale)} />
                           </>
                         )}
                         {sale.status === 'parked' && (
                           <>
-                            <RowActionButton icon={Play} label="Resume sale" tone="success" onClick={() => handleResumeParked(sale)} />
-                            <RowActionButton icon={Trash2} label="Discard held sale" tone="danger" onClick={() => handleDeleteHeldSale(sale.id)} />
+                            <RowActionButton icon={Pencil} label="Edit" onClick={() => handleResumeParked(sale)} />
+                            <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => handleDeleteHeldSale(sale.id)} />
                           </>
                         )}
                         {sale.status === 'cancelled' && <span className="text-xs text-ink-400">—</span>}
@@ -628,6 +670,19 @@ export function PointOfSalePage() {
             setIsCustomerModalOpen(false)
             showToast('Customer added.', 'success')
           }}
+        />
+      )}
+
+      {deleteSaleTarget && (
+        <ConfirmDialog
+          title={`Delete sale ${deleteSaleTarget.reference}?`}
+          message="This puts the stock back, reverses the accounting entry, and reverses the cash or credit it recorded. This cannot be undone."
+          confirmLabel="Delete sale"
+          tone="danger"
+          reasonLabel="Reason for deleting this sale"
+          reasonPlaceholder="e.g. wrong item, wrong customer, duplicate entry"
+          onConfirm={(reason) => handleDeleteSale(reason ?? '')}
+          onCancel={() => setDeleteSaleTarget(null)}
         />
       )}
 

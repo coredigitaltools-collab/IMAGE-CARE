@@ -5,6 +5,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { ExpenseFormModal } from '../../components/expenses/ExpenseFormModal'
 import type { ExpenseFormValues } from '../../components/expenses/ExpenseFormModal'
 import { useToast } from '../../components/ui/toastContext'
@@ -31,6 +32,7 @@ export function ExpenseDetailPage() {
   const activeCategories = (categoriesQuery.data ?? []).filter((c) => c.is_active)
 
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
 
   const expense = expenseQuery.data
 
@@ -69,15 +71,7 @@ export function ExpenseDetailPage() {
           <Button variant="secondary" onClick={() => setIsEditOpen(true)}>
             <Pencil size={14} /> Edit
           </Button>
-          <Button
-            variant="danger"
-            onClick={async () => {
-              if (!window.confirm('Delete this expense? This cannot be undone.')) return
-              await deleteExpense.mutateAsync(expense.id)
-              showToast('Expense deleted.', 'success')
-              navigate('/expenses/register')
-            }}
-          >
+          <Button variant="danger" onClick={() => setIsDeleteOpen(true)}>
             <Trash2 size={14} /> Delete
           </Button>
         </div>
@@ -129,6 +123,21 @@ export function ExpenseDetailPage() {
             showToast('Expense updated.', 'success')
             setIsEditOpen(false)
           }}
+        />
+      )}
+
+      {isDeleteOpen && (
+        <ConfirmDialog
+          title="Delete this expense?"
+          message="This cannot be undone."
+          confirmLabel="Delete"
+          tone="danger"
+          onConfirm={async () => {
+            await deleteExpense.mutateAsync(expense.id)
+            showToast('Expense deleted.', 'success')
+            navigate('/expenses/register')
+          }}
+          onCancel={() => setIsDeleteOpen(false)}
         />
       )}
     </div>

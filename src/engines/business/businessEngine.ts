@@ -25,6 +25,7 @@ import type { UUID } from '../../types/database';
 import type {
   EngineContext, EngineResult,
   CreateSaleCommand, PostSaleCommand, SaleResult,
+  ReverseSaleCommand,
   RecordExpenseCommand, ExpenseResult,
   RecordPayrollCommand, PayrollResult,
 } from '../types';
@@ -468,6 +469,133 @@ export class BusinessEngine {
       );
     }
     await Promise.all(bookkeeping);
+
+    return engineOk(result);
+  }
+
+  // ---- reverseSale ------------------------------------------
+  // Fully undoes a confirmed sale. Used when "Delete" is chosen on a
+  // completed sale (wrong item, wrong customer, duplicate entry) - the
+  // owner wants the whole sale gone, not a partial adjustment, so every
+  // effect it had must be undone together: stock put back
+  // (inventoryEngine.reverseForSale, movement_type 'return_in'), the
+  // journal reversed (accountingEngine.reverseJournal, reusing the
+  // debit/credit-swap reversal already built for Stage 3), and cash or
+  // credit reversed depending on how the sale was paid. The sale itself
+  // moves to 'cancelled' - a real status this schema has (see
+  // types/sales.ts) - never 'refunded', which was never a real DB value
+  // and had no working backend behind it. Only a confirmed sale can be
+  // reversed this way: a draft sale should be discarded instead
+  // (deleteParked), and an already-cancelled sale can't be cancelled
+  // twice.
+
+  async reverseSale(
+    ctx: EngineContext,
+    cmd: ReverseSaleCommand,
+  ): Promise<EngineResult<SaleResult>> {
+    if (!cmd.reason || !cmd.reason.trim()) {
+      return engineFail(makeError('VALIDATION_ERROR', 'A reason is required to delete a completed sale.', undefined, 'reason'));
+    }
+
+    // Sale and its items are independent reads once we have the id -
+    // run them together rather than one after another.
+    const [saleRes, itemsRes] = await Promise.all([
+      db.sales()
+        .select('*')
+        .eq('id', cmd.sale_id)
+        .eq('business_id', ctx.business_id)
+        .single(),
+      db.sale_items()
+        .select('*, products!sale_items_product_id_fkey(is_stockable)')
+        .eq('sale_id', cmd.sale_id)
+        .eq('business_id', ctx.business_id),
+    ]);
+
+    const { data: sale, error: sErr } = saleRes;
+    if (sErr || !sale) {
+      return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+    }
+
+    if (sale.status !== 'confirmed') {
+      return engineFail(makeError(
+        'IMMUTABLE_RECORD',
+        `This sale is ${sale.status}, not completed. Only a completed sale can be deleted this way.`,
+      ));
+    }
+
+    if (!sale.journal_entry_id) {
+      return engineFail(makeError('DATABASE_ERROR', 'This sale has no journal entry to reverse, so it cannot be safely deleted.'));
+    }
+
+    const { data: items, error: itemsErr } = itemsRes;
+    if (itemsErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Could not load the items on this sale.', itemsErr.message));
+    }
+
+    const isCreditSale = sale.payment_method === 'credit';
+
+    // Put stock back and reverse the journal at the same time - neither
+    // depends on the other's result, both only need the sale/items
+    // already loaded above.
+    const [invResult, journalResult] = await Promise.all([
+      inventoryEngine.reverseForSale(ctx, cmd.sale_id, { items: items ?? [], branchId: sale.branch_id }),
+      accountingEngine.reverseJournal(ctx, sale.journal_entry_id as UUID, cmd.reason),
+    ]);
+    if (!invResult.ok) return engineFail(invResult.error!);
+    if (!journalResult.ok) return engineFail(journalResult.error!);
+
+    // Reverse whichever payment effect the sale recorded - credit charge
+    // or cash received. Never both; a sale is only ever one or the other.
+    if (isCreditSale && sale.customer_id) {
+      const caResult = await creditEngine.getOrCreateCreditAccount(ctx, sale.customer_id, sale.branch_id);
+      if (!caResult.ok) return engineFail(caResult.error!);
+
+      const reverseResult = await creditEngine.reverseCharge(ctx, {
+        credit_account_id: caResult.data!.credit_account_id,
+        sale_id:           cmd.sale_id,
+        amount:            Number(sale.total_amount),
+        reason:            cmd.reason,
+      });
+      if (!reverseResult.ok) return engineFail(reverseResult.error!);
+    } else if (!isCreditSale) {
+      const cashResult = await cashEngine.reverseSaleCashIn(ctx, {
+        branch_id:      sale.branch_id,
+        sale_id:        cmd.sale_id,
+        amount:         Number(sale.total_amount),
+        payment_method: sale.payment_method,
+      });
+      if (!cashResult.ok) return engineFail(cashResult.error!);
+    }
+
+    // Cancel the sale - only after every reversal above has succeeded.
+    const { error: updateErr } = await db.sales()
+
+      .update({
+        status:     'cancelled',
+        notes:      sale.notes ? `${sale.notes}\n\nCancelled: ${cmd.reason}` : `Cancelled: ${cmd.reason}`,
+        updated_by: ctx.user_id,
+      })
+      .eq('id', cmd.sale_id);
+
+    if (updateErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Failed to cancel sale.', updateErr.message));
+    }
+
+    const result: SaleResult = {
+      sale_id:          cmd.sale_id,
+      sale_number:      sale.sale_number as string,
+      total_amount:     Number(sale.total_amount),
+      status:           'cancelled',
+      journal_entry_id: sale.journal_entry_id as UUID,
+    };
+
+    await auditEngine.log(ctx, {
+      table_name:     'sales',
+      record_id:      cmd.sale_id,
+      action:         'update',
+      previous_value: { status: 'confirmed' },
+      new_value:      { status: 'cancelled', reason: cmd.reason },
+    });
 
     return engineOk(result);
   }

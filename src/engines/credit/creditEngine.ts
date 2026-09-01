@@ -236,6 +236,58 @@ export class CreditEngine {
     });
   }
 
+  // ---- reverseCharge ----------------------------------------
+  // Backs out a credit charge when the sale it came from is deleted -
+  // no real cash changes hands here, this is not a customer repayment,
+  // so unlike recordPayment() above this must NOT also write a
+  // cash_transactions row. credit_transactions has no separate
+  // "reversal" transaction_type in the schema (only 'charge' and
+  // 'payment'), so this uses 'payment' - the DB trigger reduces the
+  // balance the same way a real repayment would - but the note makes
+  // clear this was a reversal, not money actually received, so it
+  // reads correctly if anyone reviews this customer's credit history
+  // later.
+
+  async reverseCharge(
+    ctx: EngineContext,
+    cmd: { credit_account_id: UUID; sale_id: UUID; amount: number; reason: string },
+  ): Promise<EngineResult<CreditResult>> {
+    if (cmd.amount <= 0) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Reversal amount must be positive.', undefined, 'amount'));
+    }
+
+    const balResult = await this.getBalance(ctx, cmd.credit_account_id);
+    if (!balResult.ok) return engineFail(balResult.error!);
+    const { balance } = balResult.data!;
+
+    const { data, error } = await db.credit_transactions()
+      .insert({
+        business_id:       ctx.business_id,
+        branch_id:         ctx.branch_id ?? (await this.getBranchFromAccount(cmd.credit_account_id)),
+        credit_account_id: cmd.credit_account_id,
+        sale_id:           cmd.sale_id,
+        transaction_type:  'payment',
+        amount:            cmd.amount,
+        notes:             `Reversal - sale deleted: ${cmd.reason}`,
+        transaction_date:  new Date().toISOString(),
+        created_by:        ctx.user_id,
+      })
+      .select('id, credit_account_id, amount')
+      .single();
+
+    if (error || !data) {
+      return engineFail(makeError('DATABASE_ERROR', 'Failed to reverse credit charge.', error?.message));
+    }
+
+    return engineOk({
+      transaction_id:    data.id as UUID,
+      credit_account_id: data.credit_account_id as UUID,
+      amount:             Number(data.amount),
+      new_balance:        balance - cmd.amount,
+      transaction_type:  'payment',
+    });
+  }
+
   // ---- getOrCreateCreditAccount ---------------------------
 
   async getOrCreateCreditAccount(

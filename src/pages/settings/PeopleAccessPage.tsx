@@ -4,6 +4,7 @@ import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { RoleBadge } from '../../components/settings/RoleBadge'
 import { StaffFormModal } from '../../components/settings/StaffFormModal'
 import { PermissionMatrixTable } from '../../components/settings/PermissionMatrixTable'
@@ -51,6 +52,8 @@ export function PeopleAccessPage() {
 
   const [modalState, setModalState] = useState<{ mode: 'create' } | { mode: 'edit'; staff: StaffMember } | null>(null)
   const [formError, setFormError] = useState<string | undefined>()
+  const [isAddRoleOpen, setIsAddRoleOpen] = useState(false)
+  const [archivingRole, setArchivingRole] = useState<{ id: string; name: string } | null>(null)
 
   const branches = branchesQuery.data ?? []
 
@@ -88,22 +91,22 @@ export function PeopleAccessPage() {
     showToast(`Temporary password for ${member.fullName}: ${result.temporaryPassword}`)
   }
 
-  const handleAddRole = async () => {
-    const name = window.prompt('New role name (e.g. Social Media Manager, Warehouse Assistant)')
-    if (!name?.trim()) return
+  const handleAddRole = async (name: string) => {
+    if (!name.trim()) return
     try {
       await createRole.mutateAsync({ name })
       showToast('Role added, set its permissions below.', 'success')
+      setIsAddRoleOpen(false)
     } catch (err) {
       showToast(err instanceof DuplicateRoleNameError ? err.message : 'Could not create this role.')
     }
   }
 
   const handleArchiveRole = async (role: { id: string; name: string }) => {
-    if (!window.confirm(`Remove the "${role.name}" role?`)) return
     try {
       await archiveRole.mutateAsync(role.id)
       showToast('Role removed.', 'success')
+      setArchivingRole(null)
     } catch (err) {
       showToast(err instanceof OwnerRoleProtectedError || err instanceof RoleInUseError ? err.message : 'Could not remove this role.')
     }
@@ -192,8 +195,8 @@ export function PeopleAccessPage() {
             matrix={permissionMatrixQuery.data as import('../../types/settings').PermissionMatrix}
             roles={activeRoles}
             onChange={(role, permission, granted) => setPermission.mutate({ role, permission, granted })}
-            onAddRole={handleAddRole}
-            onArchiveRole={handleArchiveRole}
+            onAddRole={() => setIsAddRoleOpen(true)}
+            onArchiveRole={(role) => setArchivingRole(role)}
             disabled={setPermission.isPending}
           />
         ) : null}
@@ -211,6 +214,29 @@ export function PeopleAccessPage() {
           }}
           onSubmit={handleSubmit}
           submitError={formError}
+        />
+      )}
+
+      {isAddRoleOpen && (
+        <ConfirmDialog
+          title="Add a role"
+          message="Give this role a name, then set its permissions below."
+          confirmLabel="Add role"
+          reasonLabel="Role name"
+          reasonPlaceholder="e.g. Social Media Manager, Warehouse Assistant"
+          onConfirm={(name) => handleAddRole(name ?? '')}
+          onCancel={() => setIsAddRoleOpen(false)}
+        />
+      )}
+
+      {archivingRole && (
+        <ConfirmDialog
+          title="Remove this role?"
+          message={`Remove the "${archivingRole.name}" role. Staff assigned to it will need a new role.`}
+          confirmLabel="Remove"
+          tone="danger"
+          onConfirm={() => handleArchiveRole(archivingRole)}
+          onCancel={() => setArchivingRole(null)}
         />
       )}
     </div>

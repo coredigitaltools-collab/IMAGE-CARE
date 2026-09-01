@@ -6,13 +6,13 @@
 //          Pages must never post sales directly to Supabase tables.
 // ============================================================
 
-import { supabase, rpc } from '../../lib/supabase';
-import { parseError, canDo } from '../../types/app';
+import { supabase } from '../../lib/supabase';
+import { canDo } from '../../types/app';
 import { mapErrorCode, serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Sale, SaleItem, PaymentMethod, UUID } from '../../types/database';
-import { createAndPostSale, type CreateSaleInput } from '../business/businessEngine';
+import { createAndPostSale, reverseSale, type CreateSaleInput } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -163,8 +163,21 @@ export async function listSales(
     );
     const offset = ((pagination.page ?? 1) - 1) * pageSize;
 
+    // 2026-09-01: the Sales list needs each row's product(s) to show a
+    // "Product" column instead of the internal reference number - added
+    // the sale_items embed (with the product name via the same FK-hinted
+    // join already used elsewhere for this duplicate-FK schema) so the
+    // page doesn't need a second round trip per row. Quantity comes along
+    // too so the column can show "6x Denim Jackets" for a single-item
+    // sale.
     let q = supabase.schema('imagecare').from('sales')
-      .select('*', { count: 'exact' })
+      .select(`
+        *,
+        sale_items!sale_items_sale_id_fkey(
+          quantity,
+          products!sale_items_product_id_fkey(name)
+        )
+      `, { count: 'exact' })
       .eq('business_id', ctx.business_id)
       .is('deleted_at', null)
       .range(offset, offset + pageSize - 1)
@@ -195,21 +208,40 @@ export async function listSales(
   }
 }
 
-// ---- Cancel Sale -------------------------------------------
+// ---- Cancel / Delete Sale ------------------------------------
+// One entry point for both cases the Sales page uses this for:
+//   - deleting a parked (draft) sale that was never completed - just
+//     marks it cancelled, nothing to reverse yet.
+//   - deleting a completed (confirmed) sale - routes through the real
+//     reversal engine (businessEngine.reverseSale) to put stock back
+//     and reverse the journal and cash/credit effects together.
+// 2026-09-01: this previously called rpc('engine_return_sale', ...) for
+// confirmed sales - confirmed via direct database inspection that this
+// RPC does not exist and never has, so "Refund" never actually worked
+// for a completed sale; it just returned a Supabase "function not found"
+// error, which the UI surfaced as a generic failure toast. Replaced
+// with the real, tested implementation in src/engines/*.
 
 export async function cancelSale(
   ctx: UserContext,
   saleId: UUID,
-  reason: string
+  reason?: string
 ): Promise<ServiceResponse<void>> {
   const requestId = makeRequestId();
 
-  if (!canDo(ctx, 'sales', 'edit')) {
-    return serviceFail('PERMISSION_DENIED', 'You do not have permission to cancel sales.', { requestId });
+  // A user needs at least one of the two permissions this can require
+  // (deleting a completed sale needs 'delete', deleting a held one needs
+  // 'edit') to get past the door at all - checked here, before the sale
+  // is even loaded, so someone with neither gets a clean PERMISSION_DENIED
+  // instead of a confusing "sale not found". The precise permission for
+  // this specific sale's status is re-checked below once its status is
+  // known.
+  if (!canDo(ctx, 'sales', 'edit') && !canDo(ctx, 'sales', 'delete')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete sales.', { requestId });
   }
 
   if (!reason?.trim()) {
-    return serviceFail('INVALID_INPUT', 'A cancellation reason is required.', { requestId, field: 'reason' });
+    return serviceFail('INVALID_INPUT', 'A reason is required.', { requestId, field: 'reason' });
   }
 
   try {
@@ -217,7 +249,7 @@ export async function cancelSale(
     const { data: sale } = await supabase
       .schema('imagecare')
       .from('sales')
-      .select('status')
+      .select('status, branch_id')
       .eq('id', saleId)
       .eq('business_id', ctx.business_id)
       .single();
@@ -226,26 +258,24 @@ export async function cancelSale(
     if (sale.status === 'cancelled') return serviceFail('BUSINESS_RULE_VIOLATION', 'Sale is already cancelled.', { requestId });
     if (sale.status === 'voided') return serviceFail('BUSINESS_RULE_VIOLATION', 'Voided sales cannot be cancelled.', { requestId });
 
-    // If confirmed, route through return engine to reverse inventory + journal
     if (sale.status === 'confirmed') {
-      // Get all items for full return
-      const { data: items } = await supabase
-        .schema('imagecare')
-        .from('sale_items')
-        .select('product_id, quantity')
-        .eq('sale_id', saleId);
+      if (!canDo(ctx, 'sales', 'delete')) {
+        return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete completed sales.', { requestId });
+      }
 
-      const { error } = await rpc('engine_return_sale', {
-        p_sale_id:  saleId,
-        p_user_id:  ctx.user_id,
-        p_reason:   reason,
-        p_items:    JSON.stringify(items ?? []),
-        p_idempotency_key: uuidv4(),
+      const result = await reverseSale(ctx, {
+        sale_id:   saleId,
+        branch_id: sale.branch_id as UUID,
+        reason,
       });
 
-      if (error) return serviceFail('BUSINESS_RULE_VIOLATION', parseError(error).message, { requestId });
+      if (result.error) return serviceFail(mapErrorCode(result.error.code), result.error.message, { requestId });
     } else {
-      // Draft - just mark cancelled
+      // Draft (parked) - just mark cancelled, nothing to reverse yet
+      if (!canDo(ctx, 'sales', 'edit')) {
+        return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete held sales.', { requestId });
+      }
+
       const { error } = await supabase
         .schema('imagecare')
         .from('sales')
@@ -253,12 +283,12 @@ export async function cancelSale(
         .eq('id', saleId)
         .eq('business_id', ctx.business_id);
 
-      if (error) return serviceFail('INTERNAL_ERROR', 'Failed to cancel sale.', { requestId });
+      if (error) return serviceFail('INTERNAL_ERROR', 'Failed to delete sale.', { requestId });
     }
 
     return serviceOk(undefined, requestId);
   } catch {
-    return serviceFail('INTERNAL_ERROR', 'Failed to cancel sale.', { requestId });
+    return serviceFail('INTERNAL_ERROR', 'Failed to delete sale.', { requestId });
   }
 }
 

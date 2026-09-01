@@ -221,7 +221,13 @@ export function useCheckout(_userId?: string) {
   });
 }
 
-export function useRefundSale(_userId?: string) {
+// 2026-09-01: renamed from useRefundSale - there is no separate "refund"
+// feature (the old one called an RPC, engine_return_sale, that never
+// existed in the database, so it never actually worked). This deletes a
+// completed sale outright: cancelSale() now routes confirmed sales
+// through the real reversal engine, which puts stock back and reverses
+// the journal and cash/credit effects together.
+export function useDeleteSale(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({

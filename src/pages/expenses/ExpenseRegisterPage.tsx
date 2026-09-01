@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useStaff } from '../../features/settings/hooks/useSettingsData'
@@ -41,6 +42,7 @@ export function ExpenseRegisterPage() {
   const [editing, setEditing] = useState<Expense | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [deletingExpense, setDeletingExpense] = useState<Expense | null>(null)
 
   const expenses = useMemo(() => (expensesQuery.data ?? []) as Expense[], [expensesQuery.data])
 
@@ -258,11 +260,7 @@ export function ExpenseRegisterPage() {
                           icon={Trash2}
                           label="Delete expense"
                           tone="danger"
-                          onClick={async () => {
-                            if (!window.confirm('Delete this expense? This cannot be undone.')) return
-                            await deleteExpense.mutateAsync(e.id)
-                            showToast('Expense deleted.', 'success')
-                          }}
+                          onClick={() => setDeletingExpense(e)}
                         />
                       </div>
                     </td>
@@ -314,6 +312,21 @@ export function ExpenseRegisterPage() {
             showToast('Expense updated.', 'success')
             setEditing(null)
           }}
+        />
+      )}
+
+      {deletingExpense && (
+        <ConfirmDialog
+          title="Delete this expense?"
+          message="This cannot be undone."
+          confirmLabel="Delete"
+          tone="danger"
+          onConfirm={async () => {
+            await deleteExpense.mutateAsync(deletingExpense.id)
+            showToast('Expense deleted.', 'success')
+            setDeletingExpense(null)
+          }}
+          onCancel={() => setDeletingExpense(null)}
         />
       )}
     </div>

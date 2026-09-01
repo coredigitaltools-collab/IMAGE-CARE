@@ -169,6 +169,41 @@ export async function createAndPostSale(
   });
 }
 
+// ---- Sale reversal (delete a completed sale) ----------------
+// Undoes a confirmed sale entirely: stock returned, journal reversed,
+// and cash or credit reversed depending on how it was paid. This is
+// what "Delete" does on a completed sale in the Sales page - there is
+// no separate "Refund" feature; it was never actually built (the old
+// UI called an RPC, engine_return_sale, that does not exist in the
+// database), so this is the first real implementation.
+
+export async function reverseSale(
+  ctx: UserContext,
+  input: { sale_id: UUID; branch_id: UUID; reason: string }
+): Promise<ApiResult<SaleResult>> {
+  if (!canDo(ctx, 'sales', 'delete')) {
+    return fail({ code: 'PERMISSION_DENIED', message: 'You do not have permission to delete sales.' });
+  }
+
+  const ectx = toEngineContext(ctx, input.branch_id);
+
+  const result = await realBusinessEngine.reverseSale(ectx, {
+    sale_id: input.sale_id,
+    reason:  input.reason,
+  });
+
+  if (!result.ok) {
+    return fail({ code: mapEngineErrorCode(result.error!.code), message: result.error!.message });
+  }
+
+  return ok({
+    sale_id:          result.data!.sale_id,
+    sale_number:      result.data!.sale_number,
+    status:            result.data!.status,
+    journal_entry_id:  result.data!.journal_entry_id,
+  });
+}
+
 // ---- Purchase ----------------------------------------------
 
 export interface CreatePurchaseInput {

@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
 import { CustomerHealthWidget } from '../../components/sales/CustomerHealthWidget'
 import { CustomerTimeline } from '../../components/sales/CustomerTimeline'
@@ -23,7 +24,7 @@ import {
   useCustomer,
   useCustomerNotes,
   useReactivateCustomer,
-  useRefundSale,
+  useDeleteSale,
   useSales,
   useUpdateCustomer,
 } from '../../features/sales/hooks/useSalesData'
@@ -31,10 +32,10 @@ import { useApproveCreditLimit, useCreditPayments, useCreditWriteOffs, useRecord
 import { useLoyaltyTransactions } from '../../features/loyalty/hooks/useLoyaltyData'
 import { useGenerateInvoice, useInvoices } from '../../features/invoices/hooks/useInvoicesData'
 import { PaymentExceedsBalanceError, WriteOffExceedsBalanceError } from '../../services/creditService'
-import { SaleNotRefundableError } from '../../services/salesService'
 import { AlreadyInvoicedError, effectiveStatus as effectiveInvoiceStatus } from '../../services/invoiceService'
 import { LOYALTY_TRANSACTION_LABELS } from '../../types/loyalty'
 import { INVOICE_STATUS_LABELS } from '../../types/invoices'
+import type { UUID } from '../../types/database'
 
 const LOYALTY_TX_TONE = { earn: 'success', redeem: 'info', reverse: 'danger', expire: 'warning', adjust: 'neutral' } as const
 const INVOICE_STATUS_TONE = { unpaid: 'warning', partially_paid: 'warning', paid: 'success', overdue: 'danger', cancelled: 'neutral' } as const
@@ -54,7 +55,7 @@ export function CustomerDetailPage() {
   const notesQuery = useCustomerNotes(id)
   const paymentsQuery = useCreditPayments(id)
   const loyaltyTxQuery = useLoyaltyTransactions(id)
-  const refundSale = useRefundSale(user.id)
+  const deleteSale = useDeleteSale(user.id)
   const invoicesQuery = useInvoices()
   const generateInvoice = useGenerateInvoice(user.id)
   const writeOffsQuery = useCreditWriteOffs(id)
@@ -69,6 +70,9 @@ export function CustomerDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [creditModal, setCreditModal] = useState<'payment' | 'writeoff' | 'limit' | null>(null)
   const [creditFormError, setCreditFormError] = useState<string | undefined>()
+  // Sale awaiting a Delete confirmation - see ConfirmDialog.tsx for why
+  // this replaces window.prompt() here.
+  const [deleteSaleTarget, setDeleteSaleTarget] = useState<{ id: UUID; reference: string } | null>(null)
 
   const customer = customerQuery.data
   const purchases = (salesQuery.data ?? []).filter((s) => s.customerId === id && s.status === 'completed')
@@ -243,19 +247,10 @@ export function CustomerDetailPage() {
                       </Button>
                     )}
                     <Button
-                      variant="secondary"
-                      onClick={async () => {
-                        const reason = window.prompt('Reason for this refund?')
-                        if (!reason) return
-                        try {
-                          await refundSale.mutateAsync({ saleId: sale.id, reason })
-                          showToast('Sale refunded, stock and points reversed.', 'success')
-                        } catch (err) {
-                          showToast(err instanceof SaleNotRefundableError ? err.message : 'Could not refund this sale.')
-                        }
-                      }}
+                      variant="danger"
+                      onClick={() => setDeleteSaleTarget({ id: sale.id, reference: sale.reference })}
                     >
-                      Refund
+                      Delete
                     </Button>
                   </div>
                 </li>
@@ -558,6 +553,27 @@ export function CustomerDetailPage() {
             showToast('Customer updated.', 'success')
             setIsEditOpen(false)
           }}
+        />
+      )}
+
+      {deleteSaleTarget && (
+        <ConfirmDialog
+          title={`Delete sale ${deleteSaleTarget.reference}?`}
+          message="This puts the stock back, reverses the accounting entry, and reverses the cash or credit it recorded. This cannot be undone."
+          confirmLabel="Delete sale"
+          tone="danger"
+          reasonLabel="Reason for deleting this sale"
+          reasonPlaceholder="e.g. wrong item, wrong customer, duplicate entry"
+          onConfirm={async (reason) => {
+            try {
+              await deleteSale.mutateAsync({ saleId: deleteSaleTarget.id, reason: reason ?? '' })
+              showToast('Sale deleted, stock and books reversed.', 'success')
+              setDeleteSaleTarget(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not delete this sale.')
+            }
+          }}
+          onCancel={() => setDeleteSaleTarget(null)}
         />
       )}
     </div>

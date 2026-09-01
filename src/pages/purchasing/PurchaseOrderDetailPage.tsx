@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { GoodsReceiptModal } from '../../components/purchasing/GoodsReceiptModal'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
@@ -53,6 +54,7 @@ export function PurchaseOrderDetailPage() {
 
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
   const [receiptError, setReceiptError] = useState<string | undefined>()
+  const [isRejectOpen, setIsRejectOpen] = useState(false)
 
   const order = orderQuery.data
 
@@ -87,15 +89,7 @@ export function PurchaseOrderDetailPage() {
           <div className="flex flex-wrap gap-2">
             {order.status === 'pending_approval' && (
               <>
-                <Button
-                  variant="secondary"
-                  onClick={async () => {
-                    const reason = window.prompt('Reason for rejecting this order?')
-                    if (!reason) return
-                    await rejectOrder.mutateAsync({ id: order.id, reason })
-                    showToast('Order rejected.', 'success')
-                  }}
-                >
+                <Button variant="secondary" onClick={() => setIsRejectOpen(true)}>
                   <XCircle size={14} /> Reject
                 </Button>
                 <Button
@@ -220,6 +214,22 @@ export function PurchaseOrderDetailPage() {
               setReceiptError(err instanceof OverReceiptError ? err.message : 'Could not record this receipt.')
             }
           }}
+        />
+      )}
+
+      {isRejectOpen && (
+        <ConfirmDialog
+          title="Reject this order?"
+          message={`Reject purchase order ${order.reference}.`}
+          confirmLabel="Reject"
+          tone="danger"
+          reasonLabel="Reason for rejecting this order"
+          onConfirm={async (reason) => {
+            await rejectOrder.mutateAsync({ id: order.id, reason: reason ?? '' })
+            showToast('Order rejected.', 'success')
+            setIsRejectOpen(false)
+          }}
+          onCancel={() => setIsRejectOpen(false)}
         />
       )}
     </div>

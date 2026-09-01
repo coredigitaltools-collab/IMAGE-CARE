@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
@@ -38,6 +39,7 @@ export function RequisitionsPage() {
 
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [convertingReq, setConvertingReq] = useState<PurchaseRequisition | null>(null)
+  const [rejectingReq, setRejectingReq] = useState<PurchaseRequisition | null>(null)
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
@@ -87,15 +89,7 @@ export function RequisitionsPage() {
                   </div>
                   {req.status === 'pending_approval' && (
                     <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={async () => {
-                          const reason = window.prompt('Reason for rejecting this requisition?')
-                          if (!reason) return
-                          await rejectRequisition.mutateAsync({ id: req.id, reason })
-                          showToast('Requisition rejected.', 'success')
-                        }}
-                      >
+                      <Button variant="secondary" onClick={() => setRejectingReq(req)}>
                         Reject
                       </Button>
                       <Button
@@ -127,6 +121,22 @@ export function RequisitionsPage() {
             showToast('Requisition submitted.', 'success')
             setIsAddOpen(false)
           }}
+        />
+      )}
+
+      {rejectingReq && (
+        <ConfirmDialog
+          title="Reject this requisition?"
+          message={`Reject requisition ${rejectingReq.reference}.`}
+          confirmLabel="Reject"
+          tone="danger"
+          reasonLabel="Reason for rejecting this requisition"
+          onConfirm={async (reason) => {
+            await rejectRequisition.mutateAsync({ id: rejectingReq.id, reason: reason ?? '' })
+            showToast('Requisition rejected.', 'success')
+            setRejectingReq(null)
+          }}
+          onCancel={() => setRejectingReq(null)}
         />
       )}
 

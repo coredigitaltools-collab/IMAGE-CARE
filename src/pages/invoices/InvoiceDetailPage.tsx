@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import { useBusinessProfile } from '../../features/settings/hooks/useSettingsData'
@@ -28,6 +29,7 @@ export function InvoiceDetailPage() {
   const cancelInvoice = useCancelInvoice()
 
   const [actionError, setActionError] = useState<string | undefined>()
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
 
   const invoice = invoiceQuery.data
 
@@ -87,19 +89,7 @@ export function InvoiceDetailPage() {
               </Button>
             )}
             {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  const reason = window.prompt('Reason for cancelling this invoice?')
-                  if (!reason) return
-                  try {
-                    await cancelInvoice.mutateAsync({ id: invoice.id, reason })
-                    showToast('Invoice cancelled.', 'success')
-                  } catch (err) {
-                    setActionError(err instanceof InvalidInvoiceTransitionError ? err.message : 'Could not cancel this invoice.')
-                  }
-                }}
-              >
+              <Button variant="danger" onClick={() => setIsCancelOpen(true)}>
                 <XCircle size={14} /> Cancel
               </Button>
             )}
@@ -173,6 +163,27 @@ export function InvoiceDetailPage() {
           </>
         )}
       </Card>
+
+      {isCancelOpen && (
+        <ConfirmDialog
+          title="Cancel this invoice?"
+          message={`Cancel invoice ${invoice.invoiceNumber}.`}
+          confirmLabel="Cancel invoice"
+          tone="danger"
+          reasonLabel="Reason for cancelling this invoice"
+          onConfirm={async (reason) => {
+            try {
+              await cancelInvoice.mutateAsync({ id: invoice.id, reason: reason ?? '' })
+              showToast('Invoice cancelled.', 'success')
+              setIsCancelOpen(false)
+            } catch (err) {
+              setActionError(err instanceof InvalidInvoiceTransitionError ? err.message : 'Could not cancel this invoice.')
+              setIsCancelOpen(false)
+            }
+          }}
+          onCancel={() => setIsCancelOpen(false)}
+        />
+      )}
     </div>
   )
 }

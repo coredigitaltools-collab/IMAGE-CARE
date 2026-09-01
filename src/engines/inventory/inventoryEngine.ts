@@ -267,6 +267,68 @@ export class InventoryEngine {
     return engineOk({ movements: movementIds });
   }
 
+  // ---- reverseForSale ---------------------------------------
+  // Records stock-IN movements reversing every item on a previously
+  // CONFIRMED sale - the opposite of deductForSale(), used when a
+  // completed sale is deleted so the stock it took out comes back.
+  // 'return_in' is not in recordMovement()'s outTypes list, so no
+  // availability check applies here - putting stock back can't ever be
+  // blocked by "not enough of it," unlike taking it out.
+
+  async reverseForSale(
+    ctx: EngineContext,
+    saleId: UUID,
+    preloaded?: { items: Record<string, unknown>[]; branchId: UUID },
+  ): Promise<EngineResult<{ movements: UUID[] }>> {
+    let items = preloaded?.items;
+    let branchId = preloaded?.branchId;
+
+    if (!items) {
+      const { data, error } = await db.sale_items()
+        .select('*, products!sale_items_product_id_fkey(is_stockable)')
+        .eq('sale_id', saleId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) {
+        return engineFail(makeError('DATABASE_ERROR', 'Failed to load sale items.', error.message));
+      }
+      items = data ?? [];
+    }
+
+    if (!branchId) {
+      const { data: sale } = await db.sales()
+        .select('branch_id')
+        .eq('id', saleId)
+        .single();
+
+      if (!sale) return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+      branchId = sale.branch_id;
+    }
+
+    const reverseMovementIds: UUID[] = [];
+
+    for (const item of items ?? []) {
+      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+      const typedItem = item as ItemWithProduct;
+      if (!typedItem.products?.is_stockable) continue;
+
+      const result = await this.recordMovement(ctx, {
+        branch_id:     branchId as UUID,
+        product_id:    typedItem.product_id,
+        movement_type: 'return_in',
+        quantity:      Number(typedItem.quantity),
+        unit_cost:     Number(typedItem.unit_cost),
+        reference_type:'sale',
+        reference_id:  saleId,
+      });
+
+      if (!result.ok) return engineFail(result.error!);
+      reverseMovementIds.push(result.data!.movement_id);
+    }
+
+    return engineOk({ movements: reverseMovementIds });
+  }
+
   // ---- transferStock --------------------------------------
   // Transfers stock between branches atomically:
   // transfer_out from source, transfer_in to destination.

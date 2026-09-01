@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
@@ -35,6 +36,7 @@ export function BillDetailPage() {
 
   const [isPayOpen, setIsPayOpen] = useState(false)
   const [actionError, setActionError] = useState<string | undefined>()
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
 
   const bill = billQuery.data
 
@@ -92,19 +94,7 @@ export function BillDetailPage() {
               </Button>
             )}
             {canPay && (
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  const reason = window.prompt('Reason for cancelling this bill?')
-                  if (!reason) return
-                  try {
-                    await cancelBill.mutateAsync({ id: bill.id, reason })
-                    showToast('Bill cancelled.', 'success')
-                  } catch (err) {
-                    setActionError(err instanceof InvalidBillTransitionError ? err.message : 'Could not cancel this bill.')
-                  }
-                }}
-              >
+              <Button variant="danger" onClick={() => setIsCancelOpen(true)}>
                 <XCircle size={14} /> Cancel
               </Button>
             )}
@@ -170,6 +160,27 @@ export function BillDetailPage() {
               setActionError(err instanceof PaymentExceedsInvoiceError ? err.message : 'Could not record this payment.')
             }
           }}
+        />
+      )}
+
+      {isCancelOpen && (
+        <ConfirmDialog
+          title="Cancel this bill?"
+          message={`Cancel bill ${bill.reference}.`}
+          confirmLabel="Cancel bill"
+          tone="danger"
+          reasonLabel="Reason for cancelling this bill"
+          onConfirm={async (reason) => {
+            try {
+              await cancelBill.mutateAsync({ id: bill.id, reason: reason ?? '' })
+              showToast('Bill cancelled.', 'success')
+              setIsCancelOpen(false)
+            } catch (err) {
+              setActionError(err instanceof InvalidBillTransitionError ? err.message : 'Could not cancel this bill.')
+              setIsCancelOpen(false)
+            }
+          }}
+          onCancel={() => setIsCancelOpen(false)}
         />
       )}
     </div>

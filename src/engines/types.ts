@@ -112,6 +112,17 @@ export interface SaleResult {
   journal_entry_id: UUID | null;
 }
 
+// ---- Sale reversal (delete a completed sale) ----------------
+// Undoes ALL effects of a confirmed sale: puts stock back, reverses
+// the journal entry, and reverses whatever cash or credit effect the
+// sale recorded. Distinct from a partial "refund" - this is a full
+// undo of one sale, used when the sale itself was a mistake.
+
+export interface ReverseSaleCommand {
+  sale_id: UUID;
+  reason:  string;
+}
+
 // ---- Purchase Commands -------------------------------------
 
 export interface PurchaseLineInput {

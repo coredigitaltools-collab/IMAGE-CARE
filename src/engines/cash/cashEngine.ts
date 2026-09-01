@@ -130,6 +130,26 @@ export class CashEngine {
     });
   }
 
+  // ---- reverseSaleCashIn ------------------------------------
+  // Backs out the cash received for a sale that is being deleted.
+  // Recorded as a cash_out so the balance nets back to zero for
+  // this sale, fully traceable to it via reference_type/reference_id.
+
+  async reverseSaleCashIn(
+    ctx: EngineContext,
+    opts: { branch_id: UUID; sale_id: UUID; amount: number; payment_method: string },
+  ): Promise<EngineResult<CashMovementResult>> {
+    return this.recordMovement(ctx, {
+      branch_id:       opts.branch_id,
+      transaction_type:'cash_out',
+      amount:          opts.amount,
+      payment_method:  opts.payment_method as import('../../types/database').PaymentMethod,
+      reference_type:  'sale',
+      reference_id:    opts.sale_id,
+      description:     `Reversal of cash received for cancelled sale`,
+    });
+  }
+
   // ---- recordExpenseCashOut --------------------------------
 
   async recordExpenseCashOut(

@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
@@ -40,6 +41,7 @@ export function PayablesRegisterPage() {
   // Supplier Invoices page to reach this same modal - the module's own
   // namesake action lived entirely outside it. It now opens right here.
   const [isRecordOpen, setIsRecordOpen] = useState(false)
+  const [cancellingBill, setCancellingBill] = useState<SupplierInvoice | null>(null)
 
   const supplierName = (id: string) => suppliersQuery.data?.find((s) => s.id === id)?.name ?? 'Unknown supplier'
 
@@ -128,12 +130,7 @@ export function PayablesRegisterPage() {
                           icon={XCircle}
                           label="Cancel bill"
                           tone="danger"
-                          onClick={async () => {
-                            const reason = window.prompt('Reason for cancelling this bill?')
-                            if (!reason) return
-                            await cancelBill.mutateAsync({ id: bill.id, reason })
-                            showToast('Bill cancelled.', 'success')
-                          }}
+                          onClick={() => setCancellingBill(bill)}
                         />
                       </div>
                     )}
@@ -174,6 +171,22 @@ export function PayablesRegisterPage() {
             showToast('Bill recorded.', 'success')
             setIsRecordOpen(false)
           }}
+        />
+      )}
+
+      {cancellingBill && (
+        <ConfirmDialog
+          title="Cancel this bill?"
+          message={`Cancel bill ${cancellingBill.reference}.`}
+          confirmLabel="Cancel bill"
+          tone="danger"
+          reasonLabel="Reason for cancelling this bill"
+          onConfirm={async (reason) => {
+            await cancelBill.mutateAsync({ id: cancellingBill.id, reason: reason ?? '' })
+            showToast('Bill cancelled.', 'success')
+            setCancellingBill(null)
+          }}
+          onCancel={() => setCancellingBill(null)}
         />
       )}
     </div>

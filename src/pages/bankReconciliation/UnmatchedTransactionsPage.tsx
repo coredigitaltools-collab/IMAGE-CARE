@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AlertTriangle, Trash2 } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { BankReconciliationTabs } from '../../components/bankReconciliation/BankReconciliationTabs'
@@ -5,6 +6,7 @@ import { Card } from '../../components/ui/Card'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import { useBankAccounts, useDeleteStatementLine, useStatementLines } from '../../features/bankReconciliation/hooks/useBankReconciliationData'
@@ -14,6 +16,7 @@ export function UnmatchedTransactionsPage() {
   const accountsQuery = useBankAccounts()
   const linesQuery = useStatementLines()
   const deleteLine = useDeleteStatementLine()
+  const [deletingLineId, setDeletingLineId] = useState<string | null>(null)
 
   const accountName = (id: string) => accountsQuery.data?.find((a) => a.id === id)?.name ?? 'Unknown account'
   const unmatched = (linesQuery.data ?? []).filter((l) => !l.isMatched)
@@ -50,11 +53,7 @@ export function UnmatchedTransactionsPage() {
                     icon={Trash2}
                     label="Delete"
                     tone="danger"
-                    onClick={async () => {
-                      if (!window.confirm('Delete this unmatched statement line?')) return
-                      await deleteLine.mutateAsync(line.id)
-                      showToast('Statement line deleted.', 'success')
-                    }}
+                    onClick={() => setDeletingLineId(line.id)}
                   />
                 </div>
               </li>
@@ -62,6 +61,21 @@ export function UnmatchedTransactionsPage() {
           </ul>
         )}
       </Card>
+
+      {deletingLineId && (
+        <ConfirmDialog
+          title="Delete this statement line?"
+          message="This cannot be undone."
+          confirmLabel="Delete"
+          tone="danger"
+          onConfirm={async () => {
+            await deleteLine.mutateAsync(deletingLineId)
+            showToast('Statement line deleted.', 'success')
+            setDeletingLineId(null)
+          }}
+          onCancel={() => setDeletingLineId(null)}
+        />
+      )}
     </div>
   )
 }

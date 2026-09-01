@@ -10,6 +10,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useBranches, useStaff } from '../../features/settings/hooks/useSettingsData'
@@ -31,6 +32,7 @@ export function TargetsListPage() {
   const [scopeFilter, setScopeFilter] = useState<TargetScope | 'all'>('all')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [createError, setCreateError] = useState<string | undefined>()
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   const branches = branchesQuery.data ?? []
   const staff = staffQuery.data ?? []
@@ -134,11 +136,7 @@ export function TargetsListPage() {
                       icon={Trash2}
                       label="Delete target"
                       tone="danger"
-                      onClick={async () => {
-                        if (!window.confirm('Delete this target?')) return
-                        await deleteTarget.mutateAsync(p.target.id)
-                        showToast('Target deleted.', 'success')
-                      }}
+                      onClick={() => setDeleteTargetId(p.target.id)}
                     />
                   </div>
                 </div>
@@ -168,6 +166,21 @@ export function TargetsListPage() {
               )
             }
           }}
+        />
+      )}
+
+      {deleteTargetId && (
+        <ConfirmDialog
+          title="Delete this target?"
+          message="This cannot be undone."
+          confirmLabel="Delete"
+          tone="danger"
+          onConfirm={async () => {
+            await deleteTarget.mutateAsync(deleteTargetId)
+            showToast('Target deleted.', 'success')
+            setDeleteTargetId(null)
+          }}
+          onCancel={() => setDeleteTargetId(null)}
         />
       )}
     </div>
