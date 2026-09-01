@@ -32,6 +32,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { AppShell } from '../components/layout/AppShell';
 import { LoadingScreen } from '../components/feedback/LoadingScreen';
+import { RouteErrorBoundary } from '../components/feedback/RouteErrorBoundary';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { PinSetupPage } from '../features/auth/PinSetupPage';
@@ -257,14 +258,17 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/register',
     element: <RegisterPage />,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/forgot-pin',
     element: <ForgotPinPage />,
+    errorElement: <RouteErrorBoundary />,
   },
   // /unlock and /setup-pin require a live session (checked inside
   // each page itself, same pattern as LoginPage's own redirect
@@ -274,15 +278,30 @@ export const router = createBrowserRouter([
   {
     path: '/unlock',
     element: <UnlockPage />,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: '/setup-pin',
     element: <PinSetupPage />,
+    errorElement: <RouteErrorBoundary />,
   },
 
   // Protected routes - require authentication
+  //
+  // 2026-09-01: errorElement added here after a live crash on Sales -
+  // "Unexpected Application Error! Failed to fetch dynamically imported
+  // module: .../PointOfSalePage-<hash>.js". Every page below is
+  // lazy-loaded (see the lazy() calls above), so a browser tab left open
+  // across a redeploy can try to fetch an old page chunk that no longer
+  // exists at its old hashed filename. Without this, ANY such failure -
+  // or any other unhandled error from ANY page in this whole protected
+  // tree - fell through to React Router's raw, technical default crash
+  // screen. RouteErrorBoundary replaces that with a plain-language
+  // message and auto-recovers the stale-chunk case with a single reload.
+  // See RouteErrorBoundary.tsx for the full story.
   {
     element: <RequireAuth />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         element: <SuspenseShell />,
