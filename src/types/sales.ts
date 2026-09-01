@@ -96,7 +96,13 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   credit: 'Credit',
 }
 
-export type SaleStatus = 'completed' | 'parked' | 'refunded'
+// 2026-09-01: 'cancelled' added - a held (draft) sale that's discarded
+// before it's ever completed was being labelled "Refunded" in the UI
+// (see mapStatus() in PointOfSalePage.tsx), which reads as money having
+// gone back to a customer that was never charged in the first place.
+// It's a separate, distinct outcome from an actual refund (a completed
+// sale that's later reversed), so it gets its own status now.
+export type SaleStatus = 'completed' | 'parked' | 'cancelled' | 'refunded'
 
 export interface SaleLineItem {
   productId: string

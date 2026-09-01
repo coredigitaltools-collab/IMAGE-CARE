@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Receipt, RotateCcw, Search, TrendingUp } from 'lucide-react'
+import { Play, Plus, Receipt, RotateCcw, Search, Trash2, TrendingUp } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -67,7 +67,15 @@ import type { CartItem, Customer, PaymentMethod, Sale, SaleLineItem, SaleStatus 
 function mapStatus(status: string): SaleStatus {
   if (status === 'confirmed') return 'completed'
   if (status === 'draft') return 'parked'
-  return 'refunded' // cancelled / voided
+  // 2026-09-01: the real 'sales.status' column (see TransactionStatus in
+  // types/database.ts) only ever holds draft/confirmed/cancelled/voided -
+  // there is no 'refunded' value in the database. A cancelled or voided
+  // sale was previously mapped to 'refunded' here, which showed a sale
+  // that was discarded while still on hold (never charged) as
+  // "Refunded" - confusing, since nothing was ever paid or returned.
+  // 'refunded' below stays reserved for a completed sale that's later
+  // genuinely reversed (see handleRefund/useRefundSale).
+  return 'cancelled' // cancelled / voided - held sale discarded, never charged
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,11 +135,13 @@ function unwrapOrThrow(r: { data?: any; error?: any }): any {
 const STATUS_LABEL: Record<SaleStatus, string> = {
   completed: 'Completed',
   parked: 'On Hold',
+  cancelled: 'Cancelled',
   refunded: 'Refunded',
 }
-const STATUS_TONE: Record<SaleStatus, 'success' | 'warning' | 'danger'> = {
+const STATUS_TONE: Record<SaleStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   completed: 'success',
   parked: 'warning',
+  cancelled: 'neutral',
   refunded: 'danger',
 }
 
@@ -371,6 +381,20 @@ export function PointOfSalePage() {
     showToast('Held sale resumed.', 'success')
   }
 
+  // 2026-09-01: the main Sales table only ever showed a "View receipt"
+  // action, for every row regardless of status - meaningless (and
+  // confusing) for a held sale that was never completed, since there's
+  // no receipt to view. On Hold rows now get the same Resume/Discard
+  // actions already available from the "On Hold" button's dropdown,
+  // just also reachable directly from the row without hunting for that
+  // separate control.
+  const handleDeleteHeldSale = (saleId: string) => {
+    deleteParked.mutate(saleId, {
+      onSuccess: () => showToast('Held sale removed.', 'success'),
+      onError: () => showToast('Could not remove this held sale.'),
+    })
+  }
+
   const handleRefund = async (sale: Sale) => {
     const reason = window.prompt('Reason for this refund?')
     if (!reason) return
@@ -435,7 +459,7 @@ export function PointOfSalePage() {
           <ParkedSalesButton
             parkedSales={(parkedSalesQuery.data ?? []).map(mapRawSaleRow)}
             onResume={handleResumeParked}
-            onDelete={(id) => deleteParked.mutate(id)}
+            onDelete={handleDeleteHeldSale}
           />
           <Button onClick={openRecordSale}>
             <Plus size={15} /> Record sale
@@ -473,7 +497,7 @@ export function PointOfSalePage() {
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {(['all', 'completed', 'parked', 'refunded'] as const).map((s) => (
+          {(['all', 'completed', 'parked', 'cancelled'] as const).map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
@@ -532,10 +556,19 @@ export function PointOfSalePage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
-                        <RowActionButton icon={Receipt} label="View receipt" onClick={() => openReceipt(sale)} />
                         {sale.status === 'completed' && (
-                          <RowActionButton icon={RotateCcw} label="Refund" tone="danger" onClick={() => handleRefund(sale)} />
+                          <>
+                            <RowActionButton icon={Receipt} label="View receipt" onClick={() => openReceipt(sale)} />
+                            <RowActionButton icon={RotateCcw} label="Refund" tone="danger" onClick={() => handleRefund(sale)} />
+                          </>
                         )}
+                        {sale.status === 'parked' && (
+                          <>
+                            <RowActionButton icon={Play} label="Resume sale" tone="success" onClick={() => handleResumeParked(sale)} />
+                            <RowActionButton icon={Trash2} label="Discard held sale" tone="danger" onClick={() => handleDeleteHeldSale(sale.id)} />
+                          </>
+                        )}
+                        {sale.status === 'cancelled' && <span className="text-xs text-ink-400">—</span>}
                       </div>
                     </td>
                   </tr>

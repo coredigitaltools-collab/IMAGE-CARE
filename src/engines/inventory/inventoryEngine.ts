@@ -148,9 +148,14 @@ export class InventoryEngine {
     ctx: EngineContext,
     purchaseId: UUID,
   ): Promise<EngineResult<{ movements: UUID[] }>> {
+    // 2026-09-01: 'purchase_items' has two FKs into 'products' (the
+    // real one, purchase_items_product_id_fkey, plus a legacy composite
+    // fk_s2_purchase_items_biz_product) - an unqualified `products(...)`
+    // embed is ambiguous between them and PostgREST rejects it
+    // (PGRST201). See the identical fix + full explanation on the sale
+    // side in businessEngine.ts's postSale().
     const { data: items, error } = await db.purchase_items()
-      
-      .select('*, products(is_stockable)')
+      .select('*, products!purchase_items_product_id_fkey(is_stockable)')
       .eq('purchase_id', purchaseId)
       .eq('business_id', ctx.business_id);
 
@@ -201,9 +206,11 @@ export class InventoryEngine {
     ctx: EngineContext,
     saleId: UUID,
   ): Promise<EngineResult<{ movements: UUID[] }>> {
+    // 2026-09-01: same ambiguous-embed issue as receiveFromPurchase()
+    // above and postSale() in businessEngine.ts - 'sale_items' has two
+    // FKs into 'products', so the embed needs an explicit hint.
     const { data: items, error } = await db.sale_items()
-      
-      .select('*, products(is_stockable)')
+      .select('*, products!sale_items_product_id_fkey(is_stockable)')
       .eq('sale_id', saleId)
       .eq('business_id', ctx.business_id);
 

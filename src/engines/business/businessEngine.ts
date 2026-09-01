@@ -292,11 +292,38 @@ export class BusinessEngine {
     const isCreditSale = sale.payment_method === 'credit';
 
     // Validate stock availability for all stockable items before deducting anything
-    const { data: items } = await db.sale_items()
-      
-      .select('*, products(is_stockable, is_sellable)')
+    //
+    // 2026-09-01: 'sale_items' has TWO foreign keys into 'products' -
+    // sale_items_product_id_fkey (product_id -> products.id, the one
+    // that actually matters here) and fk_s2_sale_items_biz_product (a
+    // legacy composite business_id+product_id constraint from an older
+    // migration pass). An unqualified `products(...)` embed is
+    // ambiguous with two FK paths present, so PostgREST rejects the
+    // query outright (PGRST201, "more than one relationship was
+    // found") instead of picking one. That request never got checked
+    // for an error below - `{ data: items }` silently became
+    // undefined, `items ?? []` silently became an empty array, and
+    // execution carried on as if the sale had no line items at all:
+    // no stock check ever ran (a sale could go through with stock it
+    // shouldn't have), and further down, COGS computed from this same
+    // `items` list was silently forced to 0 on every sale. This is the
+    // exact point live data traced "cannot complete sale" reports back
+    // to - the very next request after loading the sale never fires
+    // because PostgREST already rejected it, and deductForSale() hits
+    // the identical ambiguous embed moments later (see
+    // inventoryEngine.ts), this time surfacing as a real error and
+    // failing the whole sale, leaving it stuck in 'draft' forever. The
+    // `!sale_items_product_id_fkey` hint tells PostgREST exactly which
+    // relationship to embed through, and the error is now actually
+    // checked instead of swallowed.
+    const { data: items, error: itemsErr } = await db.sale_items()
+      .select('*, products!sale_items_product_id_fkey(is_stockable, is_sellable)')
       .eq('sale_id', cmd.sale_id)
       .eq('business_id', ctx.business_id);
+
+    if (itemsErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Could not load the items on this sale.', itemsErr.message));
+    }
 
     for (const item of items ?? []) {
       type ItemWithProduct = typeof item & { products: { is_stockable: boolean; is_sellable: boolean } | null };
