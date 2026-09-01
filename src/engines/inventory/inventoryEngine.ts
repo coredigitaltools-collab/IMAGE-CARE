@@ -205,40 +205,57 @@ export class InventoryEngine {
   async deductForSale(
     ctx: EngineContext,
     saleId: UUID,
+    // 2026-09-01: postSale() in businessEngine.ts already loads this
+    // sale's items (with each product's is_stockable flag) and the
+    // sale's branch_id before calling here - this used to re-fetch both
+    // from scratch every time regardless, adding two full extra round
+    // trips to every single sale. When the caller already has them,
+    // passing them through skips both re-fetches entirely; any other
+    // caller that doesn't have them yet still gets them fetched here,
+    // same as before.
+    preloaded?: { items: Record<string, unknown>[]; branchId: UUID },
   ): Promise<EngineResult<{ movements: UUID[] }>> {
-    // 2026-09-01: same ambiguous-embed issue as receiveFromPurchase()
-    // above and postSale() in businessEngine.ts - 'sale_items' has two
-    // FKs into 'products', so the embed needs an explicit hint.
-    const { data: items, error } = await db.sale_items()
-      .select('*, products!sale_items_product_id_fkey(is_stockable)')
-      .eq('sale_id', saleId)
-      .eq('business_id', ctx.business_id);
+    let items = preloaded?.items;
+    let branchId = preloaded?.branchId;
 
-    if (error) {
-      return engineFail(makeError('DATABASE_ERROR', 'Failed to load sale items.', error.message));
+    if (!items) {
+      // 2026-09-01: same ambiguous-embed issue as receiveFromPurchase()
+      // above and postSale() in businessEngine.ts - 'sale_items' has two
+      // FKs into 'products', so the embed needs an explicit hint.
+      const { data, error } = await db.sale_items()
+        .select('*, products!sale_items_product_id_fkey(is_stockable)')
+        .eq('sale_id', saleId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) {
+        return engineFail(makeError('DATABASE_ERROR', 'Failed to load sale items.', error.message));
+      }
+      items = data ?? [];
     }
 
-    const { data: sale } = await db.sales()
-      
-      .select('branch_id')
-      .eq('id', saleId)
-      .single();
+    if (!branchId) {
+      const { data: sale } = await db.sales()
+        .select('branch_id')
+        .eq('id', saleId)
+        .single();
 
-    if (!sale) return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+      if (!sale) return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+      branchId = sale.branch_id;
+    }
 
     const movementIds: UUID[] = [];
 
     for (const item of items ?? []) {
-      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null };
+      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
       const typedItem = item as ItemWithProduct;
       if (!typedItem.products?.is_stockable) continue;
 
       const result = await this.recordMovement(ctx, {
-        branch_id:     sale.branch_id,
-        product_id:    item.product_id,
+        branch_id:     branchId as UUID,
+        product_id:    typedItem.product_id,
         movement_type: 'sale',
-        quantity:      Number(item.quantity),
-        unit_cost:     Number(item.unit_cost),
+        quantity:      Number(typedItem.quantity),
+        unit_cost:     Number(typedItem.unit_cost),
         reference_type:'sale',
         reference_id:  saleId,
       });

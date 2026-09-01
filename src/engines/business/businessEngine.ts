@@ -164,16 +164,31 @@ export class BusinessEngine {
     const ctxErr = await validateContext(ctx, cmd.branch_id);
     if (ctxErr) return engineFail(ctxErr);
 
-    // Validate products are sellable
-    for (const line of cmd.lines) {
-      const { data: product } = await db.products()
-        
+    // 2026-09-01: product-sellability validation and the next sale number
+    // are independent of each other - neither needs the other's result -
+    // but were being fetched one after another, and the product check was
+    // itself a separate round trip PER LINE in a sequential loop. On a
+    // 1-item sale that's still 2 sequential round trips before any real
+    // work starts; on a multi-item sale it was N+1. Batching the product
+    // lookups into a single `.in(...)` query and running it alongside
+    // nextSaleNumber() cuts this to one round trip's worth of wait
+    // regardless of cart size - this is one of several steps behind "the
+    // Complete Sale button takes long."
+    const productIds = [...new Set(cmd.lines.map(l => l.product_id))];
+    const [{ data: products }, saleNum] = await Promise.all([
+      db.products()
         .select('id, is_sellable, is_stockable, business_id')
-        .eq('id', line.product_id)
+        .in('id', productIds)
         .eq('business_id', ctx.business_id)
-        .is('deleted_at', null)
-        .single();
+        .is('deleted_at', null),
+      nextSaleNumber(ctx.business_id),
+    ]);
 
+    for (const line of cmd.lines) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const product = (products ?? []).find((p: any) => p.id === line.product_id) as
+        | { id: string; is_sellable: boolean }
+        | undefined;
       if (!product) {
         return engineFail(makeError('RECORD_NOT_FOUND', `Product ${line.product_id} not found.`, undefined, 'product_id'));
       }
@@ -192,7 +207,6 @@ export class BusinessEngine {
       return { ...line, discount_amount: discAmt, tax_amount: taxAmt, line_total: lineTotal };
     });
 
-    const saleNum = await nextSaleNumber(ctx.business_id);
     const isCreditSale = cmd.payment_method === 'credit';
 
     const { data: sale, error: sErr } = await db.sales()
@@ -263,37 +277,27 @@ export class BusinessEngine {
     ctx: EngineContext,
     cmd: PostSaleCommand,
   ): Promise<EngineResult<SaleResult>> {
-    // Idempotency check
-    if (cmd.idempotency_key) {
-      const { isDuplicate, cachedResult } = await checkIdempotency(
-        ctx.business_id, cmd.idempotency_key, 'post_sale'
-      );
-      if (isDuplicate && cachedResult) {
-        return engineOk(cachedResult as unknown as SaleResult);
-      }
-    }
+    // 2026-09-01: these three reads don't depend on each other - the
+    // idempotency check only needs the key, loading the sale only needs
+    // sale_id, and loading its items (with each product's stock flags)
+    // also only needs sale_id, not the sale row itself - but they were
+    // being awaited one after another, adding two full extra round trips
+    // to every sale before any real validation could even start. Running
+    // them together cuts that to about one round trip's worth of wait.
+    // On the rare duplicate-submission path the sale/items reads below
+    // just go unused - a small wasted query beats a slower path for
+    // every normal, non-duplicate sale.
+    const idempotencyPromise = cmd.idempotency_key
+      ? checkIdempotency(ctx.business_id, cmd.idempotency_key, 'post_sale')
+      : Promise.resolve<{ isDuplicate: boolean; cachedResult?: Record<string, unknown> }>({ isDuplicate: false });
 
-    // Load sale
-    const { data: sale, error: sErr } = await db.sales()
-      
+    const salePromise = db.sales()
       .select('*')
       .eq('id', cmd.sale_id)
       .eq('business_id', ctx.business_id)
       .single();
 
-    if (sErr || !sale) {
-      return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
-    }
-
-    if (sale.status !== 'draft') {
-      return engineFail(makeError('IMMUTABLE_RECORD', `Sale is already ${sale.status}. Only draft sales can be posted.`));
-    }
-
-    const isCreditSale = sale.payment_method === 'credit';
-
-    // Validate stock availability for all stockable items before deducting anything
-    //
-    // 2026-09-01: 'sale_items' has TWO foreign keys into 'products' -
+    // 'sale_items' has TWO foreign keys into 'products' -
     // sale_items_product_id_fkey (product_id -> products.id, the one
     // that actually matters here) and fk_s2_sale_items_biz_product (a
     // legacy composite business_id+product_id constraint from an older
@@ -308,7 +312,7 @@ export class BusinessEngine {
     // shouldn't have), and further down, COGS computed from this same
     // `items` list was silently forced to 0 on every sale. This is the
     // exact point live data traced "cannot complete sale" reports back
-    // to - the very next request after loading the sale never fires
+    // to - the very next request after loading the sale never fired
     // because PostgREST already rejected it, and deductForSale() hits
     // the identical ambiguous embed moments later (see
     // inventoryEngine.ts), this time surfacing as a real error and
@@ -316,42 +320,74 @@ export class BusinessEngine {
     // `!sale_items_product_id_fkey` hint tells PostgREST exactly which
     // relationship to embed through, and the error is now actually
     // checked instead of swallowed.
-    const { data: items, error: itemsErr } = await db.sale_items()
+    const itemsPromise = db.sale_items()
       .select('*, products!sale_items_product_id_fkey(is_stockable, is_sellable)')
       .eq('sale_id', cmd.sale_id)
       .eq('business_id', ctx.business_id);
 
+    const [idempotency, saleRes, itemsRes] = await Promise.all([idempotencyPromise, salePromise, itemsPromise]);
+
+    if (idempotency.isDuplicate && idempotency.cachedResult) {
+      return engineOk(idempotency.cachedResult as unknown as SaleResult);
+    }
+
+    const { data: sale, error: sErr } = saleRes;
+    if (sErr || !sale) {
+      return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+    }
+
+    if (sale.status !== 'draft') {
+      return engineFail(makeError('IMMUTABLE_RECORD', `Sale is already ${sale.status}. Only draft sales can be posted.`));
+    }
+
+    const isCreditSale = sale.payment_method === 'credit';
+
+    const { data: items, error: itemsErr } = itemsRes;
     if (itemsErr) {
       return engineFail(makeError('DATABASE_ERROR', 'Could not load the items on this sale.', itemsErr.message));
     }
 
-    for (const item of items ?? []) {
-      type ItemWithProduct = typeof item & { products: { is_stockable: boolean; is_sellable: boolean } | null };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
-
-      const checkResult = await inventoryEngine.checkAvailable(
-        ctx, item.product_id, sale.branch_id, Number(item.quantity)
-      );
-      if (!checkResult.ok) return engineFail(checkResult.error!);
+    // Validate stock availability for all stockable items before deducting
+    // anything. Each item's check is an independent read, so they run
+    // together instead of one at a time - a wash for a 1-item sale, a
+    // real saving for a multi-item cart.
+    const checkResults = await Promise.all(
+      (items ?? []).map((item: Record<string, unknown>) => {
+        type ItemWithProduct = typeof item & { products: { is_stockable: boolean; is_sellable: boolean } | null };
+        const typedItem = item as ItemWithProduct;
+        if (!typedItem.products?.is_stockable) return null;
+        return inventoryEngine.checkAvailable(
+          ctx, item.product_id as UUID, sale.branch_id, Number(item.quantity)
+        );
+      })
+    );
+    for (const checkResult of checkResults) {
+      if (checkResult && !checkResult.ok) return engineFail(checkResult.error!);
     }
 
-    // Deduct inventory
-    const invResult = await inventoryEngine.deductForSale(ctx, cmd.sale_id);
-    if (!invResult.ok) return engineFail(invResult.error!);
-
-    // Compute COGS from sale_items
+    // Deduct inventory and build the journal lines at the same time -
+    // building the lines is a read-only computation (resolves account
+    // codes, does no writes) that doesn't actually depend on the
+    // deduction succeeding, so there's no reason to wait for one before
+    // starting the other. The journal is only ever POSTED (a write)
+    // after invResult confirms the deduction succeeded, below - so this
+    // doesn't change what has to succeed before what, just overlaps two
+    // independent waits instead of paying for both in sequence. Items
+    // already loaded above are passed straight through so deductForSale
+    // doesn't re-fetch the same sale_items and sale.branch_id itself.
     const cogs = (items ?? []).reduce(
       (s: number, r: Record<string, unknown>) => s + Number(r.quantity) * Number(r.unit_cost), 0
     );
-
-    // Post accounting (Revenue + COGS)
-    const linesResult = await accountingEngine.buildSaleJournalLines(ctx, {
-      revenue:       Number(sale.total_amount),
-      cogs,
-      paymentMethod: sale.payment_method,
-      isCreditSale,
-    });
+    const [invResult, linesResult] = await Promise.all([
+      inventoryEngine.deductForSale(ctx, cmd.sale_id, { items: items ?? [], branchId: sale.branch_id }),
+      accountingEngine.buildSaleJournalLines(ctx, {
+        revenue:       Number(sale.total_amount),
+        cogs,
+        paymentMethod: sale.payment_method,
+        isCreditSale,
+      }),
+    ]);
+    if (!invResult.ok) return engineFail(invResult.error!);
     if (!linesResult.ok) return engineFail(linesResult.error!);
 
     const jeResult = await accountingEngine.postJournal(ctx, {
@@ -412,21 +448,26 @@ export class BusinessEngine {
       journal_entry_id:jeResult.data!.journal_entry_id,
     };
 
-    // Audit
-    await auditEngine.log(ctx, {
-      table_name: 'sales',
-      record_id:  cmd.sale_id,
-      action:     'update',
-      new_value:  { status: 'confirmed', journal_entry_id: result.journal_entry_id },
-    });
-
-    // Record idempotency
+    // Audit + idempotency bookkeeping - two independent writes that
+    // neither reads the other's result, so they run together rather than
+    // one after another.
+    const bookkeeping: Promise<unknown>[] = [
+      auditEngine.log(ctx, {
+        table_name: 'sales',
+        record_id:  cmd.sale_id,
+        action:     'update',
+        new_value:  { status: 'confirmed', journal_entry_id: result.journal_entry_id },
+      }),
+    ];
     if (cmd.idempotency_key) {
-      await markIdempotencyComplete(
-        ctx.business_id, ctx.user_id, cmd.idempotency_key, 'post_sale',
-        result as unknown as Record<string, unknown>
+      bookkeeping.push(
+        markIdempotencyComplete(
+          ctx.business_id, ctx.user_id, cmd.idempotency_key, 'post_sale',
+          result as unknown as Record<string, unknown>
+        )
       );
     }
+    await Promise.all(bookkeeping);
 
     return engineOk(result);
   }

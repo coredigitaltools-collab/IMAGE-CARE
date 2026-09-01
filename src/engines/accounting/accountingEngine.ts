@@ -128,20 +128,27 @@ export class AccountingEngine {
     // Now it only queries when a line arrives without an account_id
     // (kept as a fallback for any future caller that doesn't pre-resolve),
     // and runs any lines that do need it in parallel rather than one by one.
-    const resolvedLines: Array<JournalLineInput & { account_id?: UUID }> = await Promise.all(
-      cmd.lines.map(async (line) => {
-        if (line.account_id) return line;
-        const account = await resolveAccount(ctx.business_id, line.account_code);
-        // account_id is set when found; if not found the line still posts but
-        // the DB trigger will validate if account_id is provided.
-        return { ...line, account_id: account?.id };
-      })
-    );
+    // 2026-09-01: resolving account IDs and generating the next journal
+    // number are independent of each other - neither needs the other's
+    // result - but were being awaited one after another. Running them
+    // together saves a full round trip on every journal post (sale,
+    // expense, purchase, payroll, reversal all go through here).
+    const [resolvedLines, entryNum] = await Promise.all([
+      Promise.all(
+        cmd.lines.map(async (line) => {
+          if (line.account_id) return line;
+          const account = await resolveAccount(ctx.business_id, line.account_code);
+          // account_id is set when found; if not found the line still posts but
+          // the DB trigger will validate if account_id is provided.
+          return { ...line, account_id: account?.id };
+        })
+      ),
+      nextJournalNumber(ctx.business_id),
+    ]);
 
     const entryDate  = cmd.entry_date ?? new Date().toISOString();
     const entryMonth = new Date(entryDate).getMonth() + 1;
     const entryYear  = new Date(entryDate).getFullYear();
-    const entryNum   = await nextJournalNumber(ctx.business_id);
 
     // Insert journal entry header
     const { data: jeData, error: jeErr } = await db.journal_entries()

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Play, Plus, Receipt, RotateCcw, Search, Trash2, TrendingUp } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Card } from '../../components/ui/Card'
@@ -149,7 +148,6 @@ export function PointOfSalePage() {
   const { user } = useAuth()
   const ctx = useUserContext()
   const { showToast } = useToast()
-  const navigate = useNavigate()
   const productPickerRef = useRef<ProductPickerHandle>(null)
 
   const productsQuery = useProducts()
@@ -314,22 +312,18 @@ export function PointOfSalePage() {
         paymentReference: paymentMethod === 'mobile_money' || paymentMethod === 'card' ? paymentReference : null,
         status: 'completed',
       })
-      // 2026-09-01: this used to open a Receipt modal and leave the
-      // cashier on the Sales page - per explicit direction ("once I press
-      // complete, the button should work then take me to the dashboard
-      // showing the recorded sale"), a completed sale now closes
-      // everything, confirms with a toast naming the actual sale number
-      // (not just a generic "success"), and navigates to the Dashboard,
-      // whose Recent Sales list and KPIs pick up this sale immediately
-      // (see useCheckout's onSuccess, which now also invalidates
-      // 'recent-sales'). The receipt for this sale is still reachable
-      // afterwards from the Sales page's own "View receipt" row action -
-      // nothing about viewing/printing a receipt was removed, only when
-      // it auto-opens.
+      // 2026-09-01: an earlier pass sent this to the overall app
+      // Dashboard (/dashboard) per the first phrasing of the request -
+      // the follow-up clarified "take me back to that sales page", not
+      // the whole-system Dashboard. This IS the Sales page (Record Sale
+      // is a modal on top of it, not a separate route), so "back to
+      // Sales" just means closing the modal - no navigation needed. The
+      // table underneath refreshes on its own: useCheckout's onSuccess
+      // invalidates the 'sales' query, so the just-completed sale shows
+      // up in this same list immediately once the modal closes.
       showToast(`Sale ${result.sale_number} recorded.`, 'success')
       setIsRecordSaleOpen(false)
       resetPOS()
-      navigate('/dashboard')
     } catch (err) {
       handleError(err)
     }
