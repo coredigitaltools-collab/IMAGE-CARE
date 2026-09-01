@@ -148,7 +148,56 @@ export function parseError(err: unknown): AppError {
     return { code: err.code, message: err.message, detail: err.detail, field: err.field };
   }
 
-  const raw = err instanceof Error ? err.message : String(err);
+  // 2026-09-01: Supabase/PostgREST errors arrive as plain objects
+  // ({message, details, hint, code}), NOT real Error instances - so
+  // `err instanceof Error` below was always false for them, `raw` became
+  // the literal string "[object Object]", none of the pattern checks
+  // below could ever match, and EVERY database-level error from EVERY
+  // Supabase call in the app (not just this one) fell through to the
+  // generic "Something went wrong. Please try again." with no indication
+  // of what actually happened. Confirmed live: a duplicate-barcode insert
+  // (Postgres code 23505) surfaced to the user as that exact generic
+  // message. This pulls the real message and Postgres error code out of
+  // that shape first, same as the ImageCareError case above already did
+  // for its own error type.
+  const pgCode = (err && typeof err === 'object' && 'code' in err)
+    ? String((err as { code?: unknown }).code)
+    : undefined;
+  const raw = err instanceof Error
+    ? err.message
+    : (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string')
+      ? (err as { message: string }).message
+      : String(err);
+
+  // Postgres unique_violation - name the field when the constraint name
+  // says which one, so "duplicate key value violates unique constraint
+  // idx_s2_products_barcode" becomes something a business owner can act
+  // on instead of a dead end.
+  if (pgCode === '23505' || raw.includes('duplicate key value violates unique constraint')) {
+    if (raw.includes('barcode')) return { code: 'VALIDATION_ERROR', message: 'That barcode is already used by another record.', field: 'barcode' };
+    if (raw.includes('sku'))     return { code: 'VALIDATION_ERROR', message: 'That SKU is already used by another product.', field: 'sku' };
+    if (raw.includes('email'))   return { code: 'VALIDATION_ERROR', message: 'That email is already in use.', field: 'email' };
+    if (raw.includes('phone'))   return { code: 'VALIDATION_ERROR', message: 'That phone number is already in use.', field: 'phone' };
+    return { code: 'VALIDATION_ERROR', message: 'That value is already in use elsewhere. Please use a different one.' };
+  }
+
+  // Postgres invalid_text_representation - most commonly a uuid column
+  // fed a non-uuid string (e.g. an option whose value never resolved to a
+  // real record). Confirmed live as the exact cause of a separate
+  // Inventory bug this same day.
+  if (pgCode === '22P02' || raw.includes('invalid input syntax for type uuid')) {
+    return { code: 'VALIDATION_ERROR', message: 'One of the selected options is invalid or not fully loaded yet. Please try again.' };
+  }
+
+  // Postgres not_null_violation / foreign_key_violation - still generic,
+  // but at least distinguishes "you're missing something required" from
+  // an unexplained server error.
+  if (pgCode === '23502' || raw.includes('violates not-null constraint')) {
+    return { code: 'VALIDATION_ERROR', message: 'A required field is missing. Please check the form and try again.' };
+  }
+  if (pgCode === '23503' || raw.includes('violates foreign key constraint')) {
+    return { code: 'VALIDATION_ERROR', message: 'One of the selected records no longer exists. Please refresh and try again.' };
+  }
 
   if (raw.includes('INSUFFICIENT_STOCK'))        return { code: 'INSUFFICIENT_STOCK',        message: 'Insufficient stock to complete this operation.' };
   if (raw.includes('PERMISSION_DENIED'))         return { code: 'PERMISSION_DENIED',         message: 'You do not have permission to perform this action.' };

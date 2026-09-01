@@ -118,8 +118,22 @@ export function useCreateProduct(_userId?: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: async (input: any) => {
       const costPrice = input.buyingPrice ?? input.cost_price ?? 0;
+      // 2026-09-01: barcode is optional, and an untouched field submits as
+      // '' (empty string), not null/undefined - `?? null` only replaces
+      // null/undefined, so every product saved with barcode left blank was
+      // sending literal ''. products has a partial unique index on
+      // (business_id, barcode) that correctly excludes NULL rows from the
+      // uniqueness check (so many products can have "no barcode") but does
+      // NOT exclude '' - '' is a real, indexed value, so the SECOND product
+      // ever saved without a barcode collided with the first and failed
+      // with "duplicate key value violates unique constraint
+      // idx_s2_products_barcode" (confirmed live). Same treatment for sku,
+      // even though the form currently requires one, so this can't recur
+      // if that ever changes.
+      const barcode = typeof input.barcode === 'string' ? input.barcode.trim() : input.barcode;
+      const sku = typeof input.sku === 'string' ? input.sku.trim() : input.sku;
       const product = await createProduct(ctx, {
-        name: input.name, sku: input.sku ?? null, barcode: input.barcode ?? null,
+        name: input.name, sku: sku || null, barcode: barcode || null,
         description: input.description ?? null,
         category_id: (input.categoryId ?? input.category_id ?? null),
         unit_id: (input.unitId ?? input.unit_id ?? null),

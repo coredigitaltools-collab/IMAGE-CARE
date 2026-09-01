@@ -24,7 +24,6 @@ import {
   useReactivateProduct,
   useSuppliers,
 } from '../../features/inventory/hooks/useInventoryData'
-import { DuplicateBarcodeError, DuplicateSkuError } from '../../services/productService'
 import type { ProductInput } from '../../types/inventory'
 
 export function ProductsListPage() {
@@ -81,11 +80,15 @@ export function ProductsListPage() {
       showToast('Product added.', 'success')
       closeAddModal()
     } catch (err) {
-      setFormError(
-        err instanceof DuplicateSkuError || err instanceof DuplicateBarcodeError
-          ? err.message
-          : 'Something went wrong. Please try again.',
-      )
+      // 2026-09-01: this used to only recognize DuplicateSkuError/
+      // DuplicateBarcodeError, both from the old local-storage productService
+      // that this page doesn't actually call anymore - the real save path
+      // (masterDataService.createProduct, via useCreateProduct) throws a
+      // plain Error whose message now comes from parseError()'s much more
+      // specific handling (see types/app.ts) - e.g. "That barcode is
+      // already used by another record." instead of a dead-end generic
+      // message. Use it whenever there is one.
+      setFormError(err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.')
     }
   }
 
