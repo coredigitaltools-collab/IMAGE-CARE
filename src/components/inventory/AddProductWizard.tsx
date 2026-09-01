@@ -40,6 +40,27 @@ interface AddProductWizardProps {
   submitError?: string
 }
 
+// 2026-09-01: SKU used to come entirely from a single shared React Query
+// cache entry (`useGeneratedSku`, keyed 'inventory'/'sku-generator') that
+// lived on the parent ProductsListPage - which only mounts once per visit
+// to the page, not once per product. So the "auto-filled" SKU was actually
+// generated ONE time per page load and silently reused, unedited, for
+// every product added afterward in that session - the 2nd product always
+// got offered the exact same SKU as the 1st, which the database correctly
+// rejected as a duplicate ("That SKU is already used by another
+// product."). Confirmed live: this is exactly the error the user hit.
+// Fixed by generating the SKU locally, fresh, every time this wizard
+// itself mounts (it fully remounts each time "Add product" is clicked,
+// since ProductsListPage only renders it conditionally) - plus a random
+// suffix, not just a millisecond timestamp, so two saves within the same
+// millisecond still can't collide. `generatedSku` stays as an optional
+// override prop for any future caller that wants to control it directly.
+function generateSku(): string {
+  const time = Date.now().toString(36).toUpperCase()
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase()
+  return `SKU-${time}${rand}`
+}
+
 // 2026-08-31: collapsed from a 4-step wizard (Basic Info -> Pricing & Stock
 // -> Supplier & Details -> Review, with Next/Back navigation) into one
 // scrollable form, at the user's explicit direction that adding a single
@@ -66,6 +87,8 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
   // exact race no longer requires the user to notice or intervene.
   const [validationSummary, setValidationSummary] = useState<string[]>([])
   const scrollRef = useRef<HTMLFormElement>(null)
+  // Fresh every time this component mounts - see generateSku() note above.
+  const [autoSku] = useState(() => generatedSku ?? generateSku())
 
   const {
     register,
@@ -78,7 +101,7 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',
-      sku: '',
+      sku: autoSku,
       barcode: '',
       categoryId: categories[0]?.id ?? '',
       brandId: '',
@@ -92,10 +115,6 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
       notes: '',
     },
   })
-
-  useEffect(() => {
-    if (generatedSku) setValue('sku', generatedSku)
-  }, [generatedSku, setValue])
 
   // Backfill categoryId once the category list actually loads, if the form
   // mounted before it did and the user hasn't picked one themselves yet.

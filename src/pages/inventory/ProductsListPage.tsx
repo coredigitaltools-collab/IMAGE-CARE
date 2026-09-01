@@ -19,7 +19,6 @@ import {
   useCreateProduct,
   useDuplicateProduct,
   useEnsureDefaultUnit,
-  useGeneratedSku,
   useProducts,
   useReactivateProduct,
   useSuppliers,
@@ -41,7 +40,12 @@ export function ProductsListPage() {
   // it's needed and returns it the same shape useUnits() would.
   const unitsQuery = useEnsureDefaultUnit()
   const suppliersQuery = useSuppliers()
-  const generatedSkuQuery = useGeneratedSku()
+  // 2026-09-01: AddProductWizard now generates its own fresh SKU every time
+  // it mounts (see the comment above generateSku() in that file) instead of
+  // reading a single shared, page-lifetime-cached value from here - that
+  // was the actual cause of "That SKU is already used by another product."
+  // on the 2nd+ product added in a session, since the old shared value
+  // never changed after the page first loaded.
   const createProduct = useCreateProduct(user.id)
   const duplicateProduct = useDuplicateProduct(user.id)
   const archiveProduct = useArchiveProduct(user.id)
@@ -209,7 +213,6 @@ export function ProductsListPage() {
           brands={brandsQuery.data ?? []}
           units={unitsQuery.data ?? []}
           suppliers={suppliersQuery.data ?? []}
-          generatedSku={generatedSkuQuery.data}
           userId={user.id}
           onClose={closeAddModal}
           onSubmit={handleCreate}
