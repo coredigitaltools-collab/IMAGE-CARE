@@ -10,7 +10,7 @@ import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Purchase, UUID } from '../../types/database';
-import { createAndPostPurchase, type CreatePurchaseInput } from '../business/businessEngine';
+import { createAndPostPurchase, voidPurchase, type CreatePurchaseInput } from '../business/businessEngine';
 import { purchasingEngine as realPurchasingEngine, inventoryEngine as realInventoryEngine } from '../../engines';
 import type { EngineContext } from '../../engines/types';
 import { APP_CONSTANTS } from '../../config/env';
@@ -213,6 +213,205 @@ export async function createPurchaseOrder(
     })),
   };
   return createPurchase(ctx, ci);
+}
+
+// ---- Edit a purchase order --------------------------------------
+// Added 2026-09-03 ("edit/delete a purchase order" correction flow -
+// every order confirms itself the instant it's recorded, so this is
+// how a mistake gets fixed after the fact):
+//
+//   - Still Draft (the order failed to auto-confirm - rare): nothing
+//     has been posted yet, so this updates the order in place. No
+//     engine involvement needed, same as updatePurchaseOrder() below.
+//   - Confirmed (the normal case): a posted transaction isn't edited
+//     in place - that would leave the stock/accounting it already
+//     posted out of sync with whatever the new numbers say. Instead
+//     this voids the original (full reversal via voidPurchase() -
+//     stock back out, journal reversed, cash/payable reversed) and
+//     records the corrected version as a new order via
+//     createAndPostPurchase(). The old order ends up Voided, the new
+//     one Confirmed - an honest trail of what actually happened,
+//     never a silently rewritten history.
+
+export async function updatePurchaseOrder(
+  ctx: UserContext,
+  purchaseId: UUID,
+  input: {
+    supplier_id?: UUID | null;
+    due_date?: string | null;
+    notes?: string | null;
+    lines: Array<{ product_id: UUID; quantity: number; unit_cost: number }>;
+  }
+): Promise<ServiceResponse<{ purchase_id: UUID }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'purchases', 'edit')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to edit purchase orders.', { requestId });
+  }
+  if (!input.lines?.length) {
+    return serviceFail('INVALID_INPUT', 'A purchase order must have at least one line.', { requestId });
+  }
+  try {
+    const { data: purchase, error: pErr } = await supabase
+      .schema('imagecare')
+      .from('purchases')
+      .select('id, status, branch_id')
+      .eq('id', purchaseId)
+      .eq('business_id', ctx.business_id)
+      .single();
+
+    if (pErr || !purchase) return serviceFail('RESOURCE_NOT_FOUND', 'Purchase order not found.', { requestId });
+    if (purchase.status !== 'draft') {
+      return serviceFail(
+        'BUSINESS_RULE_VIOLATION',
+        'This order is already confirmed and cannot be edited directly - void it and record a corrected order instead.',
+        { requestId },
+      );
+    }
+
+    const subtotal = input.lines.reduce((sum, l) => sum + l.quantity * l.unit_cost, 0);
+
+    const { error: delErr } = await supabase
+      .schema('imagecare')
+      .from('purchase_items')
+      .delete()
+      .eq('purchase_id', purchaseId)
+      .eq('business_id', ctx.business_id);
+    if (delErr) return serviceFail('INTERNAL_ERROR', 'Failed to update purchase order items.', { requestId });
+
+    const { error: insErr } = await supabase
+      .schema('imagecare')
+      .from('purchase_items')
+      .insert(input.lines.map(l => ({
+        purchase_id: purchaseId,
+        business_id: ctx.business_id,
+        branch_id:   purchase.branch_id,
+        product_id:  l.product_id,
+        quantity:    l.quantity,
+        unit_cost:   l.unit_cost,
+        discount_pct: 0, discount_amount: 0,
+        tax_rate:     0, tax_amount:      0,
+        line_total:   l.quantity * l.unit_cost,
+      })));
+    if (insErr) return serviceFail('INTERNAL_ERROR', 'Failed to update purchase order items.', { requestId });
+
+    const { error: updErr } = await supabase
+      .schema('imagecare')
+      .from('purchases')
+      .update({
+        supplier_id:  input.supplier_id ?? null,
+        due_date:     input.due_date ?? null,
+        notes:        input.notes ?? null,
+        subtotal,
+        total_amount: subtotal,
+        balance_due:  subtotal,
+        updated_by:   ctx.user_id,
+        updated_at:   new Date().toISOString(),
+      })
+      .eq('id', purchaseId)
+      .eq('business_id', ctx.business_id);
+    if (updErr) return serviceFail('INTERNAL_ERROR', 'Failed to update purchase order.', { requestId });
+
+    return serviceOk({ purchase_id: purchaseId }, requestId);
+  } catch (err) {
+    return serviceFail('INTERNAL_ERROR', (err as Error).message ?? 'Failed to update purchase order.', { requestId });
+  }
+}
+
+export async function editConfirmedPurchaseOrder(
+  ctx: UserContext,
+  purchaseId: UUID,
+  branchId: UUID,
+  input: CreatePurchaseInput
+): Promise<ServiceResponse<{ purchase_id: UUID; purchase_number: string }>> {
+  const requestId = makeRequestId();
+
+  const voidResult = await voidPurchase(ctx, {
+    purchase_id: purchaseId,
+    branch_id:   branchId,
+    reason:      'Corrected via edit - replaced by a new purchase order.',
+  });
+  if (voidResult.error) return serviceFail('BUSINESS_RULE_VIOLATION', voidResult.error.message, { requestId });
+
+  const createResult = await createAndPostPurchase(ctx, input);
+  if (createResult.error) {
+    return serviceFail(
+      'BUSINESS_RULE_VIOLATION',
+      `The original order was voided, but the corrected one could not be recorded: ${createResult.error.message}. Please record it again from Purchase Orders.`,
+      { requestId },
+    );
+  }
+  return serviceOk(createResult.data!, requestId);
+}
+
+// ---- Cancel / delete a purchase order -----------------------------
+// Mirrors cancelSale() in services/sales/salesService.ts. A still-Draft
+// order has posted nothing yet, so this just marks it Cancelled. A
+// Confirmed order has real stock and accounting behind it, so this
+// routes through voidPurchase() for a full reversal instead - replaces
+// the old useCancelPurchaseOrder hook, which used to flip the status
+// column directly with nothing actually reversed (a real bug: every
+// order confirms itself immediately now, so that bug was one click
+// away from silently leaving stock and journal entries behind with no
+// order to trace them to).
+
+export async function cancelPurchaseOrder(
+  ctx: UserContext,
+  purchaseId: UUID,
+  reason?: string
+): Promise<ServiceResponse<void>> {
+  const requestId = makeRequestId();
+
+  if (!canDo(ctx, 'purchases', 'edit') && !canDo(ctx, 'purchases', 'delete')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete purchase orders.', { requestId });
+  }
+
+  try {
+    const { data: purchase } = await supabase
+      .schema('imagecare')
+      .from('purchases')
+      .select('status, branch_id')
+      .eq('id', purchaseId)
+      .eq('business_id', ctx.business_id)
+      .single();
+
+    if (!purchase) return serviceFail('RESOURCE_NOT_FOUND', 'Purchase order not found.', { requestId });
+    if (purchase.status === 'cancelled') return serviceFail('BUSINESS_RULE_VIOLATION', 'This order is already cancelled.', { requestId });
+    if (purchase.status === 'voided') return serviceFail('BUSINESS_RULE_VIOLATION', 'This order is already voided.', { requestId });
+
+    if (purchase.status === 'confirmed') {
+      if (!canDo(ctx, 'purchases', 'delete')) {
+        return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete confirmed purchase orders.', { requestId });
+      }
+      if (!reason?.trim()) {
+        return serviceFail('INVALID_INPUT', 'A reason is required to delete a confirmed purchase order.', { requestId, field: 'reason' });
+      }
+
+      const result = await voidPurchase(ctx, {
+        purchase_id: purchaseId,
+        branch_id:   purchase.branch_id as UUID,
+        reason,
+      });
+      if (result.error) return serviceFail('BUSINESS_RULE_VIOLATION', result.error.message, { requestId });
+    } else {
+      // Draft - nothing posted yet, just mark it cancelled.
+      if (!canDo(ctx, 'purchases', 'edit')) {
+        return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete draft purchase orders.', { requestId });
+      }
+
+      const { error } = await supabase
+        .schema('imagecare')
+        .from('purchases')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', purchaseId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) return serviceFail('INTERNAL_ERROR', 'Failed to delete purchase order.', { requestId });
+    }
+
+    return serviceOk(undefined, requestId);
+  } catch {
+    return serviceFail('INTERNAL_ERROR', 'Failed to delete purchase order.', { requestId });
+  }
 }
 
 // Workflow change (2026-09-03, "remove requisitions / simplify purchase

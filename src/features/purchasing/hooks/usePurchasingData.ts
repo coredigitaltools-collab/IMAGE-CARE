@@ -4,6 +4,7 @@ import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, getPurchaseDashboardKpis,
   createPurchaseReturn, listPurchaseReturns,
+  updatePurchaseOrder, editConfirmedPurchaseOrder, cancelPurchaseOrder,
 } from '../../../services/purchasing/purchasingService';
 import {
   listBills as listRealBills,
@@ -62,15 +63,23 @@ type RawPurchaseRow = Purchase & {
   suppliers?: { name: string } | null;
 };
 
+// Bug fix (2026-09-03, "edit/delete a purchase order" correction flow):
+// 'voided' used to collapse into 'cancelled' here - harmless while nothing
+// could ever actually produce a real 'voided' row, but now that Delete on
+// a Confirmed order (useCancelPurchaseOrder -> cancelPurchaseOrder ->
+// voidPurchase) reverses real stock and accounting to get there, showing
+// it identically to a plain Cancelled draft would hide that a reversal
+// actually happened. Kept as its own distinct frontend status - see
+// PurchaseOrderStatus/PO_STATUS_LABELS in types/purchasing.ts.
 const STATUS_TO_PO_STATUS: Record<Purchase['status'], PurchaseOrderStatus> = {
   draft: 'draft',
   confirmed: 'received',
   cancelled: 'cancelled',
-  voided: 'cancelled',
+  voided: 'voided',
 };
 
 function rejectionReasonFromNotes(notes: string | null): string | null {
-  const match = notes?.match(/Rejected: (.+)$/);
+  const match = notes?.match(/(?:Rejected|Voided): (.+)$/);
   return match ? match[1] : null;
 }
 
@@ -160,19 +169,74 @@ export function useCreatePurchaseOrder(_userId?: string) {
   });
 }
 
+// Bug fix (2026-09-03, "edit/delete a purchase order" correction flow):
+// this used to flip the status column directly to 'cancelled' with a raw
+// Supabase update, nothing else - fine back when a purchase order sat in
+// 'draft' until a separate Approve step, since a draft has nothing posted
+// yet to undo. Now that every order confirms itself the instant it's
+// recorded, clicking this on a Confirmed order would have silently left
+// its real stock receipt and journal entry behind with no order to trace
+// them to. Routes through cancelPurchaseOrder() instead, which reverses
+// everything (via voidPurchase) when the order is Confirmed, and still
+// does the simple direct flip when it's still Draft.
 export function useCancelPurchaseOrder(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: UUID) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('purchases')
-        .update({ status: 'cancelled' as const, updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to cancel purchase order');
-      return { id };
-    },
+    mutationFn: ({ id, reason }: { id: UUID; reason?: string }) =>
+      cancelPurchaseOrder(ctx, id, reason).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
+  });
+}
+
+// Edit a still-Draft order in place (rare - only an order that failed to
+// auto-confirm stays in Draft). No financial effect exists yet, so this
+// just updates the order's own row/items.
+export function useUpdatePurchaseOrder(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: ({ id, input }: { id: UUID; input: any }) =>
+      updatePurchaseOrder(ctx, id, {
+        supplier_id: input.supplierId ?? input.supplier_id ?? null,
+        due_date:    input.expectedDeliveryDate ?? null,
+        notes:       input.notes ?? null,
+        lines: (input.items ?? []).map((i: { productId?: UUID; product_id?: UUID; quantity?: number; quantityOrdered?: number; unitCost?: number; unit_cost?: number }) => ({
+          product_id: (i.productId ?? i.product_id) as UUID,
+          quantity:   Number(i.quantity ?? i.quantityOrdered ?? 0),
+          unit_cost:  Number(i.unitCost ?? i.unit_cost ?? 0),
+        })),
+      }).then(unwrap),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['purchasing'] }),
+  });
+}
+
+// Edit a Confirmed order (the normal case) - voids the original (full
+// reversal: stock back out, journal reversed, cash/payable reversed) and
+// records the corrected values as a new order in one action, so "Edit"
+// on a posted order never silently rewrites what actually happened.
+export function useEditConfirmedPurchaseOrder(_userId?: string) {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const qc = useQueryClient();
+  return useMutation({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: ({ id, input }: { id: UUID; input: any }) =>
+      editConfirmedPurchaseOrder(ctx, id, (branch ?? ctx.branch_id) as UUID, {
+        branch_id:      (branch ?? ctx.branch_id) as UUID,
+        supplier_id:    input.supplierId ?? input.supplier_id,
+        payment_method: 'credit',
+        amount_paid:    0,
+        notes:          input.notes,
+        due_date:       input.expectedDeliveryDate,
+        items: (input.items ?? []).map((i: { productId?: UUID; product_id?: UUID; quantity?: number; quantityOrdered?: number; unitCost?: number; unit_cost?: number }) => ({
+          product_id: (i.productId ?? i.product_id) as UUID,
+          quantity:   Number(i.quantity ?? i.quantityOrdered ?? 0),
+          unit_cost:  Number(i.unitCost ?? i.unit_cost ?? 0),
+        })),
+      }).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
   });
 }
 

@@ -159,6 +159,18 @@ export interface PurchaseResult {
   journal_entry_id: UUID | null;
 }
 
+// ---- Purchase reversal (void a confirmed purchase order) ----
+// Undoes ALL effects of a confirmed purchase order: puts the received
+// stock back out, reverses the journal entry, and reverses whichever
+// cash or payable effect it recorded. Mirrors ReverseSaleCommand above -
+// added 2026-09-03 for the "edit/delete a purchase order" correction
+// flow (see voidPurchase() in engines/business/businessEngine.ts).
+
+export interface ReversePurchaseCommand {
+  purchase_id: UUID;
+  reason:      string;
+}
+
 // ---- Inventory Commands ------------------------------------
 
 export interface InventoryMovementCommand {

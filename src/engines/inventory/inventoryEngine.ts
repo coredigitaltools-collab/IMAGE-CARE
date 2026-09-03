@@ -329,6 +329,75 @@ export class InventoryEngine {
     return engineOk({ movements: reverseMovementIds });
   }
 
+  // ---- reverseForPurchase ------------------------------------
+  // Records stock-OUT movements reversing every item on a previously
+  // CONFIRMED purchase order - the opposite of receiveFromPurchase(),
+  // used when a confirmed purchase order is voided (2026-09-03, the
+  // "edit/delete a purchase order" correction flow - see voidPurchase()
+  // in engines/business/businessEngine.ts). 'return_out' IS in
+  // recordMovement()'s outTypes list (same movement_type Purchase
+  // Returns already uses to send stock back to a supplier), so this
+  // goes through the normal availability check - voiding an order
+  // can't remove more of a product than is still actually on hand,
+  // which is correct: if some of the received stock has since been
+  // sold or transferred out, voiding fails with a clear "not enough
+  // stock" error rather than silently going negative.
+
+  async reverseForPurchase(
+    ctx: EngineContext,
+    purchaseId: UUID,
+    preloaded?: { items: Record<string, unknown>[]; branchId: UUID },
+  ): Promise<EngineResult<{ movements: UUID[] }>> {
+    let items = preloaded?.items;
+    let branchId = preloaded?.branchId;
+
+    if (!items) {
+      const { data, error } = await db.purchase_items()
+        .select('*, products!purchase_items_product_id_fkey(is_stockable)')
+        .eq('purchase_id', purchaseId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) {
+        return engineFail(makeError('DATABASE_ERROR', 'Failed to load purchase items.', error.message));
+      }
+      items = data ?? [];
+    }
+
+    if (!branchId) {
+      const { data: purchase } = await db.purchases()
+        .select('branch_id')
+        .eq('id', purchaseId)
+        .single();
+
+      if (!purchase) return engineFail(makeError('RECORD_NOT_FOUND', 'Purchase not found.'));
+      branchId = purchase.branch_id;
+    }
+
+    const reverseMovementIds: UUID[] = [];
+
+    for (const item of items ?? []) {
+      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+      const typedItem = item as ItemWithProduct;
+      if (!typedItem.products?.is_stockable) continue;
+
+      const result = await this.recordMovement(ctx, {
+        branch_id:     branchId as UUID,
+        product_id:    typedItem.product_id,
+        movement_type: 'return_out',
+        quantity:      Number(typedItem.quantity),
+        unit_cost:     Number(typedItem.unit_cost),
+        reference_type:'purchase',
+        reference_id:  purchaseId,
+        notes:         'Voided purchase order - stock reversed',
+      });
+
+      if (!result.ok) return engineFail(result.error!);
+      reverseMovementIds.push(result.data!.movement_id);
+    }
+
+    return engineOk({ movements: reverseMovementIds });
+  }
+
   // ---- transferStock --------------------------------------
   // Transfers stock between branches atomically:
   // transfer_out from source, transfer_in to destination.

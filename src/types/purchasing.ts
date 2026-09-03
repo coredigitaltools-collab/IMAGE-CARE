@@ -47,13 +47,22 @@ export interface PurchaseRequisition extends AuditFields {
   convertedToPoId: string | null
 }
 
-export type PurchaseOrderStatus = 'draft' | 'pending_approval' | 'approved' | 'sent' | 'partially_received' | 'received' | 'cancelled'
+export type PurchaseOrderStatus = 'draft' | 'pending_approval' | 'approved' | 'sent' | 'partially_received' | 'received' | 'cancelled' | 'voided'
 // 'received' is the label shown for a real purchases.status of 'confirmed'
 // (see STATUS_TO_PO_STATUS in usePurchasingData.ts). Labelled "Confirmed"
 // rather than "Received" as of the 2026-09-03 workflow change - a PO is
 // now confirmed the instant it's recorded, whether or not the goods have
 // physically arrived, so "Received" overclaimed what the status actually
 // means.
+//
+// 'voided' added 2026-09-03 for the "edit/delete a purchase order"
+// correction flow (see voidPurchase() in engines/business/businessEngine.ts).
+// It used to collapse into 'cancelled' in STATUS_TO_PO_STATUS - fine while
+// nothing could ever actually reach the real 'voided' database status, but
+// now that Delete on a Confirmed order reverses real stock and accounting
+// through it, it needs to read differently from a plain Cancelled draft
+// that never posted anything: same underlying "this order no longer
+// counts" meaning, but a materially different thing happened to get there.
 export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   draft: 'Draft',
   pending_approval: 'Pending Approval',
@@ -62,6 +71,7 @@ export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   partially_received: 'Partially Received',
   received: 'Confirmed',
   cancelled: 'Cancelled',
+  voided: 'Voided',
 }
 
 export interface PurchaseOrderLineItem {

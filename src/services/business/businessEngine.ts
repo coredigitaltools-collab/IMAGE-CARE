@@ -295,6 +295,55 @@ export async function createAndPostPurchase(
   });
 }
 
+// ---- Purchase order reversal (delete/edit a confirmed order) -----
+// Undoes a confirmed purchase order entirely: stock put back out,
+// journal reversed, and cash or the supplier's payable balance
+// reversed depending on how it was paid. Added 2026-09-03 for the
+// "edit/delete a purchase order" correction flow - since every order
+// confirms itself the instant it's recorded, "Delete" on a confirmed
+// order routes through this real reversal (mirrors reverseSale()
+// above) rather than the old useCancelPurchaseOrder hook, which used
+// to just flip the status column directly with nothing reversed. This
+// is also what powers "Edit" on a confirmed order in the UI: void the
+// original via this function, then record a corrected replacement
+// with useCreatePurchaseOrder - the accounting trail stays honest
+// (old order shows Voided with a linked reversal, new one shows
+// Confirmed) instead of silently rewriting a posted transaction.
+
+export interface VoidPurchaseResult {
+  purchase_id: UUID;
+  purchase_number: string;
+  status: string;
+  journal_entry_id: UUID | null;
+}
+
+export async function voidPurchase(
+  ctx: UserContext,
+  input: { purchase_id: UUID; branch_id: UUID; reason: string }
+): Promise<ApiResult<VoidPurchaseResult>> {
+  if (!canDo(ctx, 'purchases', 'delete')) {
+    return fail({ code: 'PERMISSION_DENIED', message: 'You do not have permission to delete purchase orders.' });
+  }
+
+  const ectx = toEngineContext(ctx, input.branch_id);
+
+  const result = await realBusinessEngine.voidPurchase(ectx, {
+    purchase_id: input.purchase_id,
+    reason:      input.reason,
+  });
+
+  if (!result.ok) {
+    return fail({ code: mapEngineErrorCode(result.error!.code), message: result.error!.message });
+  }
+
+  return ok({
+    purchase_id:      result.data!.purchase_id,
+    purchase_number:  result.data!.purchase_number,
+    status:            result.data!.status,
+    journal_entry_id:  result.data!.journal_entry_id,
+  });
+}
+
 // ---- Expense -----------------------------------------------
 
 export interface CreateExpenseInput {

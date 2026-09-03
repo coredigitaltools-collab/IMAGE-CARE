@@ -28,6 +28,7 @@ import type {
   ReverseSaleCommand,
   RecordExpenseCommand, ExpenseResult,
   RecordPayrollCommand, PayrollResult,
+  PurchaseResult, ReversePurchaseCommand,
 } from '../types';
 import { engineOk, engineFail, makeError } from '../types';
 import { inventoryEngine } from '../inventory/inventoryEngine';
@@ -595,6 +596,150 @@ export class BusinessEngine {
       action:         'update',
       previous_value: { status: 'confirmed' },
       new_value:      { status: 'cancelled', reason: cmd.reason },
+    });
+
+    return engineOk(result);
+  }
+
+  // ---- voidPurchase -------------------------------------------
+  // Fully undoes a confirmed purchase order. Added 2026-09-03 for the
+  // "edit/delete a purchase order" correction flow: since a purchase
+  // order now confirms itself the instant it's recorded (see
+  // createAndPostPurchase() in services/business/businessEngine.ts),
+  // there is no more draft/unconfirmed window to simply discard - by
+  // the time anyone notices a mistake, real stock has already been
+  // received and a real journal entry posted. This mirrors
+  // reverseSale() above: stock is put back out
+  // (inventoryEngine.reverseForPurchase, movement_type 'return_out' -
+  // the same movement type Purchase Returns already uses), the journal
+  // is reversed (accountingEngine.reverseJournal, debit/credit swap),
+  // and whichever payment effect the order recorded is reversed too -
+  // cash paid back in if it was a cash purchase, or the supplier's
+  // outstanding balance reduced back down if it was credit. The order
+  // itself moves to 'voided' - a real status this schema already has,
+  // distinct from 'cancelled' (which is reserved for a draft order
+  // that never got this far and has nothing to reverse). Only a
+  // confirmed order can be voided this way; a still-draft order should
+  // be deleted outright instead (see deletePurchaseOrder() in
+  // services/purchasing/purchasingService.ts), and an
+  // already-cancelled/voided order can't be voided twice.
+
+  async voidPurchase(
+    ctx: EngineContext,
+    cmd: ReversePurchaseCommand,
+  ): Promise<EngineResult<PurchaseResult>> {
+    if (!cmd.reason || !cmd.reason.trim()) {
+      return engineFail(makeError('VALIDATION_ERROR', 'A reason is required to void a confirmed purchase order.', undefined, 'reason'));
+    }
+
+    const [purchaseRes, itemsRes] = await Promise.all([
+      db.purchases()
+        .select('*')
+        .eq('id', cmd.purchase_id)
+        .eq('business_id', ctx.business_id)
+        .single(),
+      db.purchase_items()
+        .select('*, products!purchase_items_product_id_fkey(is_stockable)')
+        .eq('purchase_id', cmd.purchase_id)
+        .eq('business_id', ctx.business_id),
+    ]);
+
+    const { data: purchase, error: pErr } = purchaseRes;
+    if (pErr || !purchase) {
+      return engineFail(makeError('RECORD_NOT_FOUND', 'Purchase order not found.'));
+    }
+
+    if (purchase.status !== 'confirmed') {
+      return engineFail(makeError(
+        'IMMUTABLE_RECORD',
+        `This purchase order is ${purchase.status}, not confirmed. Only a confirmed order can be voided this way.`,
+      ));
+    }
+
+    if (!purchase.journal_entry_id) {
+      return engineFail(makeError('DATABASE_ERROR', 'This purchase order has no journal entry to reverse, so it cannot be safely voided.'));
+    }
+
+    const { data: items, error: itemsErr } = itemsRes;
+    if (itemsErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Could not load the items on this purchase order.', itemsErr.message));
+    }
+
+    const isCreditPurchase = purchase.payment_method === 'credit';
+
+    // Put stock back out and reverse the journal at the same time -
+    // neither depends on the other's result, both only need the
+    // purchase/items already loaded above.
+    const [invResult, journalResult] = await Promise.all([
+      inventoryEngine.reverseForPurchase(ctx, cmd.purchase_id, { items: items ?? [], branchId: purchase.branch_id }),
+      accountingEngine.reverseJournal(ctx, purchase.journal_entry_id as UUID, cmd.reason),
+    ]);
+    if (!invResult.ok) return engineFail(invResult.error!);
+    if (!journalResult.ok) return engineFail(journalResult.error!);
+
+    // Reverse whichever payment effect the order recorded - a credit
+    // purchase increased the supplier's outstanding balance (receiveStock()
+    // in purchasingEngine.ts), a cash purchase paid cash out. Never both.
+    if (isCreditPurchase && purchase.supplier_id) {
+      const { data: supplier } = await db.suppliers()
+        .select('outstanding')
+        .eq('id', purchase.supplier_id)
+        .eq('business_id', ctx.business_id)
+        .single();
+
+      if (supplier) {
+        await db.suppliers()
+          .update({
+            outstanding: Math.max(0, Number(supplier.outstanding) - Number(purchase.total_amount)),
+            updated_by:  ctx.user_id,
+          })
+          .eq('id', purchase.supplier_id);
+      }
+    } else if (!isCreditPurchase) {
+      const cashResult = await cashEngine.reversePurchaseCashOut(ctx, {
+        branch_id:      purchase.branch_id,
+        purchase_id:    cmd.purchase_id,
+        amount:         Number(purchase.total_amount),
+        payment_method: purchase.payment_method,
+      });
+      if (!cashResult.ok) return engineFail(cashResult.error!);
+    }
+
+    // Void the purchase - only after every reversal above has succeeded.
+    // balance_due/amount_paid are zeroed along with the status: the
+    // supplier's payable (or the cash paid) was just reversed above, so a
+    // voided order shouldn't keep contributing to "outstanding payables" on
+    // the Purchasing dashboard (getPurchaseDashboardKpis() sums balance_due
+    // across every row) - that would double-count what reversing the
+    // supplier's `outstanding` balance above already corrected for.
+    const { error: updateErr } = await db.purchases()
+      .update({
+        status:       'voided',
+        balance_due:  0,
+        amount_paid:  0,
+        notes:        purchase.notes ? `${purchase.notes}\n\nVoided: ${cmd.reason}` : `Voided: ${cmd.reason}`,
+        updated_by:   ctx.user_id,
+      })
+      .eq('id', cmd.purchase_id);
+
+    if (updateErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Failed to void purchase order.', updateErr.message));
+    }
+
+    const result: PurchaseResult = {
+      purchase_id:      cmd.purchase_id,
+      purchase_number:  purchase.purchase_number as string,
+      total_amount:     Number(purchase.total_amount),
+      status:           'voided',
+      journal_entry_id: purchase.journal_entry_id as UUID,
+    };
+
+    await auditEngine.log(ctx, {
+      table_name:     'purchases',
+      record_id:      cmd.purchase_id,
+      action:         'update',
+      previous_value: { status: 'confirmed' },
+      new_value:      { status: 'voided', reason: cmd.reason },
     });
 
     return engineOk(result);

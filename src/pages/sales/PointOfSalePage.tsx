@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Pencil, Plus, Receipt, Search, Trash2, TrendingUp } from 'lucide-react'
+import { Pencil, Plus, ReceiptText, Search, Trash2, TrendingUp } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -516,7 +516,7 @@ export function PointOfSalePage() {
           label="Completed sales"
           value={String(completedCount)}
           hint="in this filter"
-          icon={Receipt}
+          icon={ReceiptText}
           tone="blue"
           isLoading={salesQuery.isLoading}
         />
@@ -558,7 +558,7 @@ export function PointOfSalePage() {
           </div>
         ) : filteredSales.length === 0 ? (
           <EmptyState
-            icon={Receipt}
+            icon={ReceiptText}
             title={sales.length === 0 ? 'No sales recorded yet' : 'No sales match this filter'}
             description={sales.length === 0 ? 'Record your first sale to see it here.' : 'Try a different search term or status.'}
             action={sales.length === 0 ? { label: 'Record sale', onClick: openRecordSale } : undefined}
@@ -594,7 +594,17 @@ export function PointOfSalePage() {
                       <div className="flex justify-end gap-1">
                         {sale.status === 'completed' && (
                           <>
-                            <RowActionButton icon={Receipt} label="View receipt" onClick={() => openReceipt(sale)} />
+                            {/* Icon fix (2026-09-03): lucide's `Receipt` icon
+                                draws a "$" inside the torn-edge receipt
+                                outline - at this button's small size the
+                                outline reads as just a plain box, so it
+                                looked like a bare dollar sign rather than a
+                                receipt. `ReceiptText` uses three horizontal
+                                lines instead (an itemized list), unambiguous
+                                at any size - swapped everywhere `Receipt` was
+                                used on this page (this button, plus both KPI/
+                                empty-state icons above, for consistency). */}
+                            <RowActionButton icon={ReceiptText} label="View receipt" onClick={() => openReceipt(sale)} />
                             <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => setDeleteSaleTarget(sale)} />
                           </>
                         )}

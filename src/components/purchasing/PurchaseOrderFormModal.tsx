@@ -14,19 +14,41 @@ interface PurchaseOrderFormModalProps {
   onClose: () => void
   onSubmit: (input: PurchaseOrderInput) => Promise<void>
   submitError?: string
+  // Edit support (2026-09-03, "edit/delete a purchase order" correction
+  // flow): when set, the form starts pre-filled from an existing order
+  // instead of blank, and title/submitLabel/notice reflect that this is a
+  // correction rather than a brand new order. What onSubmit actually does
+  // with the result differs by the order's status (direct update for a
+  // still-Draft order, void-and-recreate for a Confirmed one) - that's
+  // decided by the caller (PurchaseOrdersPage), not this form; this form
+  // only ever collects the values and hands them to onSubmit.
+  initialValues?: {
+    supplierId?: string
+    items: LineItemRow[]
+    expectedDeliveryDate?: string
+    notes?: string
+  }
+  title?: string
+  submitLabel?: string
+  notice?: string
 }
 
 // Workflow change (2026-09-03, "remove requisitions / simplify purchase
-// order workflow"): `requisitionId`/`initialRows` used to let
-// RequisitionsPage's "Convert to order" pre-fill this form from a
-// requisition's items. Requisitions are gone (RequisitionsPage deleted),
-// so both props are removed - this form's only remaining caller is
-// "Record a purchase" / "New order", always starting from a blank order.
-export function PurchaseOrderFormModal({ suppliers, products, onClose, onSubmit, submitError: externalSubmitError }: PurchaseOrderFormModalProps) {
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
-  const [rows, setRows] = useState<LineItemRow[]>(products[0] ? [{ productId: products[0].id, quantity: 1, unitCost: 0 }] : [])
-  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('')
-  const [notes, setNotes] = useState('')
+// order workflow"): `requisitionId` used to let RequisitionsPage's
+// "Convert to order" pre-fill this form from a requisition's items.
+// Requisitions are gone (RequisitionsPage deleted), so that prop is
+// removed. `initialValues` below is a distinct, newer prop for the
+// "Edit" action on an existing order - see its own comment above.
+export function PurchaseOrderFormModal({
+  suppliers, products, onClose, onSubmit, submitError: externalSubmitError,
+  initialValues, title = 'New purchase order', submitLabel = 'Record purchase order', notice,
+}: PurchaseOrderFormModalProps) {
+  const [supplierId, setSupplierId] = useState(initialValues?.supplierId ?? suppliers[0]?.id ?? '')
+  const [rows, setRows] = useState<LineItemRow[]>(
+    initialValues?.items?.length ? initialValues.items : (products[0] ? [{ productId: products[0].id, quantity: 1, unitCost: 0 }] : [])
+  )
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(initialValues?.expectedDeliveryDate ?? '')
+  const [notes, setNotes] = useState(initialValues?.notes ?? '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   // Bug fix (2026-09-03): this form has always accepted a `submitError`
   // prop and rendered it below, but neither of its two callers
@@ -74,11 +96,15 @@ export function PurchaseOrderFormModal({ suppliers, products, onClose, onSubmit,
   }
 
   return (
-    <Modal title="New purchase order" onClose={onClose} size="xl">
+    <Modal title={title} onClose={onClose} size="xl">
       {/* Modal.tsx now provides the scrollable body itself. size="xl" gives
           the line-item editor (product/qty/unit-cost columns) real width
           instead of squeezing it into the old default max-w-lg. */}
       <div className="space-y-5">
+        {notice && (
+          <p className="rounded-md bg-brand-blue-50 px-3 py-2 text-sm text-brand-blue-700">{notice}</p>
+        )}
+
         <FormRow>
           <div>
             <label htmlFor="po-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -141,7 +167,7 @@ export function PurchaseOrderFormModal({ suppliers, products, onClose, onSubmit,
             Cancel
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={isSubmitting || suppliers.length === 0 || rows.length === 0}>
-            {isSubmitting ? 'Recording…' : 'Record purchase order'}
+            {isSubmitting ? 'Saving…' : submitLabel}
           </Button>
         </div>
       </div>

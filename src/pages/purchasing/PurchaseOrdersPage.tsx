@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, ShoppingCart } from 'lucide-react'
+import { Plus, ShoppingCart, Pencil, Trash2 } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PurchasingTabs } from '../../components/purchasing/PurchasingTabs'
 import { PurchaseOrderFormModal } from '../../components/purchasing/PurchaseOrderFormModal'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { RowActionButton } from '../../components/ui/RowActionButton'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -13,8 +15,12 @@ import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
 import { useProducts, useSuppliers } from '../../features/inventory/hooks/useInventoryData'
-import { useCreatePurchaseOrder, usePurchaseOrders } from '../../features/purchasing/hooks/usePurchasingData'
+import {
+  useCreatePurchaseOrder, usePurchaseOrders,
+  useUpdatePurchaseOrder, useEditConfirmedPurchaseOrder, useCancelPurchaseOrder,
+} from '../../features/purchasing/hooks/usePurchasingData'
 import { PO_STATUS_LABELS } from '../../types/purchasing'
+import type { PurchaseOrder } from '../../types/purchasing'
 
 const STATUS_TONE = {
   draft: 'neutral',
@@ -24,6 +30,7 @@ const STATUS_TONE = {
   partially_received: 'warning',
   received: 'success',
   cancelled: 'danger',
+  voided: 'danger',
 } as const
 
 export function PurchaseOrdersPage() {
@@ -33,12 +40,36 @@ export function PurchaseOrdersPage() {
   const productsQuery = useProducts()
   const suppliersQuery = useSuppliers()
   const createOrder = useCreatePurchaseOrder(user.id)
+  const updateDraftOrder = useUpdatePurchaseOrder(user.id)
+  const editConfirmedOrder = useEditConfirmedPurchaseOrder(user.id)
+  const cancelOrder = useCancelPurchaseOrder(user.id)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
+  // Edit/Delete support (2026-09-03, "edit/delete a purchase order"
+  // correction flow - see PurchaseOrderFormModal's initialValues prop and
+  // cancelPurchaseOrder()/voidPurchase() in the service/engine layers).
+  // Only a still-Draft or Confirmed order can be edited/deleted - a
+  // Cancelled or Voided order is already a terminal, resolved state with
+  // nothing left to act on.
+  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null)
+  const [deletingOrder, setDeletingOrder] = useState<PurchaseOrder | null>(null)
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
   const supplierName = (id: string) => suppliersQuery.data?.find((s) => s.id === id)?.name ?? 'Unknown supplier'
+
+  const canActOn = (order: PurchaseOrder) => order.status === 'draft' || order.status === 'received'
+
+  const handleDelete = async (reason?: string) => {
+    if (!deletingOrder) return
+    try {
+      await cancelOrder.mutateAsync({ id: deletingOrder.id, reason })
+      showToast(deletingOrder.status === 'draft' ? 'Draft order deleted.' : 'Purchase order voided - stock and accounting reversed.', 'success')
+      setDeletingOrder(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not delete this purchase order. Please try again.')
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -86,7 +117,15 @@ export function PurchaseOrdersPage() {
                       {supplierName(order.supplierId)} · {formatRelativeTime(order.created_at)}
                     </p>
                   </div>
-                  <span className="shrink-0 text-sm font-semibold text-ink-900">{formatCurrency(total, 'UGX')}</span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-sm font-semibold text-ink-900">{formatCurrency(total, 'UGX')}</span>
+                    {canActOn(order) && (
+                      <div className="flex items-center gap-1">
+                        <RowActionButton icon={Pencil} label={`Edit ${order.reference}`} onClick={() => setEditingOrder(order)} />
+                        <RowActionButton icon={Trash2} label={`Delete ${order.reference}`} tone="danger" onClick={() => setDeletingOrder(order)} />
+                      </div>
+                    )}
+                  </div>
                 </li>
               )
             })}
@@ -104,6 +143,54 @@ export function PurchaseOrdersPage() {
             showToast('Purchase order recorded and confirmed.', 'success')
             setIsAddOpen(false)
           }}
+        />
+      )}
+
+      {editingOrder && (
+        <PurchaseOrderFormModal
+          suppliers={activeSuppliers}
+          products={activeProducts}
+          title={editingOrder.status === 'draft' ? 'Edit draft order' : 'Edit purchase order'}
+          submitLabel={editingOrder.status === 'draft' ? 'Save changes' : 'Save corrected order'}
+          notice={
+            editingOrder.status === 'draft'
+              ? undefined
+              : 'This order is already confirmed. Saving will void the original (reversing its stock and accounting) and record your changes as a new, confirmed order.'
+          }
+          initialValues={{
+            supplierId: editingOrder.supplierId,
+            expectedDeliveryDate: editingOrder.expectedDeliveryDate ?? undefined,
+            notes: editingOrder.notes,
+            items: editingOrder.items.map((i) => ({ productId: i.productId, quantity: i.quantityOrdered, unitCost: i.unitCost })),
+          }}
+          onClose={() => setEditingOrder(null)}
+          onSubmit={async (input) => {
+            if (editingOrder.status === 'draft') {
+              await updateDraftOrder.mutateAsync({ id: editingOrder.id, input })
+              showToast('Draft order updated.', 'success')
+            } else {
+              await editConfirmedOrder.mutateAsync({ id: editingOrder.id, input })
+              showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+            }
+            setEditingOrder(null)
+          }}
+        />
+      )}
+
+      {deletingOrder && (
+        <ConfirmDialog
+          title={deletingOrder.status === 'draft' ? 'Delete draft order?' : 'Delete this purchase order?'}
+          message={
+            deletingOrder.status === 'draft'
+              ? `Delete ${deletingOrder.reference}? It hasn't been confirmed yet, so nothing else is affected.`
+              : `${deletingOrder.reference} is confirmed - its stock receipt and accounting entry will be reversed, and its supplier balance restored. This can't be undone.`
+          }
+          confirmLabel="Delete"
+          tone="danger"
+          reasonLabel={deletingOrder.status === 'draft' ? undefined : 'Reason for deleting this order'}
+          reasonPlaceholder={deletingOrder.status === 'draft' ? undefined : 'e.g. wrong supplier, wrong items, duplicate entry'}
+          onConfirm={(reason) => handleDelete(reason)}
+          onCancel={() => setDeletingOrder(null)}
         />
       )}
     </div>

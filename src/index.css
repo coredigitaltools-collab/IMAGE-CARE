@@ -118,3 +118,20 @@ body {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* Bug fix (2026-09-03, ReceiptModal print): pairs with the
+   `receipt-printing` class ReceiptModal.tsx adds to <body> while it's
+   open. The receipt itself now renders through a React portal straight
+   onto <body> (see that file's comment for why - printing a
+   `position: fixed` element nested inside AppShell's scrollable <main>
+   produced a blank page), so it's a sibling of #root rather than a
+   descendant of it. Hiding #root during print (only while a receipt
+   portal is actually mounted) keeps the printed page to just the
+   receipt, instead of the whole app UI printing underneath/alongside it.
+   Scoped to this one class so it can't affect the several other pages
+   that call window.print() for their own in-page printable content. */
+@media print {
+  body.receipt-printing #root {
+    display: none !important;
+  }
+}

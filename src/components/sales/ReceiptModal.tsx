@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle2, Printer, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
@@ -16,8 +18,42 @@ interface ReceiptModalProps {
   onNewSale: () => void
 }
 
+// Bug fix (2026-09-03): Print produced a blank page. Root cause: this
+// modal renders inline in the component tree, wherever the page that
+// opened it happens to sit - which, for the Sales page, is inside
+// AppShell's <main style={{ overflow: 'auto' }}>. A `position: fixed`
+// element nested inside a scrollable (overflow: auto/scroll) ancestor is
+// a well-known Chromium print bug: on-screen it positions correctly
+// relative to the viewport as normal, but the print engine can't resolve
+// its position relative to the printed page and renders nothing for it -
+// confirmed by matching the exact "opens fine, Print shows nothing"
+// symptom reported. Rendering it through a portal straight onto
+// `document.body` (a sibling of #root, not a descendant of any scrolling
+// container) sidesteps that entirely. The `receipt-printing` class this
+// adds to <body> while open pairs with the print rule in index.css that
+// hides `#root` (the whole app UI) during print, so only this portaled
+// receipt shows up on the page - without it, the dashboard/sidebar behind
+// the modal would print alongside the receipt once printing it works at
+// all. Scoped to just this component/class so it can't affect the
+// several other pages that also call window.print() for their own
+// in-page printable content.
 export function ReceiptModal({ sale, customer, businessName, receiptSettings, cashierName, onClose, onNewSale }: ReceiptModalProps) {
-  return (
+  const portalRef = useRef<HTMLDivElement | null>(null)
+  if (!portalRef.current) {
+    portalRef.current = document.createElement('div')
+  }
+
+  useEffect(() => {
+    const node = portalRef.current!
+    document.body.appendChild(node)
+    document.body.classList.add('receipt-printing')
+    return () => {
+      document.body.classList.remove('receipt-printing')
+      document.body.removeChild(node)
+    }
+  }, [])
+
+  return createPortal(
     // Same z-index fix as the shared Modal.tsx: this uses var(--z-modal)
     // instead of an arbitrary z-50 so the receipt also paints above the
     // fixed sidebar (var(--z-sticky)) instead of underneath it.
@@ -130,6 +166,7 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
           <Button onClick={onNewSale}>New sale</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalRef.current
   )
 }
