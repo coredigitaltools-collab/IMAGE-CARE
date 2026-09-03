@@ -237,11 +237,18 @@ export async function createAndPostPurchase(
 
   const ectx = toEngineContext(ctx, input.branch_id);
 
-  // Creates a draft purchase only - matches the existing UI flow of
-  // "create purchase" then a separate "receive stock" action (see
-  // approvePurchaseOrder in purchasingService.ts, which now calls
-  // purchasingEngine.receiveStock instead of the missing
-  // fn_imc_receive_purchase RPC).
+  // Workflow change (2026-09-03, "remove requisitions / simplify purchase
+  // order workflow"): a Purchase Order used to be created in 'draft' and
+  // sit there until a separate "Approve" action called
+  // purchasingEngine.receiveStock() to post inventory movements + the
+  // purchase journal entry and flip it to 'confirmed'. Per explicit
+  // instruction, that intermediate approval stage - and the Requisition
+  // step that used to precede it - has been removed from the workflow
+  // entirely: recording a purchase order now immediately confirms it, in
+  // the same action, by chaining straight into receiveStock() below.
+  // receiveStock() itself is unchanged - still the one real place stock
+  // and accounting get posted - this just removes the separate manual step
+  // in front of it.
   const result = await realPurchasingEngine.createPurchase(ectx, {
     branch_id:      input.branch_id,
     supplier_id:    input.supplier_id,
@@ -262,6 +269,24 @@ export async function createAndPostPurchase(
 
   if (!result.ok) {
     return fail({ code: mapEngineErrorCode(result.error!.code), message: result.error!.message });
+  }
+
+  // The purchase (and its line items) now exist in the database in
+  // 'draft', exactly as before. Immediately confirm it - if this second
+  // step fails, the purchase row is left in 'draft' with no in-app way to
+  // retry it (there is deliberately no more Approve action), so this is
+  // surfaced as the whole create failing rather than a silent partial
+  // success, per "never show fake success."
+  const receiveResult = await realPurchasingEngine.receiveStock(ectx, {
+    purchase_id:     result.data!.purchase_id,
+    idempotency_key: uuidv4(),
+  });
+
+  if (!receiveResult.ok) {
+    return fail({
+      code:    mapEngineErrorCode(receiveResult.error!.code),
+      message: `Purchase order ${result.data!.purchase_number} was recorded but could not be confirmed: ${receiveResult.error!.message}`,
+    });
   }
 
   return ok({

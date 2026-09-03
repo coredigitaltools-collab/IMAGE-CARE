@@ -11,28 +11,45 @@ import type { PurchaseOrderInput } from '../../types/purchasing'
 interface PurchaseOrderFormModalProps {
   suppliers: Supplier[]
   products: Product[]
-  requisitionId?: string
-  initialRows?: LineItemRow[]
   onClose: () => void
   onSubmit: (input: PurchaseOrderInput) => Promise<void>
   submitError?: string
 }
 
-export function PurchaseOrderFormModal({ suppliers, products, requisitionId, initialRows, onClose, onSubmit, submitError }: PurchaseOrderFormModalProps) {
+// Workflow change (2026-09-03, "remove requisitions / simplify purchase
+// order workflow"): `requisitionId`/`initialRows` used to let
+// RequisitionsPage's "Convert to order" pre-fill this form from a
+// requisition's items. Requisitions are gone (RequisitionsPage deleted),
+// so both props are removed - this form's only remaining caller is
+// "Record a purchase" / "New order", always starting from a blank order.
+export function PurchaseOrderFormModal({ suppliers, products, onClose, onSubmit, submitError: externalSubmitError }: PurchaseOrderFormModalProps) {
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
-  const [rows, setRows] = useState<LineItemRow[]>(initialRows?.length ? initialRows : products[0] ? [{ productId: products[0].id, quantity: 1, unitCost: 0 }] : [])
+  const [rows, setRows] = useState<LineItemRow[]>(products[0] ? [{ productId: products[0].id, quantity: 1, unitCost: 0 }] : [])
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('')
   const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Bug fix (2026-09-03): this form has always accepted a `submitError`
+  // prop and rendered it below, but neither of its two callers
+  // (PurchaseOrdersPage, PurchaseDashboardPage) ever actually passed one -
+  // if recording a purchase order failed for any reason (permission error,
+  // network error, the new auto-confirm step failing), the button just
+  // silently reset with nothing on screen, the same silent-failure bug
+  // already found and fixed once on the Requisition form. Since this is
+  // now the one and only way to create a purchase order, this form now
+  // catches and shows its own error rather than depending on a caller that
+  // never set one.
+  const [localSubmitError, setLocalSubmitError] = useState<string | undefined>()
+  const submitError = externalSubmitError ?? localSubmitError
 
   const total = rows.reduce((sum, r) => sum + r.quantity * (r.unitCost ?? 0), 0)
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setLocalSubmitError(undefined)
     try {
       await onSubmit({
         supplierId,
-        requisitionId: requisitionId ?? null,
+        requisitionId: null,
         expectedDeliveryDate: expectedDeliveryDate || null,
         notes,
         items: rows
@@ -49,6 +66,8 @@ export function PurchaseOrderFormModal({ suppliers, products, requisitionId, ini
             }
           }),
       })
+    } catch (err) {
+      setLocalSubmitError(err instanceof Error ? err.message : 'Could not record this purchase order. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -122,7 +141,7 @@ export function PurchaseOrderFormModal({ suppliers, products, requisitionId, ini
             Cancel
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={isSubmitting || suppliers.length === 0 || rows.length === 0}>
-            {isSubmitting ? 'Creating…' : 'Submit for approval'}
+            {isSubmitting ? 'Recording…' : 'Record purchase order'}
           </Button>
         </div>
       </div>

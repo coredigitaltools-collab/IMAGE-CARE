@@ -64,6 +64,13 @@ export class PurchasingEngine {
   // Creates a purchase record in draft state.
   // Does NOT create inventory movements or accounting entries.
   // Stock is only received when receiveStock() is called.
+  //
+  // 2026-09-03: the app-level caller (createAndPostPurchase in
+  // services/business/businessEngine.ts) now calls receiveStock()
+  // immediately after this, in the same action - a Purchase Order is
+  // meant to be confirmed the moment it's recorded, no separate
+  // approval step. This method itself is unchanged (still just creates
+  // the draft row); the auto-confirm composition lives one layer up.
 
   async createPurchase(
     ctx: EngineContext,

@@ -1,10 +1,24 @@
 import type { AuditFields } from '../lib/audit'
 
-// ---------- Workflow: Requisition -> PO -> Approval -> Goods Receipt -> Invoice ----------
+// ---------- Workflow: Purchase Order -> Confirmed -> Invoice ----------
 // Every line item references a REAL product (Product Master) and every
 // order references a REAL supplier (Supplier Master), no free-text
 // entry of either, matching "Suppliers from Supplier Master only" /
 // "Products from Product Master only".
+//
+// Workflow change (2026-09-03, "remove requisitions / simplify purchase
+// order workflow"): per explicit instruction, Requisitions and the
+// separate PO approval stage have been removed from the live app - a
+// purchase order is now confirmed the instant it's recorded, with no
+// approval step in between (see createAndPostPurchase() in
+// services/business/businessEngine.ts). The `RequisitionStatus` /
+// `PurchaseRequisition` / `RequisitionLineItem` / `REQUISITION_STATUS_LABELS`
+// types below, and `GoodsReceipt` / `GoodsReceiptLineItem`, are left in
+// place only because a pre-existing, already-dead, fully disconnected mock
+// implementation of Purchasing (src/services/purchasingService.ts -
+// localStorage-based, not wired to any live page) still imports them and
+// would fail to compile without them; no live page or hook references
+// Requisitions or a separate goods-receipt step any more.
 
 export type RequisitionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'converted'
 export const REQUISITION_STATUS_LABELS: Record<RequisitionStatus, string> = {
@@ -34,13 +48,19 @@ export interface PurchaseRequisition extends AuditFields {
 }
 
 export type PurchaseOrderStatus = 'draft' | 'pending_approval' | 'approved' | 'sent' | 'partially_received' | 'received' | 'cancelled'
+// 'received' is the label shown for a real purchases.status of 'confirmed'
+// (see STATUS_TO_PO_STATUS in usePurchasingData.ts). Labelled "Confirmed"
+// rather than "Received" as of the 2026-09-03 workflow change - a PO is
+// now confirmed the instant it's recorded, whether or not the goods have
+// physically arrived, so "Received" overclaimed what the status actually
+// means.
 export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   draft: 'Draft',
   pending_approval: 'Pending Approval',
   approved: 'Approved',
   sent: 'Sent to Supplier',
   partially_received: 'Partially Received',
-  received: 'Received',
+  received: 'Confirmed',
   cancelled: 'Cancelled',
 }
 

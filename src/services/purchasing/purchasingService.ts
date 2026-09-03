@@ -215,111 +215,18 @@ export async function createPurchaseOrder(
   return createPurchase(ctx, ci);
 }
 
-export async function approvePurchaseOrder(
-  ctx: UserContext,
-  purchaseId: UUID,
-  idempotencyKey?: string
-): Promise<ServiceResponse<{ purchase_id: UUID; status: string; journal_entry_id: UUID | null }>> {
-  const requestId = makeRequestId();
-  if (!canDo(ctx, 'purchases', 'edit'))
-    return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
-  try {
-    const key = idempotencyKey ?? crypto.randomUUID();
-    const ectx = toEngineContext(ctx);
-    const result = await realPurchasingEngine.receiveStock(ectx, {
-      purchase_id:      purchaseId,
-      idempotency_key:  key,
-    });
-    if (!result.ok) {
-      return serviceFail('INTERNAL_ERROR', result.error!.message, { requestId });
-    }
-    return serviceOk({
-      purchase_id:      result.data!.purchase_id,
-      status:           result.data!.status,
-      journal_entry_id: result.data!.journal_entry_id,
-    }, requestId);
-  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to receive stock.', { requestId }); }
-}
-
-// ---- recordGoodsReceipt -----------------------------------
-// Used to just alias approvePurchaseOrder(), which silently
-// fully-received the entire PO no matter what per-line quantities
-// the user entered in GoodsReceiptModal - a user receiving 3 of 10
-// units would see "recorded" while 10 were actually posted to
-// inventory. `purchase_items` has no `received_quantity` (or
-// similar) column in any migration, so there is no way to persist
-// a true partial receipt without a schema change, which is out of
-// scope here. Rather than keep discarding the entered items/notes
-// and silently over-receiving, this now validates the entered
-// quantities cover every line's full ordered quantity - a genuine
-// partial entry is rejected with a clear message instead of being
-// silently rounded up to "everything," and the notes the user typed
-// are persisted onto the purchase instead of being dropped.
-
-export async function recordGoodsReceipt(
-  ctx: UserContext,
-  purchaseId: UUID,
-  items: Array<{ product_id: UUID; quantity_received: number }>,
-  notes?: string,
-): Promise<ServiceResponse<{ purchase_id: UUID; status: string; journal_entry_id: UUID | null }>> {
-  const requestId = makeRequestId();
-  if (!canDo(ctx, 'purchases', 'edit'))
-    return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
-  try {
-    // Same ambiguous-embed issue as listPurchases()/getPurchase() above -
-    // 'purchase_items' has two FKs back into 'purchases', so this embed
-    // needs the same explicit FK hint or it errors with PGRST201/HTTP 300.
-    const { data: purchase, error: loadErr } = await supabase
-      .schema('imagecare')
-      .from('purchases')
-      .select('id, notes, purchase_items!purchase_items_purchase_id_fkey(product_id, quantity)')
-      .eq('id', purchaseId)
-      .eq('business_id', ctx.business_id)
-      .single();
-
-    if (loadErr || !purchase) return serviceFail('RESOURCE_NOT_FOUND', 'Purchase order not found.', { requestId });
-
-    const orderedLines = (purchase.purchase_items ?? []) as Array<{ product_id: UUID; quantity: number }>;
-    const submitted = new Map<UUID, number>();
-    for (const item of items ?? []) {
-      submitted.set(item.product_id, (submitted.get(item.product_id) ?? 0) + Number(item.quantity_received || 0));
-    }
-
-    const isFullReceipt = orderedLines.every(l => (submitted.get(l.product_id) ?? 0) >= Number(l.quantity));
-    if (!isFullReceipt) {
-      return serviceFail(
-        'BUSINESS_RULE_VIOLATION',
-        "Partial goods receipt isn't supported yet - this order can only be received in full. Enter the full ordered quantity for every line, then try again.",
-        { requestId },
-      );
-    }
-
-    const key = crypto.randomUUID();
-    const ectx = toEngineContext(ctx);
-    const result = await realPurchasingEngine.receiveStock(ectx, {
-      purchase_id:      purchaseId,
-      idempotency_key:  key,
-    });
-    if (!result.ok) {
-      return serviceFail('INTERNAL_ERROR', result.error!.message, { requestId });
-    }
-
-    const trimmedNotes = notes?.trim();
-    if (trimmedNotes) {
-      const combinedNotes = purchase.notes ? `${purchase.notes}\nGoods receipt: ${trimmedNotes}` : `Goods receipt: ${trimmedNotes}`;
-      await supabase.schema('imagecare').from('purchases')
-        .update({ notes: combinedNotes, updated_by: ctx.user_id })
-        .eq('id', purchaseId)
-        .eq('business_id', ctx.business_id);
-    }
-
-    return serviceOk({
-      purchase_id:      result.data!.purchase_id,
-      status:           result.data!.status,
-      journal_entry_id: result.data!.journal_entry_id,
-    }, requestId);
-  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to record goods receipt.', { requestId }); }
-}
+// Workflow change (2026-09-03, "remove requisitions / simplify purchase
+// order workflow"): approvePurchaseOrder() and recordGoodsReceipt() used to
+// be the two ways a draft purchase order reached 'confirmed' - a manual
+// "Approve" action, or a manual "Receive goods" action, both calling
+// purchasingEngine.receiveStock(). Per explicit instruction, that separate
+// approval/receiving stage has been removed: createAndPostPurchase() in
+// services/business/businessEngine.ts now calls receiveStock() itself,
+// immediately after creating the purchase, so every order is confirmed the
+// moment it's recorded. Both wrapper functions are removed along with the
+// Approve / Reject / Receive goods UI that was their only caller -
+// receiveStock() itself (in engines/purchasing/purchasingEngine.ts) is
+// unchanged and still does the real work.
 
 export interface PurchaseDashboardKpis {
   total_orders: number; pending_orders: number; total_spend_month: number;
@@ -371,92 +278,15 @@ export async function getPurchaseDashboardKpis(
 }
 
 
-export async function rejectPurchase(
-  ctx: UserContext,
-  purchaseId: UUID,
-  reason: string
-): Promise<ServiceResponse<void>> {
-  const requestId = makeRequestId();
-  if (!canDo(ctx, 'purchases', 'edit'))
-    return serviceFail('PERMISSION_DENIED', 'You do not have permission to reject purchases.', { requestId });
-  try {
-    // Fetch and validate the purchase exists and is in a rejectable state
-    const purchaseResult = await getPurchase(ctx, purchaseId);
-    if (purchaseResult.error) return serviceFail('RESOURCE_NOT_FOUND', 'Purchase not found.', { requestId });
-    const purchase = purchaseResult.data;
-    if (!purchase) return serviceFail('RESOURCE_NOT_FOUND', 'Purchase not found.', { requestId });
-    if (purchase.status !== 'draft')
-      return serviceFail('BUSINESS_RULE_VIOLATION', `Cannot reject a purchase with status "${purchase.status}". Only draft purchases can be rejected.`, { requestId });
-
-    const { error } = await supabase.schema('imagecare').from('purchases').update({
-      status:     'cancelled' as const,
-      notes:      purchase.notes ? `${purchase.notes} | Rejected: ${reason}` : `Rejected: ${reason}`,
-      updated_at: new Date().toISOString(),
-    }).eq('id', purchaseId).eq('business_id', ctx.business_id);
-
-    if (error) return serviceFail('INTERNAL_ERROR', error.message, { requestId });
-
-    // Audit log
-    await supabase.schema('imagecare').from('audit_logs').insert({
-      business_id: ctx.business_id,
-      branch_id:   purchase.branch_id,
-      table_name:  'purchases',
-      record_id:   purchaseId,
-      action:      'update',
-      new_value:   { status: 'cancelled', rejected_by: ctx.user_id, reason, rejected_at: new Date().toISOString() },
-      user_id:     ctx.user_id,
-      created_at:  new Date().toISOString(),
-    });
-
-    return serviceOk(undefined, requestId);
-  } catch (err) {
-    return serviceFail('INTERNAL_ERROR', (err as Error).message ?? 'Failed to reject purchase.', { requestId });
-  }
-}
-
-// Bug fix (Purchasing module audit 2026-09-03): "Convert to order" on a
-// requisition (RequisitionsPage.tsx) creates a brand-new priced purchase
-// row via createPurchaseOrder() - the original bare requisition row was
-// simply left sitting in 'draft' with nothing to say it had already been
-// turned into an order, so it kept reappearing in the Requisitions list
-// and could be converted again into a second, duplicate order. The real
-// status enum has no 'converted' value to record that distinctly (only
-// draft/confirmed/cancelled/voided), so - the same way rejectPurchase()
-// above records a rejection reason in `notes` rather than inventing a
-// column - this closes the original requisition out via the one real
-// terminal state a still-draft purchase can reach ('cancelled'), with a
-// clearly worded note (never "Rejected:", so it reads honestly in the UI
-// and audit log) identifying which order it became.
-export async function markRequisitionConverted(
-  ctx: UserContext,
-  requisitionId: UUID,
-  newPurchaseNumber: string,
-): Promise<ServiceResponse<void>> {
-  const requestId = makeRequestId();
-  if (!canDo(ctx, 'purchases', 'edit'))
-    return serviceFail('PERMISSION_DENIED', 'You do not have permission to update requisitions.', { requestId });
-  try {
-    const purchaseResult = await getPurchase(ctx, requisitionId);
-    if (purchaseResult.error || !purchaseResult.data) return serviceFail('RESOURCE_NOT_FOUND', 'Requisition not found.', { requestId });
-    const purchase = purchaseResult.data;
-    if (purchase.status !== 'draft') {
-      // Already actioned (converted/rejected) - nothing to do, not an error.
-      return serviceOk(undefined, requestId);
-    }
-
-    const note = `Converted to purchase order ${newPurchaseNumber}`;
-    const { error } = await supabase.schema('imagecare').from('purchases').update({
-      status: 'cancelled' as const,
-      notes: purchase.notes ? `${purchase.notes} | ${note}` : note,
-      updated_at: new Date().toISOString(),
-    }).eq('id', requisitionId).eq('business_id', ctx.business_id);
-
-    if (error) return serviceFail('INTERNAL_ERROR', error.message, { requestId });
-    return serviceOk(undefined, requestId);
-  } catch (err) {
-    return serviceFail('INTERNAL_ERROR', (err as Error).message ?? 'Failed to update requisition.', { requestId });
-  }
-}
+// Workflow change (2026-09-03): rejectPurchase() (used by the old "Reject"
+// action on a still-draft requisition/order) and markRequisitionConverted()
+// (closed out a requisition once it had been converted into an order) are
+// both removed along with the Requisition workflow and the draft/approval
+// stage they existed to manage - a purchase order is confirmed the moment
+// it's recorded now, so there is no more draft state for either action to
+// operate on. The still-existing "Cancel" action (useCancelPurchaseOrder in
+// usePurchasingData.ts) remains for cancelling an order after the fact and
+// is unaffected.
 
 // ============================================================
 // Purchase Returns

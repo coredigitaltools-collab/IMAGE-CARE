@@ -2,16 +2,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
-  listPurchases, createPurchase,
-  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, approvePurchaseOrder, getPurchaseDashboardKpis, rejectPurchase,
-  recordGoodsReceipt, createPurchaseReturn, listPurchaseReturns, markRequisitionConverted,
+  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, getPurchaseDashboardKpis,
+  createPurchaseReturn, listPurchaseReturns,
 } from '../../../services/purchasing/purchasingService';
 import {
   listBills as listRealBills,
   createBill as createBillReal,
   recordBillPayment as recordBillPaymentReal,
 } from '../../../services/credit/creditService';
-import type { PurchaseOrderInput, PurchaseOrderStatus, PurchaseRequisition, RequisitionStatus, PurchaseOrder, SupplierInvoice, SupplierInvoiceStatus } from '../../../types/purchasing';
+import type { PurchaseOrderInput, PurchaseOrderStatus, PurchaseOrder, SupplierInvoice, SupplierInvoiceStatus } from '../../../types/purchasing';
 import type { UUID, Purchase, PurchaseItem, Bill } from '../../../types/database';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,20 +28,30 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 //
 // Bug fix (Purchasing module audit 2026-09-03): listPurchases()/getPurchase()
 // return the real imagecare.purchases row shape (snake_case columns,
-// embedded purchase_items, a 4-value TransactionStatus enum). Every
-// Purchasing page (Requisitions, Orders, Order detail) was written against
-// the camelCase `PurchaseRequisition`/`PurchaseOrder` types in
-// types/purchasing.ts, which model a richer status pipeline
+// embedded purchase_items, a 4-value TransactionStatus enum). The Orders
+// pages were written against the camelCase `PurchaseOrder` type in
+// types/purchasing.ts, which models a richer status pipeline
 // ('pending_approval' | 'approved' | 'sent' | 'partially_received' | ...)
 // that was never implemented in the database - the real status column can
 // only ever be 'draft' | 'confirmed' | 'cancelled' | 'voided'. Passing raw
 // rows straight through (as the hooks used to) meant every page read
 // `undefined` for `.items`, `.supplierId`, `.reference`, etc., which is
-// what crashed both list pages the moment they tried `.items.length` /
+// what crashed the list page the moment it tried `.items.length` /
 // `.items.reduce(...)`. This maps every real row onto the shape the
 // existing page components already expect, the same "map the narrower real
 // enum onto the richer local one" approach already used for Bills
 // (see mapBillStatus in features/bills/hooks/useBillsData.ts).
+//
+// Workflow change (2026-09-03, "remove requisitions / simplify purchase
+// order workflow"): Requisitions have been removed from the live workflow
+// entirely (see RequisitionsPage/RequisitionFormModal - both deleted, along
+// with the requisition-only hooks that used to live here:
+// useRequisitions/useCreateRequisition/useApproveRequisition/
+// useRejectRequisition, and the STATUS_TO_REQ_STATUS mapping /
+// mapPurchaseToRequisition() that fed them). A purchase order is now
+// confirmed the instant it's recorded (see createAndPostPurchase() in
+// services/business/businessEngine.ts), so this file only ever needs to map
+// a real purchases row onto the PurchaseOrder shape below.
 type RawPurchaseRow = Purchase & {
   // The `Purchase` type in types/database.ts doesn't model created_by/
   // updated_by (both real columns - confirmed live against the DB), so
@@ -60,43 +69,9 @@ const STATUS_TO_PO_STATUS: Record<Purchase['status'], PurchaseOrderStatus> = {
   voided: 'cancelled',
 };
 
-const STATUS_TO_REQ_STATUS: Record<Purchase['status'], RequisitionStatus> = {
-  draft: 'draft',
-  confirmed: 'approved',
-  cancelled: 'rejected',
-  voided: 'rejected',
-};
-
 function rejectionReasonFromNotes(notes: string | null): string | null {
   const match = notes?.match(/Rejected: (.+)$/);
   return match ? match[1] : null;
-}
-
-function mapPurchaseToRequisition(row: RawPurchaseRow): PurchaseRequisition {
-  return {
-    id: row.id,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    created_by: row.created_by ?? '',
-    updated_by: row.updated_by ?? '',
-    branch_id: row.branch_id,
-    is_active: row.status !== 'cancelled' && row.status !== 'voided',
-    sync_status: 'synced',
-    last_synced_at: row.updated_at,
-    reference: row.purchase_number,
-    requestedByName: '',
-    items: (row.purchase_items ?? []).map((it) => ({
-      productId: it.product_id,
-      productName: it.products?.name ?? 'Unknown product',
-      sku: it.products?.sku ?? '',
-      quantity: Number(it.quantity),
-      notes: it.notes ?? '',
-    })),
-    status: STATUS_TO_REQ_STATUS[row.status] ?? 'draft',
-    notes: row.notes ?? '',
-    rejectionReason: row.status === 'cancelled' ? rejectionReasonFromNotes(row.notes) : null,
-    convertedToPoId: null,
-  };
 }
 
 function mapPurchaseToOrder(row: RawPurchaseRow): PurchaseOrder {
@@ -131,56 +106,6 @@ function mapPurchaseToOrder(row: RawPurchaseRow): PurchaseOrder {
   };
 }
 
-export function useRequisitions() {
-  const ctx = useUserContext();
-  return useQuery({
-    queryKey: ['purchasing', 'requisitions', ctx.business_id],
-    queryFn: async () => {
-      const all = (await listPurchases(ctx).then(unwrap)) as RawPurchaseRow[];
-      return (Array.isArray(all) ? all : []).filter((p) => p.status === 'draft').map(mapPurchaseToRequisition);
-    },
-  });
-}
-
-export function useCreateRequisition(_userId?: string, _userName?: string) {
-  const ctx = useUserContext();
-  const branch = useActiveBranch();
-  const qc = useQueryClient();
-  return useMutation({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: (input: any) => createPurchase(ctx, {
-      branch_id: (branch ?? ctx.branch_id) as UUID,
-      payment_method: 'credit' as const, amount_paid: 0,
-      notes: input.notes ?? '',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      items: ((input.items ?? input.lines ?? []) as any[]).map((i: any) => ({ product_id: (i.productId ?? i.product_id) as UUID, quantity: i.quantity ?? i.quantityOrdered ?? 0, unit_cost: i.unitCost ?? i.unit_cost ?? 0 })),
-    }).then(unwrap),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing', 'requisitions'] }); qc.invalidateQueries({ queryKey: ['purchasing', 'orders'] }); },
-  });
-}
-
-export function useApproveRequisition(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({ mutationFn: (id: UUID) => approvePurchaseOrder(ctx, id).then(unwrap), onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); } });
-}
-
-export function useRejectRequisition(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: UUID; reason: string }) =>
-      rejectPurchase(ctx, id, reason).then(r => {
-        if (r.error) throw new Error(r.error.message ?? 'Failed to reject requisition');
-        return r;
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['purchasing', 'requisitions'] });
-      qc.invalidateQueries({ queryKey: ['purchasing', 'orders'] });
-    },
-  });
-}
-
 export function usePurchaseOrders() {
   const ctx = useUserContext();
   return useQuery({
@@ -201,13 +126,25 @@ export function usePurchaseOrder(id: string | undefined) {
   });
 }
 
+// Workflow change (2026-09-03, "remove requisitions / simplify purchase
+// order workflow"): a purchase order used to need a separate "Approve"
+// action (useApprovePurchaseOrder), could be sent back with "Reject"
+// (useRejectPurchaseOrder), marked as sent to the supplier while still
+// unapproved (useMarkPurchaseOrderSent), and only then received via
+// "Receive goods" (useRecordGoodsReceipt, see usePurchaseReturns section
+// below for the removed useGoodsReceipts). All four are removed: creating
+// an order now confirms it immediately (createAndPostPurchase() in
+// businessEngine.ts chains straight into receiveStock()), so there is no
+// more draft/unconfirmed state for any of those actions to operate on for
+// a newly recorded order. useCancelPurchaseOrder is unaffected and remains
+// below.
 export function useCreatePurchaseOrder(_userId?: string) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: PurchaseOrderInput | Record<string, unknown>) => {
-      const result = await createPurchaseOrder(ctx, {
+    mutationFn: (input: PurchaseOrderInput | Record<string, unknown>) =>
+      createPurchaseOrder(ctx, {
         branch_id: (branch ?? ctx.branch_id) as UUID,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         supplier_id: (input as any).supplierId ?? (input as any).supplier_id,
@@ -218,62 +155,11 @@ export function useCreatePurchaseOrder(_userId?: string) {
         due_date: (input as any).expectedDeliveryDate,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         lines: ((input as any).items ?? []).map((i: any) => ({ product_id: (i.productId ?? i.product_id) as UUID, quantity: Number(i.quantity ?? i.quantityOrdered ?? 0), unit_cost: Number(i.unitCost ?? i.unit_cost ?? 0) })),
-      }).then(unwrap);
-
-      // Bug fix (Purchasing module audit 2026-09-03): when this order was
-      // created by converting a requisition (see RequisitionFormModal's
-      // `requisitionId`), close out the original draft requisition row so
-      // it stops reappearing in the Requisitions list and can't be
-      // converted a second time into a duplicate order. See
-      // markRequisitionConverted() in purchasingService.ts.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const requisitionId = (input as any).requisitionId as string | null | undefined;
-      if (requisitionId) {
-        await markRequisitionConverted(ctx, requisitionId as UUID, result?.purchase_number ?? '').catch(() => {
-          // Best-effort: the new order was already created successfully:
-          // failing to also close the source requisition shouldn't be
-          // reported as the whole "create order" action having failed.
-        });
-      }
-      return result;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['purchasing'] }),
+      }).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
   });
 }
 
-export function useApprovePurchaseOrder(_approverName?: string, _userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({ mutationFn: (id: UUID) => approvePurchaseOrder(ctx, id).then(unwrap), onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); } });
-}
-
-export function useRejectPurchaseOrder(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: UUID; reason: string }) =>
-      rejectPurchase(ctx, id, reason).then(r => {
-        if (r.error) throw new Error(r.error.message ?? 'Failed to reject purchase order');
-        return r;
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['purchasing'] }),
-  });
-}
-export function useMarkPurchaseOrderSent(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: UUID) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('purchases')
-        .update({ notes: 'Sent to supplier - awaiting delivery', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id).eq('status', 'draft');
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to mark as sent');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['purchasing'] }),
-  });
-}
 export function useCancelPurchaseOrder(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
@@ -287,32 +173,6 @@ export function useCancelPurchaseOrder(_userId?: string) {
       return { id };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['purchasing'] }),
-  });
-}
-
-export function useGoodsReceipts(purchaseOrderId?: UUID) {
-  const ctx = useUserContext();
-  return useQuery({
-    queryKey: ['purchasing', 'receipts', purchaseOrderId ?? 'all', ctx.business_id],
-    queryFn: async () => {
-      const all = (await listPurchases(ctx).then(unwrap)) as RawPurchaseRow[];
-      return (Array.isArray(all) ? all : []).filter((p) => p.status === 'confirmed').map(mapPurchaseToOrder);
-    },
-  });
-}
-
-export function useRecordGoodsReceipt(_approverName?: string, _userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ purchaseOrderId, items, notes }: { purchaseOrderId: UUID; items: Array<{ productId: string; quantityReceived: number }>; notes: string }) =>
-      recordGoodsReceipt(
-        ctx,
-        purchaseOrderId,
-        (items ?? []).map(i => ({ product_id: i.productId as UUID, quantity_received: Number(i.quantityReceived) })),
-        notes,
-      ).then(unwrap),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
   });
 }
 

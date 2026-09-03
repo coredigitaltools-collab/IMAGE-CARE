@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ClipboardList, ShoppingCart, Package, Wallet, AlertTriangle, FileText } from 'lucide-react'
+import { ShoppingCart, Package, Wallet, AlertTriangle, FileText } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PurchasingTabs } from '../../components/purchasing/PurchasingTabs'
 import { PurchaseOrderFormModal } from '../../components/purchasing/PurchaseOrderFormModal'
-import { RequisitionFormModal } from '../../components/purchasing/RequisitionFormModal'
 import { KpiCard } from '../../components/dashboard/KpiCard'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -17,7 +16,6 @@ import { formatCurrency } from '../../lib/format'
 import { useProducts, useSuppliers } from '../../features/inventory/hooks/useInventoryData'
 import {
   useCreatePurchaseOrder,
-  useCreateRequisition,
   usePurchaseDashboardKpis,
   usePurchaseOrders,
 } from '../../features/purchasing/hooks/usePurchasingData'
@@ -33,10 +31,8 @@ export function PurchaseDashboardPage() {
   const suppliersQuery = useSuppliers()
   const productsQuery = useProducts()
   const createOrder = useCreatePurchaseOrder(user.id)
-  const createRequisition = useCreateRequisition(user.id, user.name)
 
   const [isPoOpen, setIsPoOpen] = useState(false)
-  const [isReqOpen, setIsReqOpen] = useState(false)
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
@@ -46,18 +42,25 @@ export function PurchaseDashboardPage() {
   // this list was always empty even with real draft orders sitting there
   // unactioned. 'draft' is the one real "still needs someone to do
   // something with it" status.
+  //
+  // Workflow change (2026-09-03, "remove requisitions / simplify purchase
+  // order workflow"): a purchase order is now confirmed the instant it's
+  // recorded, so a new order never sits in 'draft' any more - this list
+  // will only ever show orders left over from before that change (or ones
+  // that failed partway through confirming, see createAndPostPurchase() in
+  // businessEngine.ts). It's kept rather than removed since a leftover
+  // draft genuinely still needs attention (it can be cancelled from its
+  // detail page) - there just won't usually be anything here going forward.
   const needsAttention = (ordersQuery.data ?? [])
     .filter((o) => o.status === 'draft')
     .slice(0, 6)
 
-  // "New order" is the direct, everyday path (buy something from a
-  // supplier right now). "New requisition" is the internal ask-for-
-  // approval-first workflow, useful for bigger businesses with staff who
-  // aren't allowed to buy directly, but it's an extra step most small
-  // businesses don't need, so it stays available but doesn't compete for
-  // top billing with the action a first-time owner is actually looking for.
+  // Workflow change (2026-09-03): "Request approval to buy" (the
+  // Requisition quick action) is removed along with the Requisition
+  // workflow itself - there is no more approval-first path, only "Record
+  // a purchase" below, which is now the one and only way to start a
+  // purchase order.
   const secondaryActions = [
-    { label: 'Request approval to buy', icon: ClipboardList, onClick: () => setIsReqOpen(true) },
     { label: 'Record supplier invoice', icon: FileText, onClick: () => navigate('/purchasing/invoices') },
     { label: 'Reports', icon: Package, onClick: () => navigate('/purchasing/reports') },
   ]
@@ -77,7 +80,7 @@ export function PurchaseDashboardPage() {
         </Button>
       </div>
 
-      <div className="mb-6 grid grid-cols-3 gap-3">
+      <div className="mb-6 grid grid-cols-2 gap-3">
         {secondaryActions.map(({ label, icon: Icon, onClick }) => (
           <button
             key={label}
@@ -92,15 +95,8 @@ export function PurchaseDashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Open orders" value={kpisQuery.data ? String(kpisQuery.data.openOrders) : '-'} icon={ShoppingCart} tone="blue" isLoading={kpisQuery.isLoading} />
-        <KpiCard
-          label="Pending approval"
-          value={kpisQuery.data ? String(kpisQuery.data.pendingApproval) : '-'}
-          icon={ClipboardList}
-          tone={kpisQuery.data && kpisQuery.data.pendingApproval > 0 ? 'red' : 'neutral'}
-          isLoading={kpisQuery.isLoading}
-        />
         <KpiCard label="Pending receipt" value={kpisQuery.data ? String(kpisQuery.data.pendingReceipt) : '-'} icon={Package} tone="neutral" isLoading={kpisQuery.isLoading} />
         <KpiCard
           label="Spend this month"
@@ -123,7 +119,7 @@ export function PurchaseDashboardPage() {
         {ordersQuery.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : needsAttention.length === 0 ? (
-          <EmptyState icon={ShoppingCart} title="Nothing needs attention" description="No orders are awaiting approval, sending, or receiving right now." />
+          <EmptyState icon={ShoppingCart} title="Nothing needs attention" description="No leftover unconfirmed orders right now." />
         ) : (
           <ul className="divide-y divide-ink-100">
             {needsAttention.map((o) => (
@@ -148,20 +144,8 @@ export function PurchaseDashboardPage() {
           onClose={() => setIsPoOpen(false)}
           onSubmit={async (input) => {
             await createOrder.mutateAsync(input)
-            showToast('Purchase order created.', 'success')
+            showToast('Purchase order recorded and confirmed.', 'success')
             setIsPoOpen(false)
-          }}
-        />
-      )}
-
-      {isReqOpen && (
-        <RequisitionFormModal
-          products={activeProducts}
-          onClose={() => setIsReqOpen(false)}
-          onSubmit={async (items, notes) => {
-            await createRequisition.mutateAsync({ items, notes })
-            showToast('Requisition submitted.', 'success')
-            setIsReqOpen(false)
           }}
         />
       )}

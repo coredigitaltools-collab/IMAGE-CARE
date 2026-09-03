@@ -2,7 +2,6 @@ import { Link, useLocation } from 'react-router-dom'
 
 const TABS = [
   { to: '/purchasing', label: 'Dashboard', exact: true },
-  { to: '/purchasing/requisitions', label: 'Requisitions' },
   { to: '/purchasing/orders', label: 'Orders' },
   { to: '/purchasing/invoices', label: 'Invoices' },
   { to: '/purchasing/returns', label: 'Returns' },

@@ -66,7 +66,7 @@ export function PurchaseOrdersPage() {
           <EmptyState
             icon={ShoppingCart}
             title="No purchase orders yet"
-            description="Create one directly, or approve a requisition and convert it."
+            description="Record one - it's confirmed right away and ready to invoice."
             action={{ label: '+ New order', onClick: () => setIsAddOpen(true) }}
           />
         ) : (
@@ -101,7 +101,7 @@ export function PurchaseOrdersPage() {
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
             await createOrder.mutateAsync(input)
-            showToast('Purchase order created.', 'success')
+            showToast('Purchase order recorded and confirmed.', 'success')
             setIsAddOpen(false)
           }}
         />

@@ -66,10 +66,10 @@ const CustomerDirectoryPage  = lazy(() => import('../pages/sales/CustomerDirecto
 const CustomersListPage      = lazy(() => import('../pages/sales/CustomersListPage').then(m => ({ default: m.CustomersListPage })));
 const CustomerDetailPage     = lazy(() => import('../pages/sales/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
 
-// Purchasing (includes Goods Receiving, via the existing
-// GoodsReceiptModal launched from Purchase Order Detail)
+// Purchasing (a Purchase Order confirms the instant it's recorded - no
+// separate approval/goods-receiving stage or Requisition step; see the
+// route comment below)
 const PurchaseDashboardPage    = lazy(() => import('../pages/purchasing/PurchaseDashboardPage').then(m => ({ default: m.PurchaseDashboardPage })));
-const RequisitionsPage         = lazy(() => import('../pages/purchasing/RequisitionsPage').then(m => ({ default: m.RequisitionsPage })));
 const PurchaseOrdersPage       = lazy(() => import('../pages/purchasing/PurchaseOrdersPage').then(m => ({ default: m.PurchaseOrdersPage })));
 const PurchaseOrderDetailPage  = lazy(() => import('../pages/purchasing/PurchaseOrderDetailPage').then(m => ({ default: m.PurchaseOrderDetailPage })));
 const SupplierInvoicesPage     = lazy(() => import('../pages/purchasing/SupplierInvoicesPage').then(m => ({ default: m.SupplierInvoicesPage })));
@@ -335,16 +335,22 @@ export const router = createBrowserRouter([
             ],
           },
 
-          // Purchasing (Requisitions, Orders + detail, Supplier
-          // Invoices, Returns, Reports. Goods Receiving happens via
-          // the existing GoodsReceiptModal launched from a Purchase
-          // Order's detail page - there is no separate Receiving
-          // page in the current implementation.)
+          // Purchasing (Orders + detail, Supplier Invoices, Returns,
+          // Reports.
+          //
+          // Workflow change (2026-09-03, "remove requisitions /
+          // simplify purchase order workflow"): Requisitions and the
+          // separate PO approval / goods-receiving stage have been
+          // removed per explicit instruction - a Purchase Order is now
+          // confirmed the instant it's recorded (see
+          // createAndPostPurchase() in
+          // services/business/businessEngine.ts). The 'requisitions'
+          // route and RequisitionsPage are gone; there was never a
+          // separate Receiving page.)
           {
             path: 'purchasing',
             children: [
               { index: true, element: <PurchaseDashboardPage /> },
-              { path: 'requisitions', element: <RequisitionsPage /> },
               { path: 'orders', element: <PurchaseOrdersPage /> },
               { path: 'orders/:id', element: <PurchaseOrderDetailPage /> },
               { path: 'invoices', element: <SupplierInvoicesPage /> },
