@@ -1,12 +1,12 @@
 // Stage 5: Settings feature hooks - rewired to Stage 4 services.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext } from '../../../context/AppContext';
-import { getBusinessProfile, saveBusinessProfile, listStaff, getSetting, updateSetting } from '../../../services/settings/settingsService';
+import { getBusinessProfile, saveBusinessProfile, listStaff, updateStaffMember, setStaffActive, getSetting, updateSetting } from '../../../services/settings/settingsService';
 import { listBranches, createBranch, updateBranch } from '../../../services/masterData/masterDataService';
 import { listRoles, createRole as createRoleReal, renameRole as renameRoleReal, archiveRole as archiveRoleReal } from '../../../services/roleService';
 import { getPermissionMatrix, setPermission as setPermissionReal } from '../../../services/permissionsService';
 import type { UUID } from '../../../types/database';
-import type { Permission, StaffRole } from '../../../types/settings';
+import type { Permission, StaffRole, StaffInput } from '../../../types/settings';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any {
@@ -323,12 +323,44 @@ export function useRestoreBackup(_userId?: string) {
 export function useLastSyncedAt(_userId?: string) { return useQuery({ queryKey: ['sync', 'last-synced'], queryFn: async () => new Date().toISOString(), staleTime: 30_000 }); }
 export function usePendingSyncItems(_userId?: string) { return useQuery({ queryKey: ['sync', 'pending'], queryFn: async () => [] as Array<{ id: string; operation: string; entityType: string; entityId: string; createdAt: string; status: string }>, staleTime: 15_000 }); }
 export function useRunSync(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async () => ({ success: true, syncedCount: 0, failedCount: 0, errors: [] as string[] }), onSuccess: () => qc.invalidateQueries({ queryKey: ['sync'] }) }); }
+// Create Staff and Reset Password remain mocks: creating a login or setting
+// a password needs the Supabase Auth Admin API (a service-role key), which
+// can't safely run from browser code - see the comment on
+// updateStaffMember()/setStaffActive() in settingsService.ts. Left as-is,
+// not a new bug introduced here.
 export function useCreateStaff(_userId?: string) { const qc = useQueryClient(); return useMutation({ // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: async (input: Record<string, unknown>): Promise<any> => ({ ...input, id: crypto.randomUUID(), temporaryPassword: 'ImageCare@123' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }) }); }
-export function useDisableStaff(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }) }); }
-export function useReactivateStaff(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }) }); }
 export function useResetStaffPassword(_userId?: string) { return useMutation({ mutationFn: async (id: string) => ({ id, temporaryPassword: 'ImageCare@123' }) }); }
-export function useUpdateStaff(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ id, input }: { id: string; input: Record<string, unknown> }) => ({ id, ...input }), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }) }); }
+
+// Bug fix (Settings save-button audit 2026-09-03): these three used to be
+// identity-function mocks (`async (id) => ({id})`, `async ({id,input}) =>
+// ({id,...input})`) that always reported success but never wrote to
+// Supabase - a refresh silently discarded every edit/disable/reactivate.
+// Now call the real imagecare.users writes in settingsService.ts.
+export function useUpdateStaff(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: StaffInput }) => updateStaffMember(ctx, id, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
+  });
+}
+export function useDisableStaff(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => setStaffActive(ctx, id, false),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
+  });
+}
+export function useReactivateStaff(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => setStaffActive(ctx, id, true),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
+  });
+}
 export function useSaveReceiptSettings(_userId?: string) {
   const ctx = useUserContext(); const qc = useQueryClient();
   return useMutation({

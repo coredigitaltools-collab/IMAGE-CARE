@@ -181,12 +181,48 @@ export interface BusinessProfile {
   logo_url: string | null; tax_id: string | null; receipt_footer: string | null;
 }
 
+// Bug fix (Settings save-button audit 2026-09-03): this used to select('*')
+// and hand the raw imagecare.businesses row straight to the UI, and
+// saveBusinessProfile() below used to write {name, email, phone, address,
+// currency} straight back - but the real columns are name, contact_email,
+// contact_phone, currency, and a JSONB address, not email/phone/address(text).
+// PostgREST rejects an update referencing unknown columns outright, which is
+// why "Save changes" on Business Profile always failed. Same field-mapping
+// bug class as masterDataService.ts's toCustomerRow()/toSupplierRow().
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readBusinessAddress(address: any): string {
+  if (typeof address === 'string') return address;
+  if (!address || typeof address !== 'object') return '';
+  if (typeof address.raw === 'string') return address.raw;
+  return Object.keys(address).length > 0 ? JSON.stringify(address) : '';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapBusinessProfileRow(row: any): BusinessProfile {
+  return {
+    id: row.id,
+    business_id: row.id, // businesses.id IS the business_id everywhere else in the app
+    name: row.name ?? '',
+    phone: row.contact_phone ?? null,
+    email: row.contact_email ?? null,
+    address: readBusinessAddress(row.address),
+    currency: row.currency ?? 'UGX',
+    logo_url: row.logo_url ?? null,
+    tax_id: row.tax_id ?? null,
+    // No receipt_footer column exists on imagecare.businesses, and no page
+    // reads BusinessProfile.receipt_footer (receipt footer text actually
+    // lives in the separate 'receipt' settings category) - reported
+    // honestly as null rather than invented.
+    receipt_footer: null,
+  };
+}
+
 export async function getBusinessProfile(ctx: UserContext): Promise<ApiResult<BusinessProfile>> {
   try {
     const { data, error } = await supabase.schema('imagecare').from('businesses')
       .select('*').eq('id', ctx.business_id).single();
     if (error) return fail(parseError(error));
-    return ok(data as unknown as BusinessProfile);
+    return ok(mapBusinessProfileRow(data));
   } catch (err) { return fail(parseError(err)); }
 }
 
@@ -195,44 +231,132 @@ export async function saveBusinessProfile(
   input: Partial<Omit<BusinessProfile, 'id' | 'business_id'>>
 ): Promise<ApiResult<BusinessProfile>> {
   try {
+    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (input.name !== undefined) row.name = input.name;
+    if (input.email !== undefined) row.contact_email = input.email || null;
+    if (input.phone !== undefined) row.contact_phone = input.phone || null;
+    if (input.address !== undefined) row.address = input.address ? { raw: input.address } : null;
+    if (input.currency !== undefined) row.currency = input.currency;
+    if (input.logo_url !== undefined) row.logo_url = input.logo_url;
+    if (input.tax_id !== undefined) row.tax_id = input.tax_id;
+
     const { data, error } = await supabase.schema('imagecare').from('businesses')
-      .update({ ...input, updated_at: new Date().toISOString() })
+      .update(row)
       .eq('id', ctx.business_id).select().single();
     if (error) return fail(parseError(error));
-    return ok(data as unknown as BusinessProfile);
+    return ok(mapBusinessProfileRow(data));
   } catch (err) { return fail(parseError(err)); }
+}
+
+// Explicit column list (not '*'): imagecare.users also carries
+// pin_hash/pin_failed_attempts/pin_locked_until/pin_set_at (daily unlock
+// PIN - see 0020_stage7_pin_auth.sql). Those must never be included in an
+// API response, even a bcrypt hash, so they are deliberately left out.
+const STAFF_COLUMNS = `
+  id, business_id, branch_id, auth_user_id, first_name, last_name,
+  email, phone, role, is_owner, employment_type, hire_date, salary,
+  salary_currency, avatar_url, is_active, last_login_at, settings,
+  metadata, created_at, updated_at, deleted_at
+`;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapStaffRow(u: any): SettingsStaffMember {
+  return {
+    ...u,
+    fullName:       `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim(),
+    username:       u.email?.split('@')[0] ?? u.id,
+    // users.branch_id is a single column (one branch per staff member) -
+    // the Edit Staff form's multi-select checkboxes can only ever reflect
+    // that one real assignment. This used to be hardcoded to [] regardless
+    // of the real value, so "Assigned branches" always rendered with
+    // nothing checked even for staff who do have a branch_id set.
+    branchIds:      u.branch_id ? [u.branch_id as string] : [],
+    updated_at:     u.updated_at ?? new Date().toISOString(),
+    created_by:     u.created_by ?? '',
+    updated_by:     u.updated_by ?? '',
+    sync_status:    'synced' as const,
+    last_synced_at: null,
+  };
 }
 
 export async function listStaff(ctx: UserContext): Promise<ApiResult<SettingsStaffMember[]>> {
   try {
-    // Explicit column list (not '*'): imagecare.users also carries
-    // pin_hash/pin_failed_attempts/pin_locked_until/pin_set_at (daily
-    // unlock PIN - see 0020_stage7_pin_auth.sql). Those must never be
-    // included in an API response, even a bcrypt hash, so they are
-    // deliberately left out of this select.
     const { data, error } = await supabase.schema('imagecare').from('users')
-      .select(`
-        id, business_id, branch_id, auth_user_id, first_name, last_name,
-        email, phone, role, is_owner, employment_type, hire_date, salary,
-        salary_currency, avatar_url, is_active, last_login_at, settings,
-        metadata, created_at, updated_at, deleted_at
-      `)
+      .select(STAFF_COLUMNS)
       .eq('business_id', ctx.business_id).is('deleted_at', null).order('first_name');
     if (error) return fail(parseError(error));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mapped: SettingsStaffMember[] = ((data ?? []) as any[]).map((u: any) => ({
-      ...u,
-      fullName:       `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim(),
-      username:       u.email?.split('@')[0] ?? u.id,
-      branchIds:      [] as string[],
-      updated_at:     u.updated_at ?? new Date().toISOString(),
-      created_by:     u.created_by ?? '',
-      updated_by:     u.updated_by ?? '',
-      sync_status:    'synced' as const,
-      last_synced_at: null,
-    }));
-    return ok(mapped);
+    return ok(((data ?? []) as any[]).map(mapStaffRow));
   } catch (err) { return fail(parseError(err)); }
+}
+
+// Bug fix (Settings save-button audit 2026-09-03): Edit/Disable/Reactivate
+// staff used to be identity-function mocks in
+// src/features/settings/hooks/useSettingsData.ts - `async (input) => ({
+// ...input, id: crypto.randomUUID() })` - which always reported success but
+// never wrote to Supabase. A refresh silently discarded every change. These
+// write to the same real imagecare.users table listStaff() reads from.
+// (Create Staff and Reset Password are intentionally left as-is: those
+// need the Supabase Auth Admin API - a service-role key - to create a login
+// or set a password, which can't safely run from browser code.)
+//
+// These throw directly rather than returning ApiResult, matching how
+// createRoleReal()/archiveRoleReal() (src/services/roleService.ts) are
+// already called from this same page (PeopleAccessPage.tsx): the ApiResult
+// + unwrap() pattern used elsewhere in this file re-wraps every failure as
+// a plain Error, which would swallow LastActiveOwnerError's identity before
+// the page's `err instanceof LastActiveOwnerError` check ever saw it.
+export async function updateStaffMember(
+  ctx: UserContext,
+  id: UUID,
+  input: { fullName?: string; email?: string; role?: string; branchIds?: string[] }
+): Promise<SettingsStaffMember> {
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.fullName !== undefined) {
+    const trimmed = input.fullName.trim();
+    const spaceIdx = trimmed.indexOf(' ');
+    row.first_name = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+    row.last_name = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+  }
+  if (input.email !== undefined) row.email = input.email;
+  if (input.role !== undefined) row.role = input.role;
+  if (input.branchIds !== undefined) row.branch_id = input.branchIds[0] ?? null;
+
+  const { data, error } = await supabase.schema('imagecare').from('users')
+    .update(row).eq('id', id).eq('business_id', ctx.business_id)
+    .select(STAFF_COLUMNS).single();
+  if (error) throw new Error(parseError(error).message ?? 'Failed to update staff member.');
+  return mapStaffRow(data);
+}
+
+export async function setStaffActive(
+  ctx: UserContext, id: UUID, isActive: boolean
+): Promise<SettingsStaffMember> {
+  // Business rule (IMP-002, mirrored from the prior local implementation in
+  // src/services/staffService.ts): never disable the last active Owner.
+  if (!isActive) {
+    const { data: target, error: targetErr } = await supabase.schema('imagecare').from('users')
+      .select('is_owner').eq('id', id).eq('business_id', ctx.business_id).maybeSingle();
+    if (targetErr) throw new Error(parseError(targetErr).message ?? 'Failed to check owner status.');
+    if (target?.is_owner) {
+      const { count, error: countErr } = await supabase.schema('imagecare').from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', ctx.business_id).eq('is_owner', true).eq('is_active', true)
+        .is('deleted_at', null).neq('id', id);
+      if (countErr) throw new Error(parseError(countErr).message ?? 'Failed to check active owners.');
+      if (!count) {
+        const { LastActiveOwnerError } = await import('../staffService');
+        throw new LastActiveOwnerError();
+      }
+    }
+  }
+
+  const { data, error } = await supabase.schema('imagecare').from('users')
+    .update({ is_active: isActive, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('business_id', ctx.business_id)
+    .select(STAFF_COLUMNS).single();
+  if (error) throw new Error(parseError(error).message ?? 'Failed to update staff status.');
+  return mapStaffRow(data);
 }
 
 export interface ExpenseCategory {
