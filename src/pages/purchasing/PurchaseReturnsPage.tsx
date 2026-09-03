@@ -95,8 +95,8 @@ export function PurchaseReturnsPage() {
               await createReturn.mutateAsync({ ...input, purchaseOrderId: null })
               showToast('Return recorded, stock updated.', 'success')
               setIsAddOpen(false)
-            } catch {
-              setAddError("Purchase returns aren't available yet.")
+            } catch (err) {
+              setAddError(err instanceof Error ? err.message : 'Could not record this return.')
             }
           }}
         />

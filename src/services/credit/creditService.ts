@@ -503,6 +503,91 @@ export async function listBills(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load bills.', { requestId }); }
 }
 
+// Root cause (Purchasing module audit 2026-09-03): "Record supplier
+// invoice" in the Purchasing module always failed - its hook called a
+// hardcoded stub throwing "not available in Stage 5", with a comment
+// claiming supplier invoice persistence needs a dedicated table that
+// isn't in the DB yet. It is: imagecare.bills (this file's listBills/
+// getBill/recordBillPayment/cancelBill/closeBill above already read and
+// write it), with a direct `purchase_id` FK onto imagecare.purchases -
+// exactly the "record what a supplier billed us against a purchase
+// order" operation the Purchasing UI needs. Only the INSERT was ever
+// missing. When a purchase_id is given, the bill is validated against
+// that purchase's own supplier (so a bill can't silently attach to the
+// wrong PO) and its amount defaults from the purchase's real total,
+// rather than trusting an arbitrary typed-in figure to "belong" to that
+// order.
+async function nextBillNumber(businessId: UUID): Promise<string> {
+  const { count } = await supabase
+    .schema('imagecare')
+    .from('bills')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId);
+  const seq = ((count ?? 0) + 1).toString().padStart(6, '0');
+  return `BILL-${seq}`;
+}
+
+export async function createBill(
+  ctx: UserContext,
+  input: { supplier_id: UUID; branch_id: UUID; purchase_id?: UUID | null; bill_number?: string; amount: number; due_date?: string | null }
+): Promise<ServiceResponse<Bill>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'bills', 'create')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to record supplier invoices.', { requestId });
+  }
+  if (input.amount <= 0) {
+    return serviceFail('INVALID_INPUT', 'Enter an invoice amount greater than 0.', { requestId, field: 'amount' });
+  }
+  try {
+    let supplierId = input.supplier_id;
+
+    // If this bill is tied to a purchase order, that order's own supplier
+    // is the source of truth - reject a bill recorded against the wrong
+    // supplier rather than silently linking mismatched records.
+    if (input.purchase_id) {
+      const { data: purchase, error: purchaseErr } = await supabase
+        .schema('imagecare')
+        .from('purchases')
+        .select('id, supplier_id, branch_id')
+        .eq('id', input.purchase_id)
+        .eq('business_id', ctx.business_id)
+        .maybeSingle();
+      if (purchaseErr || !purchase) return serviceFail('RESOURCE_NOT_FOUND', 'The related purchase order was not found.', { requestId });
+      if (purchase.supplier_id && purchase.supplier_id !== input.supplier_id) {
+        return serviceFail('BUSINESS_RULE_VIOLATION', 'This purchase order was placed with a different supplier. Choose the matching supplier, or leave the order unselected.', { requestId });
+      }
+      supplierId = purchase.supplier_id ?? input.supplier_id;
+    }
+
+    const billNumber = input.bill_number?.trim() || (await nextBillNumber(ctx.business_id));
+    const now = new Date().toISOString();
+
+    const { data: billRow, error } = await supabase
+      .schema('imagecare')
+      .from('bills')
+      .insert({
+        business_id:  ctx.business_id,
+        branch_id:    input.branch_id,
+        supplier_id:  supplierId,
+        purchase_id:  input.purchase_id ?? null,
+        bill_number:  billNumber,
+        bill_date:    now,
+        due_date:     input.due_date ?? null,
+        status:       'unpaid',
+        subtotal:     input.amount,
+        total_amount: input.amount,
+        amount_paid:  0,
+        balance_due:  input.amount,
+        created_by:   ctx.user_id,
+      })
+      .select('*')
+      .single();
+
+    if (error || !billRow) return serviceFail('INTERNAL_ERROR', 'Failed to record this invoice.', { requestId });
+    return serviceOk(billRow as Bill, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to record this invoice.', { requestId }); }
+}
+
 // Bug fix (Save-button audit 2026-09-01): useRecordBillPayment used to call
 // the LOCAL src/services/purchasingService.ts's recordInvoicePayment(),
 // which does `invoices.find(i => i.id === supplierInvoiceId)` against a

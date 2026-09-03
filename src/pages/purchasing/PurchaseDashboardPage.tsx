@@ -41,8 +41,13 @@ export function PurchaseDashboardPage() {
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
 
+  // Bug fix (Purchasing module audit 2026-09-03): filtered on statuses the
+  // real status enum (draft/confirmed/cancelled/voided) never produces, so
+  // this list was always empty even with real draft orders sitting there
+  // unactioned. 'draft' is the one real "still needs someone to do
+  // something with it" status.
   const needsAttention = (ordersQuery.data ?? [])
-    .filter((o) => o.status === 'pending_approval' || o.status === 'approved' || o.status === 'sent' || o.status === 'partially_received')
+    .filter((o) => o.status === 'draft')
     .slice(0, 6)
 
   // "New order" is the direct, everyday path (buy something from a
@@ -129,7 +134,7 @@ export function PurchaseDashboardPage() {
                   </Link>
                   <p className="text-xs text-ink-500">{activeSuppliers.find((s) => s.id === o.supplierId)?.name ?? 'Unknown supplier'}</p>
                 </div>
-                <Badge tone={o.status === 'pending_approval' ? 'warning' : 'info'}>{PO_STATUS_LABELS[o.status]}</Badge>
+                <Badge tone="warning">{PO_STATUS_LABELS[o.status]}</Badge>
               </li>
             ))}
           </ul>

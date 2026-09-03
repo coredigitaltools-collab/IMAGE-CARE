@@ -77,7 +77,17 @@ export function PurchaseOrderDetailPage() {
   const total = order.items.reduce((sum, i) => sum + i.quantityOrdered * i.unitCost, 0)
   const supplier = suppliersQuery.data?.find((s) => s.id === order.supplierId)
   const linkedInvoices = (invoicesQuery.data ?? []).filter((inv) => inv.purchaseOrderId === order.id)
-  const canReceive = order.status === 'approved' || order.status === 'sent' || order.status === 'partially_received'
+  // Bug fix (Purchasing module audit 2026-09-03): every action on this page
+  // used to gate on statuses ('pending_approval' | 'approved' | 'sent' |
+  // 'partially_received') the real imagecare.purchases.status enum can
+  // never hold (it's only draft | confirmed | cancelled | voided), so none
+  // of Approve / Reject / Mark sent / Receive goods could ever appear for a
+  // real order - a freshly created PO had no usable action at all besides
+  // Cancel. The real backend has a single real transition out of 'draft'
+  // (receiveStock(), called by both "Approve" and "Receive goods" - see
+  // approvePurchaseOrder()/recordGoodsReceipt() in purchasingService.ts),
+  // so every draft-stage action is now gated on the real 'draft' status.
+  const canReceive = order.status === 'draft'
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -86,7 +96,7 @@ export function PurchaseOrderDetailPage() {
         description={`${supplier?.name ?? 'Unknown supplier'} · ${formatCurrency(total, 'UGX')}`}
         action={
           <div className="flex flex-wrap gap-2">
-            {order.status === 'pending_approval' && (
+            {order.status === 'draft' && (
               <>
                 <Button variant="secondary" onClick={() => setIsRejectOpen(true)}>
                   <XCircle size={14} /> Reject
@@ -94,14 +104,14 @@ export function PurchaseOrderDetailPage() {
                 <Button
                   onClick={async () => {
                     await approveOrder.mutateAsync(order.id)
-                    showToast('Order approved.', 'success')
+                    showToast('Order approved, stock received.', 'success')
                   }}
                 >
                   <CheckCircle2 size={14} /> Approve
                 </Button>
               </>
             )}
-            {order.status === 'approved' && (
+            {order.status === 'draft' && (
               <Button
                 variant="secondary"
                 onClick={async () => {
@@ -174,9 +184,14 @@ export function PurchaseOrderDetailPage() {
               <li key={receipt.id} className="py-2.5 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-ink-900">{receipt.reference}</span>
-                  <span className="text-xs text-ink-500">
-                    {formatRelativeTime(receipt.receivedAt)} · {receipt.receivedByName}
-                  </span>
+                  {/* Bug fix (Purchasing module audit 2026-09-03): there is no
+                      separate goods-receipt record in the real schema -
+                      receiveStock() confirms the purchase itself, in one
+                      step, so "receipts" here are really just this order's
+                      own confirmed purchases. Shows when it was confirmed
+                      instead of fields (receivedAt/receivedByName) that
+                      only ever existed on the local mock shape. */}
+                  <span className="text-xs text-ink-500">{formatRelativeTime(receipt.updated_at)}</span>
                 </div>
                 <p className="mt-0.5 text-xs text-ink-500">{receipt.items.map((i) => `${i.quantityReceived}× ${i.productName}`).join(', ')}</p>
               </li>

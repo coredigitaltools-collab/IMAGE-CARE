@@ -11,7 +11,7 @@ import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } fr
 import type { UserContext } from '../../types/app';
 import type { Purchase, UUID } from '../../types/database';
 import { createAndPostPurchase, type CreatePurchaseInput } from '../business/businessEngine';
-import { purchasingEngine as realPurchasingEngine } from '../../engines';
+import { purchasingEngine as realPurchasingEngine, inventoryEngine as realInventoryEngine } from '../../engines';
 import type { EngineContext } from '../../engines/types';
 import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
@@ -59,7 +59,13 @@ export async function getPurchase(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('purchases')
-      .select('*, purchase_items(*), suppliers(name)')
+      // 'purchase_items' has two FKs into 'products' (the real
+      // purchase_items_product_id_fkey, plus a legacy composite
+      // fk_s2_purchase_items_biz_product) - an unqualified `products(...)`
+      // embed is ambiguous and PostgREST rejects it (PGRST201), the exact
+      // issue already documented and fixed the same way in
+      // inventoryEngine.ts's receiveFromPurchase()/deductForSale().
+      .select('*, purchase_items(*, products!purchase_items_product_id_fkey(name, sku)), suppliers(name)')
       .eq('id', purchaseId)
       .eq('business_id', ctx.business_id)
       .single();
@@ -85,8 +91,19 @@ export async function listPurchases(
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
     const offset = ((pagination.page ?? 1) - 1) * pageSize;
 
+    // Bug fix (Purchasing module audit 2026-09-03): this used to select
+    // plain '*' with no embed, while every consumer (RequisitionsPage,
+    // PurchaseOrdersPage, PurchaseOrderDetailPage) unconditionally reads
+    // `.items.length` / `.items.map(...)` / `.items.reduce(...)` on every
+    // row - `items` was always undefined here (only getPurchase() embedded
+    // purchase_items), so both pages threw a TypeError on the very first
+    // render and tripped the route error boundary ("Something went
+    // wrong."). Mirrors the identical fix already applied to
+    // inventoryReportsService's Fast/Slow Moving report. The `products`
+    // sub-embed (explicit FK hint - see getPurchase() above for why) lets
+    // line items show a real product name/SKU instead of nothing.
     let q = supabase.schema('imagecare').from('purchases')
-      .select('*', { count: 'exact' })
+      .select('*, purchase_items(*, products!purchase_items_product_id_fkey(name, sku)), suppliers(name)', { count: 'exact' })
       .eq('business_id', ctx.business_id)
       .is('deleted_at', null)
       .range(offset, offset + pageSize - 1)
@@ -285,9 +302,20 @@ export async function recordGoodsReceipt(
 export interface PurchaseDashboardKpis {
   total_orders: number; pending_orders: number; total_spend_month: number;
   outstanding_payables: number; openOrders: number; pendingApproval: number;
-  pendingReceipt: number; spendThisMonthUgx: number;
+  pendingReceipt: number; spendThisMonthUgx: number; overdueDeliveries: number;
 }
 
+// Bug fix (Purchasing module audit 2026-09-03): "Open orders" and "Pending
+// approval" used to both read the exact same number (every 'draft' row,
+// requisitions and priced orders alike, undifferentiated) - a bare
+// requisition (no supplier yet) and a real priced order awaiting receipt
+// are different things happening on this dashboard, so they're split by
+// whether a supplier has been assigned (mirrors the real distinction
+// RequisitionFormModal vs PurchaseOrderFormModal already draw - see
+// mapPurchaseToRequisition/mapPurchaseToOrder in usePurchasingData.ts).
+// `overdueDeliveries` was read by PurchaseDashboardPage.tsx but never
+// present on this object at all (always rendered as the literal text
+// "undefined") - added here from the real `due_date` column.
 export async function getPurchaseDashboardKpis(
   ctx: UserContext, branchId?: UUID
 ): Promise<ServiceResponse<PurchaseDashboardKpis>> {
@@ -296,21 +324,26 @@ export async function getPurchaseDashboardKpis(
     return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
   try {
     let q = supabase.schema('imagecare').from('purchases')
-      .select('status, total_amount, balance_due, purchase_date', { count: 'exact' })
+      .select('status, supplier_id, total_amount, balance_due, purchase_date, due_date', { count: 'exact' })
       .eq('business_id', ctx.business_id).is('deleted_at', null);
     if (branchId) q = q.eq('branch_id', branchId);
     const { data, error } = await q;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId });
-    const rows = (data ?? []) as Array<{ status: string; total_amount: number; balance_due: number; purchase_date: string }>;
+    const rows = (data ?? []) as Array<{ status: string; supplier_id: string | null; total_amount: number; balance_due: number; purchase_date: string; due_date: string | null }>;
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-    const pending = rows.filter(r => r.status === 'draft').length;
+    const now = new Date().toISOString();
+    const draftRows = rows.filter(r => r.status === 'draft');
+    const pendingApproval = draftRows.filter(r => !r.supplier_id).length; // bare requisitions, no supplier chosen yet
+    const openOrders = draftRows.filter(r => r.supplier_id).length; // priced orders, not yet received
     const spend   = rows.filter(r => r.purchase_date >= monthStart && r.status === 'confirmed').reduce((s, r) => s + r.total_amount, 0);
     const payable = rows.reduce((s, r) => s + (r.balance_due ?? 0), 0);
+    const overdueDeliveries = draftRows.filter(r => r.supplier_id && r.due_date && r.due_date < now).length;
     return serviceOk({
-      total_orders: rows.length, pending_orders: pending, total_spend_month: spend,
-      outstanding_payables: payable, openOrders: pending, pendingApproval: pending,
-      pendingReceipt: rows.filter(r => r.status === 'confirmed' && (r.balance_due ?? 0) > 0).length,
+      total_orders: rows.length, pending_orders: draftRows.length, total_spend_month: spend,
+      outstanding_payables: payable, openOrders, pendingApproval,
+      pendingReceipt: openOrders,
       spendThisMonthUgx: spend,
+      overdueDeliveries,
     }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId }); }
 }
@@ -357,4 +390,218 @@ export async function rejectPurchase(
   } catch (err) {
     return serviceFail('INTERNAL_ERROR', (err as Error).message ?? 'Failed to reject purchase.', { requestId });
   }
+}
+
+// Bug fix (Purchasing module audit 2026-09-03): "Convert to order" on a
+// requisition (RequisitionsPage.tsx) creates a brand-new priced purchase
+// row via createPurchaseOrder() - the original bare requisition row was
+// simply left sitting in 'draft' with nothing to say it had already been
+// turned into an order, so it kept reappearing in the Requisitions list
+// and could be converted again into a second, duplicate order. The real
+// status enum has no 'converted' value to record that distinctly (only
+// draft/confirmed/cancelled/voided), so - the same way rejectPurchase()
+// above records a rejection reason in `notes` rather than inventing a
+// column - this closes the original requisition out via the one real
+// terminal state a still-draft purchase can reach ('cancelled'), with a
+// clearly worded note (never "Rejected:", so it reads honestly in the UI
+// and audit log) identifying which order it became.
+export async function markRequisitionConverted(
+  ctx: UserContext,
+  requisitionId: UUID,
+  newPurchaseNumber: string,
+): Promise<ServiceResponse<void>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'purchases', 'edit'))
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to update requisitions.', { requestId });
+  try {
+    const purchaseResult = await getPurchase(ctx, requisitionId);
+    if (purchaseResult.error || !purchaseResult.data) return serviceFail('RESOURCE_NOT_FOUND', 'Requisition not found.', { requestId });
+    const purchase = purchaseResult.data;
+    if (purchase.status !== 'draft') {
+      // Already actioned (converted/rejected) - nothing to do, not an error.
+      return serviceOk(undefined, requestId);
+    }
+
+    const note = `Converted to purchase order ${newPurchaseNumber}`;
+    const { error } = await supabase.schema('imagecare').from('purchases').update({
+      status: 'cancelled' as const,
+      notes: purchase.notes ? `${purchase.notes} | ${note}` : note,
+      updated_at: new Date().toISOString(),
+    }).eq('id', requisitionId).eq('business_id', ctx.business_id);
+
+    if (error) return serviceFail('INTERNAL_ERROR', error.message, { requestId });
+    return serviceOk(undefined, requestId);
+  } catch (err) {
+    return serviceFail('INTERNAL_ERROR', (err as Error).message ?? 'Failed to update requisition.', { requestId });
+  }
+}
+
+// ============================================================
+// Purchase Returns
+// ============================================================
+// Root cause (Purchasing module audit 2026-09-03): the UI's "Record
+// return" action always threw "Purchase returns aren't available yet" -
+// the hook was a hardcoded stub with a comment claiming a dedicated
+// returns table doesn't exist in the Stage 4 DB. It doesn't, but the real
+// schema already has everything a purchase return needs: the
+// imagecare.inventory_movements table's movement_type enum has both
+// 'return_in' (stock coming back from a customer, already used by
+// reverseForSale() in inventoryEngine.ts) and 'return_out' (stock going
+// OUT back to a supplier) - the exact mechanism this workflow needs, sitting
+// unused. This reuses that real, already-working, already-audited
+// (checkAvailable / stock-derived-from-movements) mechanism rather than
+// inventing a new table or a fake success. Every line of a return is
+// grouped under one synthetic reference_id (inventory_movements has no
+// FK on reference_id, so this is safe) with reference_type
+// 'purchase_return'; since inventory_movements has no supplier_id column
+// and no returns-specific table exists to add one to without a schema
+// migration (out of scope for this fix), the supplier is recorded via a
+// small parseable prefix on `notes` - the same "reuse an existing
+// extensible column rather than add a new one" pattern already used
+// throughout this codebase for cancel reasons / closed-at timestamps
+// (see cancelBill/closeBill in creditService.ts).
+
+export interface PurchaseReturnItemInput {
+  product_id: UUID;
+  quantity: number;
+  unit_cost: number;
+}
+
+export interface CreatePurchaseReturnInput {
+  branch_id: UUID;
+  supplier_id: UUID;
+  purchase_id?: UUID | null;
+  reason: string;
+  items: PurchaseReturnItemInput[];
+}
+
+export interface PurchaseReturnRow {
+  id: string; // synthetic, = reference_id shared by every line of this return
+  reference: string;
+  supplierId: string;
+  purchaseOrderId: string | null;
+  items: Array<{ productId: string; productName: string; sku: string; quantity: number; unitCost: number }>;
+  reason: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+const RETURN_NOTE_PREFIX = '[purchase_return]';
+
+function encodeReturnNotes(supplierId: UUID, purchaseId: UUID | null | undefined, reason: string): string {
+  return `${RETURN_NOTE_PREFIX} supplier=${supplierId} purchase=${purchaseId ?? ''} :: ${reason.trim()}`;
+}
+
+function decodeReturnNotes(notes: string | null): { supplierId: string; purchaseId: string | null; reason: string } | null {
+  if (!notes || !notes.startsWith(RETURN_NOTE_PREFIX)) return null;
+  const match = notes.match(/^\[purchase_return\] supplier=([0-9a-f-]+) purchase=([0-9a-f-]*) :: ([\s\S]*)$/i);
+  if (!match) return null;
+  return { supplierId: match[1], purchaseId: match[2] || null, reason: match[3] };
+}
+
+export async function createPurchaseReturn(
+  ctx: UserContext,
+  input: CreatePurchaseReturnInput
+): Promise<ServiceResponse<{ return_id: UUID }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'purchases', 'edit')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to record purchase returns.', { requestId });
+  }
+  if (!input.items?.length) {
+    return serviceFail('INVALID_INPUT', 'A return must have at least one item.', { requestId });
+  }
+  if (!input.reason?.trim()) {
+    return serviceFail('INVALID_INPUT', 'A reason is required to record a return.', { requestId, field: 'reason' });
+  }
+  try {
+    const ectx = toEngineContext(ctx, input.branch_id);
+
+    // Validate every line has enough stock on hand before writing any
+    // movement, so a return with several lines can't fail halfway through
+    // and leave some products already deducted while others weren't.
+    for (const item of input.items) {
+      const check = await realInventoryEngine.checkAvailable(ectx, item.product_id, input.branch_id, item.quantity);
+      if (!check.ok) return serviceFail('BUSINESS_RULE_VIOLATION', check.error!.message, { requestId });
+    }
+
+    const returnId = uuidv4() as UUID;
+    const notes = encodeReturnNotes(input.supplier_id, input.purchase_id, input.reason);
+
+    for (const item of input.items) {
+      const result = await realInventoryEngine.recordMovement(ectx, {
+        branch_id:      input.branch_id,
+        product_id:     item.product_id,
+        movement_type:  'return_out',
+        quantity:       item.quantity,
+        unit_cost:      item.unit_cost,
+        reference_type: 'purchase_return',
+        reference_id:   returnId,
+        notes,
+      });
+      if (!result.ok) return serviceFail('INTERNAL_ERROR', result.error!.message, { requestId });
+    }
+
+    return serviceOk({ return_id: returnId }, requestId);
+  } catch (err) {
+    return serviceFail('INTERNAL_ERROR', (err as Error).message ?? 'Failed to record purchase return.', { requestId });
+  }
+}
+
+export async function listPurchaseReturns(ctx: UserContext): Promise<ServiceResponse<PurchaseReturnRow[]>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'purchases', 'view')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to view purchase returns.', { requestId });
+  }
+  try {
+    const { data, error } = await supabase
+      .schema('imagecare')
+      .from('inventory_movements')
+      // Same ambiguous-embed issue as purchase_items above -
+      // inventory_movements also has two FKs into products.
+      .select('id, product_id, quantity, unit_cost, reference_id, notes, moved_at, created_by, products!inventory_movements_product_id_fkey(name, sku)')
+      .eq('business_id', ctx.business_id)
+      .eq('movement_type', 'return_out')
+      .eq('reference_type', 'purchase_return')
+      .order('moved_at', { ascending: false });
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load purchase returns.', { requestId });
+
+    type Row = {
+      id: string; product_id: string; quantity: number; unit_cost: number;
+      reference_id: string | null; notes: string | null; moved_at: string; created_by: string | null;
+      // PostgREST returns a to-one embed as an array unless the FK column
+      // is unique/PK - normalize with `[0]` below rather than trusting the
+      // shape to be a bare object.
+      products: Array<{ name: string; sku: string }> | { name: string; sku: string } | null;
+    };
+
+    const grouped = new Map<string, PurchaseReturnRow>();
+    for (const row of ((data ?? []) as unknown) as Row[]) {
+      if (!row.reference_id) continue;
+      const decoded = decodeReturnNotes(row.notes);
+      const product = Array.isArray(row.products) ? row.products[0] : row.products;
+      let ret = grouped.get(row.reference_id);
+      if (!ret) {
+        ret = {
+          id: row.reference_id,
+          reference: `RET-${row.reference_id.slice(0, 8).toUpperCase()}`,
+          supplierId: decoded?.supplierId ?? '',
+          purchaseOrderId: decoded?.purchaseId ?? null,
+          items: [],
+          reason: decoded?.reason ?? '',
+          createdAt: row.moved_at,
+          createdBy: row.created_by ?? '',
+        };
+        grouped.set(row.reference_id, ret);
+      }
+      ret.items.push({
+        productId: row.product_id,
+        productName: product?.name ?? 'Unknown product',
+        sku: product?.sku ?? '',
+        quantity: Number(row.quantity),
+        unitCost: Number(row.unit_cost),
+      });
+    }
+
+    return serviceOk(Array.from(grouped.values()), requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load purchase returns.', { requestId }); }
 }

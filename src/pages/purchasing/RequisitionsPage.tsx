@@ -15,7 +15,6 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
 import { useProducts, useSuppliers } from '../../features/inventory/hooks/useInventoryData'
 import {
-  useApproveRequisition,
   useCreatePurchaseOrder,
   useCreateRequisition,
   useRejectRequisition,
@@ -33,7 +32,6 @@ export function RequisitionsPage() {
   const productsQuery = useProducts()
   const suppliersQuery = useSuppliers()
   const createRequisition = useCreateRequisition(user.id, user.name)
-  const approveRequisition = useApproveRequisition(user.id)
   const rejectRequisition = useRejectRequisition(user.id)
   const createOrder = useCreatePurchaseOrder(user.id)
 
@@ -87,22 +85,26 @@ export function RequisitionsPage() {
                       {req.requestedByName} · {formatRelativeTime(req.created_at)} · {req.items.length} item{req.items.length === 1 ? '' : 's'}
                     </p>
                   </div>
-                  {req.status === 'pending_approval' && (
+                  {/* Bug fix (Purchasing module audit 2026-09-03): these used to
+                      gate on 'pending_approval'/'approved' - statuses the real
+                      imagecare.purchases.status enum (draft/confirmed/cancelled/
+                      voided) can never hold, so a real requisition (always
+                      'draft' while it sits in this list) could never show either
+                      action. A bare requisition has no supplier or priced items
+                      yet (RequisitionFormModal never asks for either), so there
+                      is no real "approve" operation for it to perform on its own
+                      - "Convert to order" (choosing a supplier and pricing the
+                      items into a real purchase order) is the existing, working
+                      action that fills that role; only Reject and Convert are
+                      offered here, both gated on the real 'draft' status. */}
+                  {req.status === 'draft' && (
                     <div className="flex gap-2">
                       <Button variant="secondary" onClick={() => setRejectingReq(req)}>
                         Reject
                       </Button>
-                      <Button
-                        onClick={async () => {
-                          await approveRequisition.mutateAsync(req.id)
-                          showToast('Requisition approved.', 'success')
-                        }}
-                      >
-                        Approve
-                      </Button>
+                      <Button onClick={() => setConvertingReq(req)}>Convert to order</Button>
                     </div>
                   )}
-                  {req.status === 'approved' && <Button onClick={() => setConvertingReq(req)}>Convert to order</Button>}
                 </div>
                 <p className="mt-1.5 text-xs text-ink-500">{req.items.map((i) => `${i.quantity}× ${i.productName}`).join(', ')}</p>
                 {req.rejectionReason && <p className="mt-1 text-xs text-brand-red-700">Rejected: {req.rejectionReason}</p>}

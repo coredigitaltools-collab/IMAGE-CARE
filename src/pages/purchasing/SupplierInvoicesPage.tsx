@@ -19,7 +19,6 @@ import {
   useRecordInvoicePayment,
   useSupplierInvoices,
 } from '../../features/purchasing/hooks/usePurchasingData'
-import { PaymentExceedsInvoiceError } from '../../services/purchasingService'
 import type { SupplierInvoice } from '../../types/purchasing'
 
 const STATUS_TONE = { unpaid: 'danger', partially_paid: 'warning', paid: 'success', cancelled: 'neutral', closed: 'info' } as const
@@ -118,8 +117,8 @@ export function SupplierInvoicesPage() {
               await createInvoice.mutateAsync(input)
               showToast('Invoice recorded.', 'success')
               setIsAddOpen(false)
-            } catch {
-              setAddError("Recording a supplier invoice directly isn't available yet.")
+            } catch (err) {
+              setAddError(err instanceof Error ? err.message : 'Could not record this invoice.')
             }
           }}
         />
@@ -137,7 +136,7 @@ export function SupplierInvoicesPage() {
               showToast('Payment recorded.', 'success')
               setPayingInvoice(null)
             } catch (err) {
-              setPayError(err instanceof PaymentExceedsInvoiceError ? err.message : 'Could not record this payment.')
+              setPayError(err instanceof Error ? err.message : 'Could not record this payment.')
             }
           }}
         />
