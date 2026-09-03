@@ -195,8 +195,7 @@ export function InventoryReportsPage() {
                 </ul>
               </div>
               <p className="col-span-full text-xs text-ink-500">
-                Based on sale movements in the last 30 days. Until the Sales module is implemented, this will show 0 units for
-                everything, that's accurate, not a bug.
+                Based on sale movements in the last 30 days.
               </p>
             </div>
           ))}

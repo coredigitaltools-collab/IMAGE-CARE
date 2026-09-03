@@ -11,7 +11,8 @@ import {
 import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
 import { listBrands, createBrand, updateBrand, archiveBrand } from '../../../services/brandService';
 import type { UUID } from '../../../types/database';
-import type { Product as InventoryProduct, Supplier as InventorySupplier } from '../../../types/inventory';
+import type { Product as InventoryProduct, Supplier as InventorySupplier, StockMovementType } from '../../../types/inventory';
+import { convertFromUgx } from '../../../lib/currency';
 import type { SupportedCurrency } from '../../../lib/currency';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -351,8 +352,12 @@ export function useInventoryKpis(_currency?: SupportedCurrency) {
       const inv = await listInventory(ctx, { branch_id: branch ?? undefined }).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(inv) ? inv as any[] : [];
+      // Bug fix (Inventory save-button audit 2026-09-03): vw_stock_summary
+      // (the real view this reads from) has no is_low_stock column - only
+      // stock_status ('out_of_stock' | 'low_stock' | 'in_stock') - so this
+      // always counted 0 low-stock items regardless of real stock levels.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const low = items.filter((i: any) => i.is_low_stock).length;
+      const low = items.filter((i: any) => i.stock_status === 'low_stock').length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const oos = items.filter((i: any) => (i.quantity_on_hand ?? 0) <= 0).length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -391,13 +396,57 @@ export function useInventoryList(branchId?: UUID) {
   });
 }
 
+// Bug fix (Inventory save-button audit 2026-09-03): this used to hand
+// StockMovementsPage.tsx the raw inventory_movements rows (product_id,
+// movement_type, quantity, notes, moved_at) untranslated. The page reads
+// productId/type/quantityChange/reason/createdAt, none of which exist on a
+// raw row, so every row rendered as "Unknown product" with a blank type and
+// amount - and filtering to one product via the dropdown always matched
+// nothing (m.productId was always undefined), even though the movements
+// genuinely exist. Same translation useStockAdjustments() below already
+// does for the adjustments-only subset; factored out here so both share it.
+// imagecare.movement_type (the real DB enum) has 11 values; the UI's
+// StockMovementType only distinguishes 7. Mapped onto the closest UI
+// bucket rather than left untyped, so TYPE_TONE[m.type] in
+// StockMovementsPage.tsx stays a valid, typed lookup.
+const MOVEMENT_TYPE_MAP: Record<string, StockMovementType> = {
+  opening_stock: 'opening',
+  purchase: 'purchase',
+  sale: 'sale',
+  return_in: 'refund',
+  return_out: 'purchase_return',
+  adjustment_in: 'adjustment',
+  adjustment_out: 'adjustment',
+  transfer_in: 'transfer',
+  transfer_out: 'transfer',
+  damage: 'adjustment',
+  expiry: 'adjustment',
+};
+const MOVEMENT_OUT_TYPES = new Set(['sale', 'adjustment_out', 'transfer_out', 'return_out', 'damage', 'expiry']);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapMovement(m: any): { id: string; productId: string; type: StockMovementType; quantityChange: number; reason: string; createdAt: string } {
+  return {
+    id: m.id,
+    productId: m.product_id,
+    type: MOVEMENT_TYPE_MAP[m.movement_type] ?? 'adjustment',
+    quantityChange: MOVEMENT_OUT_TYPES.has(m.movement_type) ? -Number(m.quantity) : Number(m.quantity),
+    reason: m.notes ?? '',
+    createdAt: m.moved_at,
+  };
+}
+
 export function useInventoryMovements(productId?: UUID) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
   const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
     queryKey: ['inventory', 'movements', ctx.business_id, branchId, productId],
-    queryFn: () => getInventoryMovements(ctx, { product_id: productId, branch_id: branchId as UUID }).then(unwrap),
+    queryFn: async () => {
+      const rows = await getInventoryMovements(ctx, { product_id: productId, branch_id: branchId as UUID }, { page_size: 500 }).then(unwrap);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (Array.isArray(rows) ? rows as any[] : []).map(mapMovement);
+    },
     enabled: Boolean(branchId),
   });
 }
@@ -422,8 +471,15 @@ export function useLowStockItems(branchId?: UUID) {
   const branch = useActiveBranch();
   return useQuery({
     queryKey: ['inventory', 'low-stock', ctx.business_id, branchId ?? branch],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    queryFn: async () => { const inv = await listInventory(ctx, { branch_id: (branchId ?? branch) as string | undefined }).then(unwrap); return (Array.isArray(inv) ? inv : []).filter((i: any) => i.is_low_stock); },
+    queryFn: async () => {
+      const inv = await listInventory(ctx, { branch_id: (branchId ?? branch) as string | undefined }, { page_size: 500 }).then(unwrap);
+      // Bug fix (Inventory save-button audit 2026-09-03): vw_stock_summary
+      // has no is_low_stock column (only stock_status) - this always
+      // filtered out every row, so "Low Stock Alerts" on ReportsPage.tsx
+      // showed "All products adequately stocked" regardless of real stock.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (Array.isArray(inv) ? inv : []).filter((i: any) => i.stock_status === 'low_stock');
+    },
   });
 }
 
@@ -436,15 +492,176 @@ export function useInventoryValueTrend(_trendRange?: unknown, _currency?: unknow
   return useQuery({ queryKey: ['inventory', 'value-trend'], queryFn: async () => [] as Array<{ label: string; value: number }>, staleTime: 5 * 60_000 });
 }
 
-// Stubs
-export function useLowStockReport(branchId?: UUID) { return useLowStockItems(branchId); }
-export function useOutOfStockReport(branchId?: UUID) { return useLowStockItems(branchId); }
 export function useStockSummary(branchId?: UUID) { return useInventoryList(branchId); }
-export function useDeadStockReport(branchId?: UUID) { return useLowStockItems(branchId); }
-export function useFastSlowMovingReport(branchId?: UUID) { return useInventoryList(branchId); }
-export function useProfitabilityReport(branchId?: UUID) { return useInventoryList(branchId); }
-export function useStockLevelsReport(branchId?: UUID) { return useInventoryList(branchId); }
-export function useValuationReport(branchId?: UUID) { return useInventoryList(branchId); }
+
+// ---- Inventory Reports (Inventory > Reports tab) -------------
+// Bug fix (Inventory save-button audit 2026-09-03): all seven of these used
+// to be bare aliases onto useInventoryList()/useLowStockItems() - hooks
+// with a completely different shape (raw vw_stock_summary rows, or an
+// always-empty array thanks to the is_low_stock bug fixed above) than what
+// InventoryReportsPage.tsx actually renders: ValuationRow{product,
+// stockValue, potentialSaleValue}, DeadStockRow{product,
+// daysSinceLastMovement}, {fast,slow} MovementRankRow lists,
+// ProfitabilityRow{product,marginPercent,potentialProfit}. On top of the
+// shape mismatch, the page calls useValuationReport('UGX') and
+// useProfitabilityReport('UGX') - passing a currency code into hooks whose
+// stub signature expected a branch UUID, which Postgres then rejected
+// outright (invalid uuid syntax for a branch_id filter) - hence "No data"
+// on every tab. Fast/Slow Moving crashed outright: fastSlow.data?.fast.map
+// (...) - a plain array has no .fast property, so .map threw on undefined.
+// Each report below is real, computed from listProducts()/listInventory()
+// (vw_stock_summary, for current stock and stock_status) and, for the two
+// movement-history reports, getInventoryMovements().
+
+async function fetchActiveProducts(ctx: ReturnType<typeof useUserContext>): Promise<InventoryProduct[]> {
+  const [products, stockRows] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    listProducts(ctx).then(unwrap) as Promise<any[]>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    listInventory(ctx, {}, { page_size: 500 }).then(unwrap) as Promise<any[]>,
+  ]);
+  const stockByProduct = new Map<string, number>();
+  for (const row of Array.isArray(stockRows) ? stockRows : []) {
+    const key = row.product_id as string;
+    stockByProduct.set(key, (stockByProduct.get(key) ?? 0) + Number(row.quantity_on_hand ?? 0));
+  }
+  return (Array.isArray(products) ? products : [])
+    .map((p) => mapProduct({ ...p, currentStock: stockByProduct.get(p.id) ?? 0 }))
+    .filter((p) => p.status === 'active');
+}
+
+async function fetchAllMovements(ctx: ReturnType<typeof useUserContext>, branchId: UUID) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = await getInventoryMovements(ctx, { branch_id: branchId }, { page_size: 500 }).then(unwrap) as any[];
+  return Array.isArray(rows) ? rows : [];
+}
+
+export function useValuationReport(currency: SupportedCurrency = 'UGX') {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'valuation', ctx.business_id, currency],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products
+        .map((product) => ({
+          product,
+          stockValue: convertFromUgx(product.buyingPrice * product.currentStock, currency),
+          potentialSaleValue: convertFromUgx(product.sellingPrice * product.currentStock, currency),
+        }))
+        .sort((a, b) => b.stockValue - a.stockValue);
+    },
+  });
+}
+
+export function useStockLevelsReport() {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'stock-levels', ctx.business_id],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return [...products].sort((a, b) => a.name.localeCompare(b.name));
+    },
+  });
+}
+
+export function useLowStockReport() {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'low-stock', ctx.business_id],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products
+        .filter((p) => p.currentStock > 0 && p.currentStock <= p.reorderLevel)
+        .sort((a, b) => a.currentStock - b.currentStock);
+    },
+  });
+}
+
+export function useOutOfStockReport() {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'out-of-stock', ctx.business_id],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products.filter((p) => p.currentStock <= 0);
+    },
+  });
+}
+
+export function useDeadStockReport(windowDays = 30) {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'dead-stock', ctx.business_id, branchId, windowDays],
+    queryFn: async () => {
+      const [products, movements] = await Promise.all([
+        fetchActiveProducts(ctx),
+        branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
+      ]);
+      return products
+        .filter((p) => p.currentStock > 0)
+        .map((product) => {
+          const productMoves = movements
+            .filter((m) => m.product_id === product.id && m.movement_type !== 'opening_stock')
+            .sort((a, b) => new Date(b.moved_at).getTime() - new Date(a.moved_at).getTime());
+          const last = productMoves[0];
+          const daysSinceLastMovement = last
+            ? Math.floor((Date.now() - new Date(last.moved_at).getTime()) / 86_400_000)
+            : null;
+          return { product, daysSinceLastMovement };
+        })
+        .filter((row) => row.daysSinceLastMovement === null || row.daysSinceLastMovement >= windowDays)
+        .sort((a, b) => (b.daysSinceLastMovement ?? Infinity) - (a.daysSinceLastMovement ?? Infinity));
+    },
+  });
+}
+
+export function useFastSlowMovingReport(windowDays = 30) {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'fast-slow', ctx.business_id, branchId, windowDays],
+    queryFn: async () => {
+      const [products, movements] = await Promise.all([
+        fetchActiveProducts(ctx),
+        branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
+      ]);
+      const cutoff = Date.now() - windowDays * 86_400_000;
+      const rows = products.map((product) => {
+        const unitsMoved = movements
+          .filter((m) => m.product_id === product.id && m.movement_type === 'sale' && new Date(m.moved_at).getTime() >= cutoff)
+          .reduce((sum, m) => sum + Math.abs(Number(m.quantity)), 0);
+        return { product, unitsMoved };
+      });
+      const sorted = [...rows].sort((a, b) => b.unitsMoved - a.unitsMoved);
+      return { fast: sorted.slice(0, 10), slow: [...sorted].reverse().slice(0, 10) };
+    },
+  });
+}
+
+export function useProfitabilityReport(currency: SupportedCurrency = 'UGX') {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'profitability', ctx.business_id, currency],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products
+        .map((product) => {
+          const margin = product.sellingPrice > 0
+            ? ((product.sellingPrice - product.buyingPrice) / product.sellingPrice) * 100
+            : 0;
+          return {
+            product,
+            marginPercent: Math.round(margin * 10) / 10,
+            potentialProfit: convertFromUgx((product.sellingPrice - product.buyingPrice) * product.currentStock, currency),
+          };
+        })
+        .sort((a, b) => b.potentialProfit - a.potentialProfit);
+    },
+  });
+}
 // 2026-09-02: this used to be a bare alias to useCreateProduct, which
 // expects a full ProductInput object - but both call sites
 // (ProductsListPage/ProductDetailPage) call .mutateAsync(product.id), a
@@ -502,6 +719,15 @@ export function useCreateUnit(_userId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
   });
 }
+// Bug fix (Inventory save-button audit 2026-09-03): StockAdjustmentModal.tsx
+// (the only caller) submits {productId, quantityChange, reason} -
+// quantityChange already signed (positive = stock in, negative = stock
+// out). This used to read input.quantity/input.direction instead, neither
+// of which exist on that shape, so the computed quantity was always 0 -
+// and createStockAdjustment() correctly rejects a zero quantity as
+// invalid every time. That's why "Record adjustment" never worked,
+// regardless of what was entered. input.quantity/input.direction kept as
+// a fallback in case anything else ever calls this with that older shape.
 export function useCreateAdjustment(_userId?: string) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
@@ -511,7 +737,12 @@ export function useCreateAdjustment(_userId?: string) {
     mutationFn: async (input: any) => createStockAdjustment(ctx, {
       branch_id: (input.branch_id ?? input.branchId ?? branch ?? ctx.branch_id) as UUID,
       product_id: (input.product_id ?? input.productId) as UUID,
-      quantity: (() => { const qty = Math.abs(input.quantity ?? input.adjustmentQuantity ?? 0); const isOut = input.direction === 'out' || input.type === 'damage' || input.type === 'loss'; return isOut ? -qty : qty; })(),
+      quantity: (() => {
+        if (typeof input.quantityChange === 'number') return input.quantityChange;
+        const qty = Math.abs(input.quantity ?? input.adjustmentQuantity ?? 0);
+        const isOut = input.direction === 'out' || input.type === 'damage' || input.type === 'loss';
+        return isOut ? -qty : qty;
+      })(),
       reason: input.reason ?? input.type ?? 'Manual adjustment',
       notes: input.notes ?? undefined,
     }).then(unwrap),
