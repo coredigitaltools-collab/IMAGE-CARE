@@ -162,8 +162,14 @@ export function PurchaseOrderDetailPage() {
             <li key={item.productId} className="flex items-center justify-between gap-3 py-2.5 text-sm">
               <div className="min-w-0">
                 <p className="truncate font-medium text-ink-900">{item.productName}</p>
+                {/* Bug fix (2026-09-03 human-testing round): "Qty" and
+                    "Price" were never labelled as such here - just bare
+                    numbers in a sentence ("X of Y received", "cost each")
+                    that a real user reported not being able to make sense
+                    of. Values and the calculation are unchanged, only the
+                    wording is clearer now. */}
                 <p className="text-xs text-ink-500">
-                  {item.sku} · {item.quantityReceived} of {item.quantityOrdered} received · {formatCurrency(item.unitCost, 'UGX')} each
+                  {item.sku} · Qty: {item.quantityOrdered} ({item.quantityReceived} received) · Price: {formatCurrency(item.unitCost, 'UGX')} each
                 </p>
               </div>
               <p className="shrink-0 font-medium text-ink-900">{formatCurrency(item.quantityOrdered * item.unitCost, 'UGX')}</p>

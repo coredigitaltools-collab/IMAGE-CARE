@@ -34,6 +34,25 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
 
   const relatedOrders = orders.filter((o) => o.supplierId === supplierId && o.status !== 'draft' && o.status !== 'cancelled')
 
+  // Bug fix (2026-09-03 human-testing round): picking a related purchase
+  // order used to do nothing but store its id - the user still had to
+  // work out and type the amount themselves even though the order already
+  // has real priced line items. This pulls the order's own total (same
+  // calculation PurchaseOrderDetailPage.tsx uses) into the Amount field
+  // the moment an order is selected, so the invoice starts from the
+  // order's real numbers instead of a blank form. It stays a normal,
+  // editable field afterward - the supplier's actual invoice can
+  // legitimately differ (shipping, rounding, a partial bill), so this
+  // fills in a starting point rather than locking the figure.
+  const handleSelectOrder = (orderId: string) => {
+    setPurchaseOrderId(orderId)
+    const order = relatedOrders.find((o) => o.id === orderId)
+    if (order) {
+      const orderTotal = order.items.reduce((sum, i) => sum + i.quantityOrdered * i.unitCost, 0)
+      setAmount(orderTotal)
+    }
+  }
+
   const handleSubmit = async () => {
     setIsSubmitting(true)
     try {
@@ -108,7 +127,7 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
           <select
             id="inv-po"
             value={purchaseOrderId}
-            onChange={(e) => setPurchaseOrderId(e.target.value)}
+            onChange={(e) => handleSelectOrder(e.target.value)}
             className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             <option value="">None</option>
@@ -118,6 +137,9 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
               </option>
             ))}
           </select>
+          {purchaseOrderId && (
+            <p className="mt-1 text-xs text-ink-500">Amount below was filled in from this order's total - adjust it if the supplier billed a different amount.</p>
+          )}
         </div>
         <div>
           <label htmlFor="inv-number" className="mb-1.5 block text-sm font-medium text-ink-700">

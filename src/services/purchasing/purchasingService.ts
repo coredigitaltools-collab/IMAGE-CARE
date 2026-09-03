@@ -59,13 +59,20 @@ export async function getPurchase(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('purchases')
-      // 'purchase_items' has two FKs into 'products' (the real
-      // purchase_items_product_id_fkey, plus a legacy composite
-      // fk_s2_purchase_items_biz_product) - an unqualified `products(...)`
-      // embed is ambiguous and PostgREST rejects it (PGRST201), the exact
-      // issue already documented and fixed the same way in
-      // inventoryEngine.ts's receiveFromPurchase()/deductForSale().
-      .select('*, purchase_items(*, products!purchase_items_product_id_fkey(name, sku)), suppliers(name)')
+      // Root cause (2026-09-03 human-testing round): 'purchase_items' ALSO
+      // has two FKs back into 'purchases' itself (the real
+      // purchase_items_purchase_id_fkey, plus a legacy composite
+      // fk_s2_purchase_items_biz_purchase) - one level up from the
+      // products ambiguity already fixed below. Disambiguating only the
+      // inner `products` embed still left the outer `purchase_items` embed
+      // itself ambiguous, so PostgREST returned HTTP 300 ("Multiple
+      // Choices" / PGRST201) for this entire query - confirmed live via
+      // Supabase's edge logs. supabase-js surfaces that as `error`, and
+      // since a 300 isn't a thrown exception, it silently produced an
+      // empty list rather than a visible failure: a real Order was
+      // present in the database the whole time, the query to read it back
+      // was simply erroring out. Both embeds now name their FK explicitly.
+      .select('*, purchase_items!purchase_items_purchase_id_fkey(*, products!purchase_items_product_id_fkey(name, sku)), suppliers(name)')
       .eq('id', purchaseId)
       .eq('business_id', ctx.business_id)
       .single();
@@ -102,8 +109,20 @@ export async function listPurchases(
     // inventoryReportsService's Fast/Slow Moving report. The `products`
     // sub-embed (explicit FK hint - see getPurchase() above for why) lets
     // line items show a real product name/SKU instead of nothing.
+    //
+    // Root cause (2026-09-03 human-testing round): this fix was incomplete
+    // - 'purchase_items' also has two FKs back into 'purchases' itself
+    // (purchase_items_purchase_id_fkey, plus a legacy composite
+    // fk_s2_purchase_items_biz_purchase), so the outer `purchase_items`
+    // embed was ALSO ambiguous even after the inner `products` embed was
+    // fixed. PostgREST returned HTTP 300 for this whole query (confirmed
+    // live via Supabase's edge logs) - a newly created order really was
+    // saved to the database, but this query to list it back was silently
+    // erroring, which the pages below rendered as "No purchase orders
+    // yet" / "No requisitions yet" rather than a visible error. See
+    // getPurchase() above for the identical fix.
     let q = supabase.schema('imagecare').from('purchases')
-      .select('*, purchase_items(*, products!purchase_items_product_id_fkey(name, sku)), suppliers(name)', { count: 'exact' })
+      .select('*, purchase_items!purchase_items_purchase_id_fkey(*, products!purchase_items_product_id_fkey(name, sku)), suppliers(name)', { count: 'exact' })
       .eq('business_id', ctx.business_id)
       .is('deleted_at', null)
       .range(offset, offset + pageSize - 1)
@@ -247,10 +266,13 @@ export async function recordGoodsReceipt(
   if (!canDo(ctx, 'purchases', 'edit'))
     return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
   try {
+    // Same ambiguous-embed issue as listPurchases()/getPurchase() above -
+    // 'purchase_items' has two FKs back into 'purchases', so this embed
+    // needs the same explicit FK hint or it errors with PGRST201/HTTP 300.
     const { data: purchase, error: loadErr } = await supabase
       .schema('imagecare')
       .from('purchases')
-      .select('id, notes, purchase_items(product_id, quantity)')
+      .select('id, notes, purchase_items!purchase_items_purchase_id_fkey(product_id, quantity)')
       .eq('id', purchaseId)
       .eq('business_id', ctx.business_id)
       .single();
