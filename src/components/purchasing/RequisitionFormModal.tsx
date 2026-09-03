@@ -16,9 +16,23 @@ export function RequisitionFormModal({ products, onClose, onSubmit }: Requisitio
   const [rows, setRows] = useState<LineItemRow[]>(products[0] ? [{ productId: products[0].id, quantity: 1 }] : [])
   const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Bug fix (2026-09-03, "requisition is not recording"): this form used to
+  // have no way to show a failed save at all - if onSubmit rejected for any
+  // reason (permission error, network error, backend validation), the
+  // button just silently reset to "Submit for approval" with nothing on
+  // screen to explain why. A user testing this reported exactly that
+  // symptom. Live data confirmed their requisitions actually WERE saved to
+  // the database both times (the real bug was a separate list-loading issue
+  // that has been fixed separately) - but this form still had no way to
+  // surface a genuine failure if one occurred, unlike every other
+  // Purchasing modal (SupplierInvoiceModal, GoodsReceiptModal, etc.), which
+  // all show a submitError message. This brings this form in line with
+  // those.
+  const [submitError, setSubmitError] = useState<string | undefined>()
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setSubmitError(undefined)
     try {
       await onSubmit(
         rows
@@ -29,6 +43,8 @@ export function RequisitionFormModal({ products, onClose, onSubmit }: Requisitio
           }),
         notes,
       )
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Could not submit this requisition. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -54,6 +70,7 @@ export function RequisitionFormModal({ products, onClose, onSubmit }: Requisitio
             className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
+        {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
