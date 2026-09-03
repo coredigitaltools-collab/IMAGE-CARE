@@ -13,12 +13,18 @@ import { useBusinessProfile, useSaveBusinessProfile } from '../../features/setti
 import { SUPPORTED_CURRENCIES } from '../../lib/currency'
 
 // Validation per IMP-002: business name is required.
+// Field names below match the REAL persisted shape (imagecare.businesses:
+// name/phone/email/address/currency, see settingsService.ts's
+// BusinessProfile interface) - a prior version of this form used
+// businessName/contactEmail/contactPhone/defaultCurrency, which PostgREST
+// silently dropped on save since no such columns exist. Fixed 2026-09-02
+// (save-button audit).
 const schema = z.object({
-  businessName: z.string().trim().min(1, 'Business name is required.'),
-  contactEmail: z.string().trim().email('Enter a valid email address.').or(z.literal('')),
-  contactPhone: z.string().trim(),
+  name: z.string().trim().min(1, 'Business name is required.'),
+  email: z.string().trim().email('Enter a valid email address.').or(z.literal('')),
+  phone: z.string().trim(),
   address: z.string().trim(),
-  defaultCurrency: z.string().min(1),
+  currency: z.string().min(1),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -37,12 +43,24 @@ export function BusinessProfilePage() {
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   useEffect(() => {
-    if (profileQuery.data) reset(profileQuery.data)
+    if (profileQuery.data) {
+      reset({
+        name: profileQuery.data.name ?? '',
+        email: profileQuery.data.email ?? '',
+        phone: profileQuery.data.phone ?? '',
+        address: profileQuery.data.address ?? '',
+        currency: profileQuery.data.currency ?? SUPPORTED_CURRENCIES[0],
+      })
+    }
   }, [profileQuery.data, reset])
 
   const onSubmit = handleSubmit(async (values) => {
-    await saveMutation.mutateAsync(values)
-    showToast('Business profile saved.', 'success')
+    try {
+      await saveMutation.mutateAsync(values)
+      showToast('Business profile saved.', 'success')
+    } catch {
+      showToast('Unable to save. Please try again.')
+    }
   })
 
   return (
@@ -58,23 +76,23 @@ export function BusinessProfilePage() {
           </div>
         ) : (
           <form onSubmit={onSubmit} className="space-y-4">
-            <FormField label="Business name" {...register('businessName')} error={errors.businessName?.message} />
+            <FormField label="Business name" {...register('name')} error={errors.name?.message} />
             <FormField
               label="Contact email"
               type="email"
-              {...register('contactEmail')}
-              error={errors.contactEmail?.message}
+              {...register('email')}
+              error={errors.email?.message}
             />
-            <FormField label="Contact phone" {...register('contactPhone')} error={errors.contactPhone?.message} />
+            <FormField label="Contact phone" {...register('phone')} error={errors.phone?.message} />
             <FormField label="Address" {...register('address')} error={errors.address?.message} />
 
             <div>
-              <label htmlFor="defaultCurrency" className="mb-1.5 block text-sm font-medium text-ink-700">
+              <label htmlFor="currency" className="mb-1.5 block text-sm font-medium text-ink-700">
                 Default currency
               </label>
               <select
-                id="defaultCurrency"
-                {...register('defaultCurrency')}
+                id="currency"
+                {...register('currency')}
                 className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
               >
                 {SUPPORTED_CURRENCIES.map((c) => (

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Merge } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { formatCurrency } from '../../lib/format'
 import type { Customer } from '../../types/sales'
 
 interface MergeCustomerModalProps {
@@ -58,8 +59,8 @@ export function MergeCustomerModal({ source, candidates, onClose, onMerge }: Mer
                 Loyalty points: {target.loyaltyPoints} + {source.loyaltyPoints} = {target.loyaltyPoints + source.loyaltyPoints}
               </li>
               <li>
-                Credit balance: {target.creditBalance.toLocaleString()} + {source.creditBalance.toLocaleString()} ={' '}
-                {(target.creditBalance + source.creditBalance).toLocaleString()} UGX
+                Credit balance: {formatCurrency(target.creditBalance, 'UGX')} + {formatCurrency(source.creditBalance, 'UGX')} ={' '}
+                {formatCurrency(target.creditBalance + source.creditBalance, 'UGX')}
               </li>
               <li>All of "{source.name}"'s past sales will now show under "{target.name}".</li>
             </ul>

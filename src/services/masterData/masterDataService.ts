@@ -313,6 +313,84 @@ export async function getCustomer(
   }
 }
 
+// 2026-09-03: customer and supplier writes used to spread the caller's form
+// object straight into the insert/update ({ ...input }). The forms are
+// camelCase app-shape objects (creditLimit, contactName, status,
+// dateOfBirth, ...) and react-hook-form also carries every default value it
+// was seeded with (id, created_at, sync_status, ...), so PostgREST was
+// handed keys that are not columns on imagecare.customers /
+// imagecare.suppliers and rejected the whole statement - creating a
+// customer or a supplier failed 100% of the time. These two whitelists are
+// the translation layer: only real columns are ever sent, anything without
+// a column is dropped rather than passed through, and an absent optional
+// key is simply left out so no optional field can block a save.
+type WriteInput = Record<string, unknown>;
+
+function firstDefined(...values: unknown[]): unknown {
+  for (const value of values) if (value !== undefined) return value;
+  return undefined;
+}
+
+// Real columns on imagecare.customers (see 0005_stage2_parties.sql).
+// Deliberately dropped, because no column exists to hold them:
+//   status ('active' | 'vip' | 'blacklisted' - is_active is only a boolean,
+//     it cannot represent vip/blacklisted, so this stays UI-only),
+//   dateOfBirth, preferredBranchId, preferredPaymentMethod.
+// Also dropped: credit_balance / loyaltyPoints / lifetimePurchases, which
+// are derived server-side and must never be written from a form.
+function toCustomerRow(input: WriteInput | undefined): WriteInput {
+  const src = input ?? {};
+  const row: WriteInput = {};
+  const set = (column: string, value: unknown) => { if (value !== undefined) row[column] = value; };
+
+  set('name', src.name);
+  set('code', src.code);
+  set('phone', src.phone);
+  set('email', src.email);
+  set('address', src.address);
+  set('tin', src.tin);
+  set('notes', src.notes);
+  set('tags', src.tags);
+  set('metadata', src.metadata);
+  set('branch_id', firstDefined(src.branch_id, src.branchId));
+  set('credit_limit', firstDefined(src.credit_limit, src.creditLimit));
+  set('is_active', firstDefined(src.is_active, src.isActive));
+
+  return row;
+}
+
+// Real columns on imagecare.suppliers (see 0005_stage2_parties.sql).
+// contactName -> contact_person. The supplier form's Active/Inactive select
+// has no `status` column to land in, but is_active is exactly that toggle
+// with exactly those two states, so it is translated rather than dropped -
+// otherwise the control in the form would silently do nothing. Archive /
+// reactivate keep writing is_active directly, unchanged.
+function toSupplierRow(input: WriteInput | undefined): WriteInput {
+  const src = input ?? {};
+  const row: WriteInput = {};
+  const set = (column: string, value: unknown) => { if (value !== undefined) row[column] = value; };
+
+  set('name', src.name);
+  set('code', src.code);
+  set('contact_person', firstDefined(src.contact_person, src.contactName));
+  set('phone', src.phone);
+  set('email', src.email);
+  set('address', src.address);
+  set('tin', src.tin);
+  set('notes', src.notes);
+  set('tags', src.tags);
+  set('metadata', src.metadata);
+  set('branch_id', firstDefined(src.branch_id, src.branchId));
+  set('payment_terms', firstDefined(src.payment_terms, src.paymentTerms));
+  set('credit_limit', firstDefined(src.credit_limit, src.creditLimit));
+  set('is_active', firstDefined(
+    src.is_active,
+    src.status === 'active' ? true : src.status === 'inactive' ? false : undefined,
+  ));
+
+  return row;
+}
+
 export async function createCustomer(
   ctx: UserContext,
   input: Omit<Customer, 'id' | 'business_id' | 'credit_balance' | 'created_at' | 'updated_at' | 'deleted_at'>
@@ -325,7 +403,7 @@ export async function createCustomer(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('customers')
-      .insert({ ...input, business_id: ctx.business_id, credit_balance: 0 })
+      .insert({ ...toCustomerRow(input as WriteInput), business_id: ctx.business_id, credit_balance: 0 })
       .select()
       .single();
 
@@ -349,7 +427,7 @@ export async function updateCustomer(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('customers')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...toCustomerRow(updates as WriteInput), updated_at: new Date().toISOString() })
       .eq('id', customerId)
       .eq('business_id', ctx.business_id)
       .select()
@@ -427,7 +505,7 @@ export async function createSupplier(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('suppliers')
-      .insert({ ...input, business_id: ctx.business_id, outstanding: 0 })
+      .insert({ ...toSupplierRow(input as WriteInput), business_id: ctx.business_id, outstanding: 0 })
       .select()
       .single();
 
@@ -454,7 +532,7 @@ export async function updateSupplier(
   if (!canDo(ctx, 'suppliers', 'edit')) return fail({ code: 'PERMISSION_DENIED', message: 'Permission denied.' });
   try {
     const { data, error } = await supabase.schema('imagecare').from('suppliers')
-      .update({ ...input, updated_at: new Date().toISOString() })
+      .update({ ...toSupplierRow(input as WriteInput), updated_at: new Date().toISOString() })
       .eq('id', supplierId).eq('business_id', ctx.business_id).select().single();
     if (error) return fail(parseError(error));
     return ok(data as Supplier);
@@ -644,6 +722,30 @@ export async function archiveCategory(
       .eq('id', categoryId).eq('business_id', ctx.business_id);
     if (error) return fail(parseError(error));
     return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+// 2026-09-02: useMergeCategories used to be a complete no-op
+// (`mutationFn: async ({ sourceId: _s, targetId: _t }) => ({})`) that
+// discarded both ids and did nothing, while CategoriesPage still showed
+// "Merged into X." regardless - a fabricated success on every call. Real
+// merge: reassign every product pointing at the source category to the
+// target, then archive the now-empty source (same real archiveCategory
+// used everywhere else). If reassignment fails, the source is deliberately
+// left un-archived rather than archived-with-orphaned-products.
+export async function mergeCategories(
+  ctx: UserContext,
+  sourceId: UUID,
+  targetId: UUID
+): Promise<ApiResult<void>> {
+  try {
+    const { error: reassignError } = await supabase.schema('imagecare').from('products')
+      .update({ category_id: targetId, updated_at: new Date().toISOString() })
+      .eq('category_id', sourceId)
+      .eq('business_id', ctx.business_id);
+    if (reassignError) return fail(parseError(reassignError));
+
+    return archiveCategory(ctx, sourceId);
   } catch (err) { return fail(parseError(err)); }
 }
 

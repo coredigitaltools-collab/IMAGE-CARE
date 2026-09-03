@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { NumberField } from '../ui/NumberField'
+import { formatCurrency } from '../../lib/format'
 import { PayComponentTypeFormModal } from './PayComponentTypeFormModal'
 import { useCreateComponentType } from '../../features/payroll/hooks/usePayrollData'
 import type { PayComponentType } from '../../types/payroll'
@@ -74,7 +75,7 @@ export function AssignComponentModal({ kind, availableTypes, userId, onClose, on
             >
               {availableTypes.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.isPercentageOfBase ? `${t.amount}% of base` : `UGX ${t.amount.toLocaleString()}`})
+                  {t.name} ({t.isPercentageOfBase ? `${t.amount}% of base` : formatCurrency(t.amount, 'UGX')})
                 </option>
               ))}
             </select>

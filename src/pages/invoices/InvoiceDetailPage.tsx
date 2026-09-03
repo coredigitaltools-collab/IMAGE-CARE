@@ -109,7 +109,7 @@ export function InvoiceDetailPage() {
 
       <Card className="p-6">
         {settings?.showLogo !== false && (
-          <p className="mb-1 text-center text-base font-bold text-ink-900">{businessProfileQuery.data?.businessName ?? 'ImageCare'}</p>
+          <p className="mb-1 text-center text-base font-bold text-ink-900">{businessProfileQuery.data?.name ?? 'ImageCare'}</p>
         )}
         <p className="text-center text-xs text-ink-500">Invoice {invoice.invoiceNumber}</p>
         <p className="text-center text-xs text-ink-500">{new Date(invoice.issuedAt).toLocaleDateString('en-UG')}</p>

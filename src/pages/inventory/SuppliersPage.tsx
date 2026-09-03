@@ -22,14 +22,20 @@ export function SuppliersPage() {
   const [modalState, setModalState] = useState<{ mode: 'create' } | { mode: 'edit'; supplier: Supplier } | null>(null)
 
   const handleSubmit = async (input: SupplierInput) => {
-    if (modalState?.mode === 'edit') {
-      await updateSupplier.mutateAsync({ id: modalState.supplier.id, input })
-      showToast('Supplier updated.', 'success')
-    } else {
-      await createSupplier.mutateAsync(input)
-      showToast('Supplier added.', 'success')
+    // Same missing-handler problem as the inline add on Supplier Invoices:
+    // a rejected save was an unhandled promise rejection with no feedback.
+    try {
+      if (modalState?.mode === 'edit') {
+        await updateSupplier.mutateAsync({ id: modalState.supplier.id, input })
+        showToast('Supplier updated.', 'success')
+      } else {
+        await createSupplier.mutateAsync(input)
+        showToast('Supplier added.', 'success')
+      }
+      setModalState(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this supplier.')
     }
-    setModalState(null)
   }
 
   return (

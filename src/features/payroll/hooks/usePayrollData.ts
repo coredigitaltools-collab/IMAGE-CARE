@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as payrollService from '../../../services/payrollService'
+import * as payrollPeriodService from '../../../services/payroll/payrollPeriodService'
 import { useUserContext } from '../../../context/AppContext'
-import { getPayroll, listPayroll, approvePayroll, processPayrollPayment } from '../../../services/financial/financialServices'
-import type { PayComponentTypeInput, PayrollEmployeeInput, PayrollPeriod, PayrollPeriodStatus } from '../../../types/payroll'
-import type { PayrollRecord, UUID } from '../../../types/database'
+import { listPayroll } from '../../../services/financial/financialServices'
+import { APP_CONSTANTS } from '../../../config/env'
+import type { PayComponentTypeInput, PayrollEmployeeInput } from '../../../types/payroll'
+import type { PayrollRecord } from '../../../types/database'
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['payroll'] })
@@ -19,50 +21,23 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
   return d
 }
 
-// The real imagecare.payroll table is flat: one row per employee per
-// pay period (see its migration comment), with only 4 statuses
-// ('pending'|'approved'|'paid'|'cancelled'). The legacy UI models a
-// two-level "period" concept with 5 statuses (draft/calculated/
-// approved/paid/archived) tracking calculation + payslip generation
-// separately from approval. There is no real backend concept of
-// "calculated" or "payslips generated" (see docs/MODULE_INTEGRATION_MAP.md
-// gap), so a real row is mapped onto the closest PayrollPeriod shape:
-// pending -> calculated (ready to approve, matching approvePayroll's
-// pending->approved precondition), approved/paid/cancelled map directly
-// (cancelled shown as archived).
-function mapStatus(status: PayrollRecord['status']): PayrollPeriodStatus {
-  switch (status) {
-    case 'pending':
-      return 'calculated'
-    case 'approved':
-      return 'approved'
-    case 'paid':
-      return 'paid'
-    case 'cancelled':
-      return 'archived'
-    default:
-      return 'draft'
-  }
-}
-
-function mapRecordToPeriod(r: PayrollRecord): PayrollPeriod {
-  const status = mapStatus(r.status)
-  return {
-    id: r.id,
-    reference: r.payroll_number,
-    startDate: r.pay_period_start,
-    endDate: r.pay_period_end,
-    status,
-    calculatedAt: r.created_at,
-    approvedAt: status === 'approved' || status === 'paid' || status === 'archived' ? r.updated_at : null,
-    approvedByName: null,
-    payslipsGeneratedAt: status === 'approved' || status === 'paid' || status === 'archived' ? r.updated_at : null,
-    paidAt: status === 'paid' || status === 'archived' ? r.updated_at : null,
-    archivedAt: status === 'archived' ? r.updated_at : null,
-    createdAt: r.created_at,
-    createdBy: r.user_id,
-  }
-}
+// PERIOD LIFECYCLE: fully real, on imagecare.payroll.
+//
+// A period is the set of imagecare.payroll rows sharing
+// business_id + pay_period_start + pay_period_end (there is no
+// payroll_periods table and none is invented). Create inserts one real
+// row per active employee, costed from that employee's real
+// imagecare.users.salary; Calculate re-costs those rows from the
+// current salaries; Approve and Record payment delegate to the already
+// real approvePayroll()/processPayrollPayment(); Generate payslips and
+// Archive are real updates on the same rows. See
+// services/payroll/payrollPeriodService.ts for the full status model.
+//
+// Still local, and deliberately out of scope here: the payroll employee
+// register, the allowance/deduction catalogue and its per-employee
+// assignments. Those have no table in the real schema at all (see
+// docs/MODULE_INTEGRATION_MAP.md gap), which is why the real rows carry
+// zero allowances/deductions rather than invented ones.
 
 // ---------- Employees ----------
 
@@ -161,81 +136,93 @@ export function useRemoveAssignment() {
 
 // ---------- Periods ----------
 
+// REAL: imagecare.payroll rows grouped into periods.
 export function usePayrollPeriods() {
   const ctx = useUserContext()
-  return useQuery({
-    queryKey: ['payroll', 'periods', ctx.business_id],
-    queryFn: () =>
-      listPayroll(ctx, {})
-        .then(unwrap)
-        .then((items: PayrollRecord[]) => items.map(mapRecordToPeriod)),
-  })
+  return useQuery({ queryKey: ['payroll', 'periods', ctx.business_id], queryFn: () => payrollPeriodService.listPeriods(ctx) })
 }
 
+// REAL: imagecare.payroll
 export function usePayrollPeriod(id: string | undefined) {
   const ctx = useUserContext()
   return useQuery({
-    queryKey: ['payroll', 'period', id, ctx.business_id],
-    queryFn: () => getPayroll(ctx, id as UUID).then(unwrap).then(mapRecordToPeriod),
+    queryKey: ['payroll', 'period', ctx.business_id, id ?? 'none'],
+    queryFn: () => payrollPeriodService.getPeriod(ctx, id as string),
     enabled: Boolean(id),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+// REAL: inserts one imagecare.payroll row per active employee, costed
+// from that employee's real imagecare.users.salary. Resolves with the
+// created period plus the active staff who had to be skipped (no salary
+// or no branch), so the caller can say who was left out.
 export function useCreatePayrollPeriod(userId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ startDate, endDate }: { startDate: string; endDate: string }) => payrollService.createPeriod(startDate, endDate, userId),
-    onSuccess: () => invalidateAll(qc),
-  })
-}
-
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function usePayslips(periodId?: string) {
-  return useQuery({ queryKey: ['payroll', 'payslips', periodId ?? 'all'], queryFn: () => payrollService.listPayslips(periodId) })
-}
-
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useCalculatePayroll() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (periodId: string) => payrollService.calculatePayroll(periodId),
-    onSuccess: () => invalidateAll(qc),
-  })
-}
-
-export function useApprovePeriod(_approverName: string) {
   const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (periodId: string) => approvePayroll(ctx, periodId as UUID).then(unwrap),
+    mutationFn: ({ startDate, endDate }: { startDate: string; endDate: string }) =>
+      payrollPeriodService.createPeriod(ctx, startDate, endDate, userId),
     onSuccess: () => invalidateAll(qc),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useMarkPayslipsGenerated() {
+// REAL: the period's imagecare.payroll rows, one payslip line each.
+export function usePayslips(periodId?: string) {
+  const ctx = useUserContext()
+  return useQuery({
+    queryKey: ['payroll', 'payslips', ctx.business_id, periodId ?? 'all'],
+    queryFn: () => payrollPeriodService.listPayslips(ctx, periodId),
+  })
+}
+
+// REAL: re-costs the period's rows from current salaries, then moves
+// them to the table's native 'pending' (= calculated) status.
+export function useCalculatePayroll() {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (periodId: string) => payrollService.markPayslipsGenerated(periodId),
+    mutationFn: (periodId: string) => payrollPeriodService.calculatePayroll(ctx, periodId),
     onSuccess: () => invalidateAll(qc),
   })
 }
 
+// REAL: approvePayroll() (financialServices) per row.
+export function useApprovePeriod(approverName: string) {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (periodId: string) => payrollPeriodService.approvePeriod(ctx, periodId, approverName),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+// REAL: stamps metadata.payslips_generated_at on the period's rows.
+export function useMarkPayslipsGenerated() {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (periodId: string) => payrollPeriodService.markPayslipsGenerated(ctx, periodId),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+// REAL: processPayrollPayment() (financialServices -> businessEngine)
+// per row, which posts the journal entry and cash outflow per employee.
 export function useRecordPayrollPayment() {
   const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (periodId: string) => processPayrollPayment(ctx, periodId as UUID).then(unwrap),
+    mutationFn: (periodId: string) => payrollPeriodService.recordPayrollPayment(ctx, periodId),
     onSuccess: () => invalidateAll(qc),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+// REAL: status update on the period's rows.
 export function useArchivePeriod() {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (periodId: string) => payrollService.archivePeriod(periodId),
+    mutationFn: (periodId: string) => payrollPeriodService.archivePeriod(ctx, periodId),
     onSuccess: () => invalidateAll(qc),
   })
 }
@@ -245,16 +232,26 @@ export function usePayrollDashboardKpis() {
   return useQuery({
     queryKey: ['payroll', 'kpis', ctx.business_id],
     queryFn: async () => {
-      const items = (await listPayroll(ctx, {}).then(unwrap)) as PayrollRecord[]
+      // Largest page allowed: one payroll row is one employee for one
+      // period, so the default 50-row page would have covered only the
+      // last couple of periods once real per-employee rows exist, and
+      // the YTD cost would silently under-report. Rows come back newest
+      // pay_date first, so this reads the most recent 200.
+      const items = (await listPayroll(ctx, {}, { page_size: APP_CONSTANTS.MAX_PAGE_SIZE }).then(unwrap)) as PayrollRecord[]
 
-      const activeEmployeeCount = new Set(items.filter((r) => r.status !== 'cancelled').map((r) => r.user_id)).size
+      const activeEmployeeCount = new Set(
+        items.filter((r) => r.status !== 'cancelled' && r.status !== 'archived').map((r) => r.user_id),
+      ).size
 
       const sortedByDate = [...items].sort((a, b) => new Date(b.pay_date).getTime() - new Date(a.pay_date).getTime())
-      const currentPeriodStatus = sortedByDate.length > 0 ? mapStatus(sortedByDate[0].status) : null
+      const currentPeriodStatus = sortedByDate.length > 0 ? payrollPeriodService.rowStatusToPeriodStatus(sortedByDate[0].status) : null
 
+      // 'pending' is the calculated-but-not-yet-approved state.
       const pendingApprovalCount = items.filter((r) => r.status === 'pending').length
 
-      const paidItems = items.filter((r) => r.status === 'paid')
+      // An archived period was paid - it still counts towards the last
+      // payroll paid and the YTD payroll cost.
+      const paidItems = items.filter((r) => r.status === 'paid' || r.status === 'archived')
       const lastPaidDate = paidItems.reduce<string | null>((latest, r) => (!latest || r.pay_date > latest ? r.pay_date : latest), null)
       const lastPaidBatch = lastPaidDate ? paidItems.filter((r) => r.pay_date === lastPaidDate) : []
       const lastPaidAmountUgx = lastPaidBatch.reduce((sum, r) => sum + r.net_pay, 0)

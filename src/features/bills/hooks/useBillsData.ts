@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as billsService from '../../../services/billsService'
 import { useUserContext } from '../../../context/AppContext'
-import { getBill as getRealBill, listBills as listRealBills } from '../../../services/credit/creditService'
+import {
+  getBill as getRealBill,
+  listBills as listRealBills,
+  recordBillPayment as recordBillPaymentReal,
+  cancelBill as cancelBillReal,
+  closeBill as closeBillReal,
+} from '../../../services/credit/creditService'
 import type { Bill as RealBill, UUID } from '../../../types/database'
 import type { SupplierInvoice, SupplierInvoiceStatus } from '../../../types/purchasing'
 
@@ -17,10 +23,14 @@ import type { SupplierInvoice, SupplierInvoiceStatus } from '../../../types/purc
 // unmodified against real data — this was judged less risky than editing
 // field references across five page files.
 //
-// There is still no real backend function for recording a bill payment,
-// cancelling/closing a bill, payables aging, or supplier statements, so
-// those hooks below remain wired to the LOCAL-ONLY IndexedDB service
-// (services/billsService.ts) exactly as before.
+// Save-button audit 2026-09-01: useRecordBillPayment/useCancelBill/
+// useCloseBill are now also rewired to real functions on that same service
+// (see the hooks below) - they used to call the LOCAL IndexedDB service
+// (services/billsService.ts), which for payments aliased straight to
+// purchasingService.recordInvoicePayment and always failed with "Invoice
+// not found." against a real bill's id. useBillPayments/usePayablesAging/
+// useSupplierStatement remain LOCAL-ONLY - there is no real backend table
+// for a per-payment history, payables aging, or supplier statements yet.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any {
@@ -62,6 +72,10 @@ function mapBillStatus(status: RealBill['status']): SupplierInvoiceStatus {
 }
 
 function toSupplierInvoice(row: RealBillRow): SupplierInvoice {
+  // Real bills.* has no 'closed'/cancel-reason columns - closeBill()/
+  // cancelBill() (src/services/credit/creditService.ts) record them in the
+  // extensible `metadata` JSONB column instead.
+  const metadata = (row.metadata ?? {}) as { closed_at?: string; cancel_reason?: string }
   return {
     id: row.id,
     reference: row.bill_number,
@@ -73,8 +87,8 @@ function toSupplierInvoice(row: RealBillRow): SupplierInvoice {
     dueDate: row.due_date,
     status: mapBillStatus(row.status),
     cancelledAt: row.status === 'voided' ? row.updated_at : null,
-    cancelReason: null,
-    closedAt: null,
+    cancelReason: metadata.cancel_reason ?? null,
+    closedAt: metadata.closed_at ?? null,
     createdAt: row.created_at,
     createdBy: '',
   }
@@ -102,30 +116,39 @@ export function useBillPayments(billId?: string) {
   return useQuery({ queryKey: ['bills', 'payments', billId ?? 'all'], queryFn: () => billsService.listBillPayments(billId) })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useRecordBillPayment(userId: string) {
+// Bug fix (Save-button audit 2026-09-01): useRecordBillPayment/useCancelBill/
+// useCloseBill used to call src/services/billsService.ts, which for
+// payments aliases straight to the LOCAL purchasingService.recordInvoicePayment
+// - `invoices.find(i => i.id === supplierInvoiceId)` against a LOCAL
+// IndexedDB collection a real bill's id is essentially never in, so every
+// attempt failed with "Invoice not found." Cancel/close had the same
+// "never touches the real bill" problem. Rewired to the real functions
+// added to src/services/credit/creditService.ts.
+export function useRecordBillPayment(_userId: string) {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ billId, amount, reference }: { billId: string; amount: number; reference: string }) =>
-      billsService.recordBillPayment(billId, amount, reference, userId),
+      recordBillPaymentReal(ctx, { bill_id: billId as UUID, amount, reference }).then(unwrap),
     onSuccess: () => invalidateAll(qc),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useCancelBill() {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => billsService.cancelBill(id, reason),
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      cancelBillReal(ctx, { bill_id: id as UUID, reason }).then(unwrap),
     onSuccess: () => invalidateAll(qc),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useCloseBill() {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => billsService.closeBill(id),
+    mutationFn: (id: string) => closeBillReal(ctx, { bill_id: id as UUID }).then(unwrap),
     onSuccess: () => invalidateAll(qc),
   })
 }

@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tan
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listProducts, getProduct, createProduct, updateProduct, softDeleteProduct,
-  listCategories, createCategory, updateCategory, archiveCategory,
+  listCategories, createCategory, updateCategory, archiveCategory, mergeCategories,
   listUnits, createUnit, updateUnit, archiveUnit,
   listSuppliers, createSupplier, updateSupplier, archiveSupplier,
 } from '../../../services/masterData/masterDataService';
 import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
+import { listBrands, createBrand, updateBrand, archiveBrand } from '../../../services/brandService';
 import type { UUID } from '../../../types/database';
-import type { Product as InventoryProduct } from '../../../types/inventory';
+import type { Product as InventoryProduct, Supplier as InventorySupplier } from '../../../types/inventory';
 import type { SupportedCurrency } from '../../../lib/currency';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,8 +53,19 @@ export function useCategories() {
   return useQuery({ queryKey: ['inventory', 'categories', ctx.business_id], queryFn: () => listCategories(ctx).then(unwrap) });
 }
 
+// 2026-09-02: this used to always return [] (staleTime: Infinity, so it
+// never even refetched), while useCreateBrand/useUpdateBrand/useArchiveBrand
+// fabricated in-memory-only objects that touched no storage at all - not
+// even IndexedDB - so a saved brand vanished on refresh, on top of never
+// showing up in this list. There is no imagecare.brands table (Stage 4
+// note in masterDataService.ts), so this can't go through Supabase without
+// a schema change, which is out of scope here. brandService.ts already has
+// a genuine IndexedDB-backed CRUD implementation (same getCollection/
+// setCollection pattern as expenseService.ts) that nothing was calling -
+// wiring these hooks to it is an honest local persistence fix: it won't
+// sync across devices, but it survives a browser refresh, unlike before.
 export function useBrands() {
-  return useQuery({ queryKey: ['inventory', 'brands'], queryFn: async () => [] as import('../../../types/inventory').Brand[], staleTime: Infinity });
+  return useQuery({ queryKey: ['inventory', 'brands'], queryFn: () => listBrands() });
 }
 
 // 2026-09-01: listProducts() only ever selected from the products table
@@ -201,17 +213,67 @@ export function useArchiveProduct(_userId?: string) {
   return useMutation({ mutationFn: (id: UUID) => softDeleteProduct(ctx, id).then(unwrap), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'products'] }) });
 }
 
+// 2026-09-03: supplier rows used to reach the UI completely unmapped -
+// useSuppliers() returned raw database rows while every consumer reads the
+// app-shape Supplier (types/inventory.ts). A raw row has contact_person and
+// is_active; it has no contactName and no status at all, so
+// `suppliers.filter(s => s.status === 'active')` - the filter behind the
+// supplier dropdown on Purchase Orders, Requisitions, Supplier Invoices,
+// Purchase Returns, the Purchasing dashboard, Payables and Bills reports -
+// always matched nothing, and the Suppliers page rendered an empty status
+// badge and an empty contact line. This mapper is the counterpart of
+// mapCustomer() in useSalesData.ts: the row is translated once, here, so no
+// call site has to know about column names.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readAddress(address: any): string {
+  if (typeof address === 'string') return address;
+  if (!address || typeof address !== 'object') return '';
+  if (typeof address.raw === 'string') return address.raw;
+  return Object.keys(address).length > 0 ? JSON.stringify(address) : '';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSupplier(s: any): InventorySupplier {
+  return {
+    id: s.id, created_at: s.created_at ?? '', updated_at: s.updated_at ?? '',
+    created_by: s.created_by ?? '', updated_by: s.updated_by ?? '',
+    branch_id: s.branch_id ?? null, is_active: s.is_active ?? true,
+    sync_status: 'synced' as const, last_synced_at: null,
+    name: s.name ?? '',
+    contactName: s.contact_person ?? s.contactName ?? '',
+    phone: s.phone ?? '', email: s.email ?? '', tin: s.tin ?? '',
+    // suppliers.address is JSONB; a typed-in address is written as
+    // { raw: '...' } by the mutations below.
+    address: readAddress(s.address),
+    notes: s.notes ?? '',
+    // There is no `status` column: is_active is the real toggle, and
+    // 'active' | 'inactive' is exactly what it means.
+    status: (s.is_active ?? true) ? 'active' : 'inactive',
+  };
+}
+
 export function useSuppliers() {
   const ctx = useUserContext();
-  return useQuery({ queryKey: ['inventory', 'suppliers', ctx.business_id], queryFn: () => listSuppliers(ctx).then(unwrap) });
+  return useQuery({
+    queryKey: ['inventory', 'suppliers', ctx.business_id],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    queryFn: async () => (await listSuppliers(ctx).then(unwrap) as any[]).map(mapSupplier),
+  });
 }
 
 export function useCreateSupplier(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
+    // Returns a mapped supplier, not the raw row: SupplierInvoiceModal's
+    // inline "add supplier" selects the result immediately.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: (input: any) => createSupplier(ctx, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : (input.address ?? null) } as any).then(unwrap),
+    mutationFn: async (input: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = await createSupplier(ctx, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : (input.address ?? null) } as any).then(unwrap);
+      if (!row || Array.isArray(row)) throw new Error('The supplier was not saved. Please try again.');
+      return mapSupplier(row);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   });
 }
@@ -221,7 +283,12 @@ export function useUpdateSupplier(_userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: ({ id, input }: { id: UUID; input: any }) => updateSupplier(ctx, id, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : input.address } as any).then(unwrap),
+    mutationFn: async ({ id, input }: { id: UUID; input: any }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = await updateSupplier(ctx, id, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : input.address } as any).then(unwrap);
+      if (!row || Array.isArray(row)) throw new Error('The supplier was not saved. Please try again.');
+      return mapSupplier(row);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   });
 }
@@ -378,7 +445,46 @@ export function useFastSlowMovingReport(branchId?: UUID) { return useInventoryLi
 export function useProfitabilityReport(branchId?: UUID) { return useInventoryList(branchId); }
 export function useStockLevelsReport(branchId?: UUID) { return useInventoryList(branchId); }
 export function useValuationReport(branchId?: UUID) { return useInventoryList(branchId); }
-export const useDuplicateProduct = useCreateProduct;
+// 2026-09-02: this used to be a bare alias to useCreateProduct, which
+// expects a full ProductInput object - but both call sites
+// (ProductsListPage/ProductDetailPage) call .mutateAsync(product.id), a
+// bare string. Every field createProduct() read off that string came back
+// undefined, so "Duplicate" silently created a blank, nameless product.
+// Real fix: fetch the source product, build a fresh ProductInput from it
+// (name suffixed "(Copy)"), and create that - same shape as a brand-new
+// Add Product. sku/barcode are deliberately left out so a new one is
+// required/generated, never copied, per the uniqueness fix on those columns.
+export function useDuplicateProduct(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: UUID | string) => {
+      const source = await getProduct(ctx, id as UUID).then(unwrap);
+      const product = await createProduct(ctx, {
+        name: `${source.name} (Copy)`,
+        sku: null, barcode: null,
+        description: source.description ?? null,
+        category_id: source.category_id ?? null,
+        unit_id: source.unit_id ?? null,
+        selling_price: source.selling_price ?? 0,
+        cost_price: source.cost_price ?? 0,
+        reorder_level: source.reorder_level ?? 0,
+        is_stockable: source.is_stockable ?? true,
+        is_sellable: source.is_sellable ?? true,
+        is_purchasable: source.is_purchasable ?? true,
+        is_active: true,
+        track_expiry: source.track_expiry ?? false,
+        tax_rate: source.tax_rate ?? 0,
+        metadata: { brand_id: source.metadata?.brand_id ?? null, supplier_id: source.metadata?.supplier_id ?? null },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any).then(unwrap);
+      return product;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+    },
+  });
+}
 export const useStockMovements = useInventoryMovements;
 export function useReactivateProduct(_userId?: string) {
   const ctx = useUserContext();
@@ -447,9 +553,27 @@ export function useStockAdjustments() {
   });
 }
 export function useGeneratedSku() { return useQuery({ queryKey: ['inventory', 'sku-generator'], queryFn: async () => `SKU-${Date.now().toString(36).toUpperCase()}`, staleTime: 0 }); }
-export function useArchiveBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
-export function useCreateBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: { name: string }) => ({ id: crypto.randomUUID(), name: input.name, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').Brand), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
-export function useUpdateBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ id, input }: { id: string; input: { name: string } }) => ({ id, name: input.name, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').Brand), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
+export function useCreateBrand(userId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string }) => createBrand(input, userId ?? ''),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
+  });
+}
+export function useUpdateBrand(userId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { name: string } }) => updateBrand(id, input, userId ?? ''),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
+  });
+}
+export function useArchiveBrand(userId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => archiveBrand(id, userId ?? ''),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
+  });
+}
 export function useArchiveCategory(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
@@ -467,7 +591,18 @@ export function useUpdateCategory(_userId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'categories'] }),
   });
 }
-export function useMergeCategories(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ sourceId: _s, targetId: _t }: { sourceId: string; targetId: string }) => ({}), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'categories'] }) }); }
+export function useMergeCategories(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, targetId }: { sourceId: string; targetId: string }) =>
+      mergeCategories(ctx, sourceId as UUID, targetId as UUID).then(unwrap),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'categories'] });
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+    },
+  });
+}
 export function useArchiveUnit(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();

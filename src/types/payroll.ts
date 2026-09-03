@@ -33,6 +33,39 @@ export interface EmployeePayComponent {
   amountOverride: number | null // null = use the type's default amount/percent
 }
 
+// ---------- Payroll business-rule errors ----------
+// These live here (not in a service) because the payroll period
+// lifecycle is now served by the real backend service
+// (services/payroll/payrollPeriodService.ts) while employee /
+// pay-component management is still local (services/payrollService.ts),
+// and the pages catch these same error types regardless of which
+// service raised them.
+
+export class OverlappingPeriodError extends Error {
+  constructor() {
+    super('This payroll period overlaps with an existing one.')
+    this.name = 'OverlappingPeriodError'
+  }
+}
+export class PayrollLockedError extends Error {
+  constructor() {
+    super('This payroll period is approved and locked, it can no longer be recalculated.')
+    this.name = 'PayrollLockedError'
+  }
+}
+export class InvalidPeriodTransitionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidPeriodTransitionError'
+  }
+}
+export class NoEmployeesInPayrollError extends Error {
+  constructor(message = 'Add at least one employee to payroll before calculating.') {
+    super(message)
+    this.name = 'NoEmployeesInPayrollError'
+  }
+}
+
 export type PayrollPeriodStatus = 'draft' | 'calculated' | 'approved' | 'paid' | 'archived'
 export const PAYROLL_STATUS_LABELS: Record<PayrollPeriodStatus, string> = {
   draft: 'Draft',

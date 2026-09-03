@@ -1,63 +1,93 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as salesTargetsService from '../../../services/salesTargetsService'
-import type { SalesTargetInput, SalesTargetsSettings } from '../../../types/salesTargets'
+import * as salesTargetsRealService from '../../../services/salesTargets/salesTargetsService'
+import { useUserContext } from '../../../context/AppContext'
+import type { UserContext } from '../../../types/app'
+import type { SalesTarget, SalesTargetInput, SalesTargetsSettings } from '../../../types/salesTargets'
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['sales-targets'] })
 }
 
 // ---------------------------------------------------------------------------
-// Real-backend investigation (Stage 6 module restoration pass):
+// Real-backend rewire (save-button repair pass):
 //
 // imagecare.sales_targets exists as a real table (business_id, branch_id,
 // user_id, period_start, period_end, target_amount, target_type, notes -
 // see database/migrations/0011_stage2_supporting_domains.sql) with RLS
-// enabled, but no service function anywhere under src/services/ performs
-// CRUD against it - there is no listSalesTargets/createSalesTarget/etc. in
-// src/services/reporting/reportingService.ts or elsewhere. The only
-// Supabase-backed hook that mentions "sales targets" is
-// src/hooks/modules/useModuleHooks.ts's useSalesTargets(), but it never
-// touches imagecare.sales_targets: it only calls getDashboardKPIs() and
-// getSalesByPeriod() from reportingService.ts, i.e. general sales
-// performance figures, not target-vs-actual tracking against a stored
-// target row.
+// enabled. createTarget/deleteTarget now write to it for real, via
+// services/salesTargets/salesTargetsService.ts, for BRANCH and STAFF
+// scoped targets - the common, accountable case (branches and staff both
+// come from the real Settings data already, see useBranches/useStaff in
+// features/settings/hooks/useSettingsData.ts, so branchId/staffId picked
+// in the New Target modal are always valid real ids).
 //
-// Every hook below - including useTargetsDashboardData - ultimately needs a
-// real target_amount value scoped to a business/branch/staff and period
-// (see SalesTargetsDashboardPage's data.current.target.targetAmountUgx,
-// TargetsListPage/TargetReportsPage's per-target progress rows, and
-// LeaderboardPage's per-staff/per-branch target ranking). Since no real
-// backend service creates or reads those target rows, there is no honest
-// way to wire any of these to Supabase without fabricating target numbers
-// that don't exist in a real, queryable place. Every export below therefore
-// stays LOCAL-ONLY (still backed by the local IndexedDB-only
-// salesTargetsService), each tagged per docs/MODULE_INTEGRATION_MAP.md.
+// BUSINESS-wide targets are the one case that table cannot represent:
+// chk_s2_target_scope requires branch_id or user_id to be set, so a
+// business-wide row (both null) is rejected by the database. Since
+// "Business-wide" is the modal's default option, useCreateTarget below
+// routes that one scope to the existing local IndexedDB store instead of
+// turning the default action into an error.
+//
+// Because targets can now live in either store, every read that lists
+// targets (useTargets, useAllTargetProgress) merges both, and delete
+// tries the real store first, falling back to local only when the real
+// delete legitimately matched no row (see useDeleteTarget) - otherwise a
+// target created for real would either never show up, or "delete"
+// would silently do nothing. useTargetsDashboardData/useLeaderboard/
+// useTargetsNearingCompletion stay LOCAL-ONLY (lower-priority derived
+// views, not the save path this pass is about; still tagged per
+// docs/MODULE_INTEGRATION_MAP.md).
 // ---------------------------------------------------------------------------
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+async function listMergedTargets(ctx: UserContext): Promise<SalesTarget[]> {
+  const [local, real] = await Promise.all([salesTargetsService.listTargets(), salesTargetsRealService.listTargets(ctx)])
+  const realTargets = real.success && real.data ? real.data : []
+  return [...local, ...realTargets].sort((a, b) => new Date(b.periodStart).getTime() - new Date(a.periodStart).getTime())
+}
+
 export function useTargets() {
-  return useQuery({ queryKey: ['sales-targets', 'list'], queryFn: salesTargetsService.listTargets })
+  const ctx = useUserContext()
+  return useQuery({ queryKey: ['sales-targets', 'list', ctx.business_id], queryFn: () => listMergedTargets(ctx) })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useAllTargetProgress() {
-  return useQuery({ queryKey: ['sales-targets', 'progress'], queryFn: salesTargetsService.getAllProgress })
+  const ctx = useUserContext()
+  return useQuery({
+    queryKey: ['sales-targets', 'progress', ctx.business_id],
+    queryFn: async () => {
+      const targets = await listMergedTargets(ctx)
+      return Promise.all(targets.map((t) => salesTargetsService.getTargetProgress(t)))
+    },
+  })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useCreateTarget(userId: string) {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: SalesTargetInput) => salesTargetsService.createTarget(input, userId),
+    mutationFn: async (input: SalesTargetInput) => {
+      if (input.scope === 'business') return salesTargetsService.createTarget(input, userId)
+      const result = await salesTargetsRealService.createTarget(ctx, input)
+      if (!result.success) throw new Error(result.error?.message ?? 'Could not create this target.')
+      return result.data
+    },
     onSuccess: () => invalidateAll(qc),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useDeleteTarget() {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => salesTargetsService.deleteTarget(id),
+    mutationFn: async (id: string) => {
+      const result = await salesTargetsRealService.deleteTarget(ctx, id)
+      if (result.success && result.data?.deleted) return
+      if (!result.success) throw new Error(result.error?.message ?? 'Could not delete this target.')
+      // Ran fine but matched no real row - this target only ever existed
+      // locally (e.g. a business-wide one), delete it there.
+      await salesTargetsService.deleteTarget(id)
+    },
     onSuccess: () => invalidateAll(qc),
   })
 }

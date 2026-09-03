@@ -12,8 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useCreatePayrollPeriod, usePayrollPeriods } from '../../features/payroll/hooks/usePayrollData'
-import { OverlappingPeriodError } from '../../services/payrollService'
-import { PAYROLL_STATUS_LABELS } from '../../types/payroll'
+import { NoEmployeesInPayrollError, OverlappingPeriodError, PAYROLL_STATUS_LABELS } from '../../types/payroll'
 
 const STATUS_TONE = { draft: 'neutral', calculated: 'warning', approved: 'info', paid: 'success', archived: 'neutral' } as const
 
@@ -91,11 +90,20 @@ export function PayrollPeriodsPage() {
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (startDate, endDate) => {
             try {
-              await createPeriod.mutateAsync({ startDate, endDate })
-              showToast('Payroll period created.', 'success')
+              const { skipped } = await createPeriod.mutateAsync({ startDate, endDate })
+              showToast(
+                skipped.length === 0
+                  ? 'Payroll period created.'
+                  : `Payroll period created. Skipped ${skipped.length} staff member${skipped.length === 1 ? '' : 's'}: ${skipped.join(', ')}.`,
+                'success',
+              )
               setIsAddOpen(false)
             } catch (err) {
-              setAddError(err instanceof OverlappingPeriodError ? err.message : 'Could not create this period.')
+              setAddError(
+                err instanceof OverlappingPeriodError || err instanceof NoEmployeesInPayrollError
+                  ? err.message
+                  : 'Could not create this period.',
+              )
             }
           }}
         />

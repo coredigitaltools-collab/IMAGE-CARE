@@ -231,9 +231,15 @@ export function CrmDashboardPage() {
         <CustomerFormModal
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createCustomer.mutateAsync(input)
-            showToast('Customer added.', 'success')
-            setIsAddOpen(false)
+            // Without this a rejected save was an unhandled promise
+            // rejection: the modal stayed open and said nothing.
+            try {
+              await createCustomer.mutateAsync(input)
+              showToast('Customer added.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not save this customer.')
+            }
           }}
         />
       )}

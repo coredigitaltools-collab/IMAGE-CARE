@@ -88,10 +88,13 @@ export function useRecentSales(_branchId?: string) {
   return useQuery({
     queryKey: ['recent-sales', ctx.business_id, branch],
     queryFn: async () => {
-      const rows = (await getRecentSales(ctx, branch ?? undefined).then(unwrap)) as Array<{
-        id: string; sale_number: string; total_amount: number; status: string; created_at: string; customer_id: string | null; branch_id: string
-      }>;
-      const customers = (await listCustomers(ctx).then((r) => (r.error ? [] : r.data ?? []))) as Array<{ id: string; name: string }>;
+      // Neither read depends on the other's result - run them together.
+      const [rows, customers] = await Promise.all([
+        getRecentSales(ctx, branch ?? undefined).then(unwrap) as Promise<Array<{
+          id: string; sale_number: string; total_amount: number; status: string; created_at: string; customer_id: string | null; branch_id: string
+        }>>,
+        listCustomers(ctx).then((r) => (r.error ? [] : r.data ?? [])) as Promise<Array<{ id: string; name: string }>>,
+      ]);
       const nameById = new Map(customers.map((c) => [c.id, c.name]));
       return rows.map((r): RecentSale => ({
         id: r.id,

@@ -205,7 +205,82 @@ export async function approvePurchaseOrder(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to receive stock.', { requestId }); }
 }
 
-export const recordGoodsReceipt = approvePurchaseOrder;
+// ---- recordGoodsReceipt -----------------------------------
+// Used to just alias approvePurchaseOrder(), which silently
+// fully-received the entire PO no matter what per-line quantities
+// the user entered in GoodsReceiptModal - a user receiving 3 of 10
+// units would see "recorded" while 10 were actually posted to
+// inventory. `purchase_items` has no `received_quantity` (or
+// similar) column in any migration, so there is no way to persist
+// a true partial receipt without a schema change, which is out of
+// scope here. Rather than keep discarding the entered items/notes
+// and silently over-receiving, this now validates the entered
+// quantities cover every line's full ordered quantity - a genuine
+// partial entry is rejected with a clear message instead of being
+// silently rounded up to "everything," and the notes the user typed
+// are persisted onto the purchase instead of being dropped.
+
+export async function recordGoodsReceipt(
+  ctx: UserContext,
+  purchaseId: UUID,
+  items: Array<{ product_id: UUID; quantity_received: number }>,
+  notes?: string,
+): Promise<ServiceResponse<{ purchase_id: UUID; status: string; journal_entry_id: UUID | null }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'purchases', 'edit'))
+    return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
+  try {
+    const { data: purchase, error: loadErr } = await supabase
+      .schema('imagecare')
+      .from('purchases')
+      .select('id, notes, purchase_items(product_id, quantity)')
+      .eq('id', purchaseId)
+      .eq('business_id', ctx.business_id)
+      .single();
+
+    if (loadErr || !purchase) return serviceFail('RESOURCE_NOT_FOUND', 'Purchase order not found.', { requestId });
+
+    const orderedLines = (purchase.purchase_items ?? []) as Array<{ product_id: UUID; quantity: number }>;
+    const submitted = new Map<UUID, number>();
+    for (const item of items ?? []) {
+      submitted.set(item.product_id, (submitted.get(item.product_id) ?? 0) + Number(item.quantity_received || 0));
+    }
+
+    const isFullReceipt = orderedLines.every(l => (submitted.get(l.product_id) ?? 0) >= Number(l.quantity));
+    if (!isFullReceipt) {
+      return serviceFail(
+        'BUSINESS_RULE_VIOLATION',
+        "Partial goods receipt isn't supported yet - this order can only be received in full. Enter the full ordered quantity for every line, then try again.",
+        { requestId },
+      );
+    }
+
+    const key = crypto.randomUUID();
+    const ectx = toEngineContext(ctx);
+    const result = await realPurchasingEngine.receiveStock(ectx, {
+      purchase_id:      purchaseId,
+      idempotency_key:  key,
+    });
+    if (!result.ok) {
+      return serviceFail('INTERNAL_ERROR', result.error!.message, { requestId });
+    }
+
+    const trimmedNotes = notes?.trim();
+    if (trimmedNotes) {
+      const combinedNotes = purchase.notes ? `${purchase.notes}\nGoods receipt: ${trimmedNotes}` : `Goods receipt: ${trimmedNotes}`;
+      await supabase.schema('imagecare').from('purchases')
+        .update({ notes: combinedNotes, updated_by: ctx.user_id })
+        .eq('id', purchaseId)
+        .eq('business_id', ctx.business_id);
+    }
+
+    return serviceOk({
+      purchase_id:      result.data!.purchase_id,
+      status:           result.data!.status,
+      journal_entry_id: result.data!.journal_entry_id,
+    }, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to record goods receipt.', { requestId }); }
+}
 
 export interface PurchaseDashboardKpis {
   total_orders: number; pending_orders: number; total_spend_month: number;

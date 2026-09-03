@@ -69,7 +69,7 @@ export function DashboardPage() {
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <WelcomeHeader userName={user.name} businessName={businessProfileQuery.data?.businessName ?? 'ImageCare'} />
+        <WelcomeHeader userName={user.name} businessName={businessProfileQuery.data?.name ?? 'ImageCare'} />
         <div className="flex items-center gap-3">
           <BranchSelector
             branches={visibleBranches}

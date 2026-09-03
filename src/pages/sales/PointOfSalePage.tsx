@@ -665,10 +665,17 @@ export function PointOfSalePage() {
           submitLabel="Save & Continue Sale"
           onClose={() => setIsCustomerModalOpen(false)}
           onSubmit={async (input) => {
-            const customer = await createCustomer.mutateAsync(input)
-            setSelectedCustomer(customer)
-            setIsCustomerModalOpen(false)
-            showToast('Customer added.', 'success')
+            // A failure here used to be an unhandled promise rejection: the
+            // modal just sat there with no message, so a customer that could
+            // not be saved looked like a dead button.
+            try {
+              const customer = await createCustomer.mutateAsync(input)
+              setSelectedCustomer(customer)
+              setIsCustomerModalOpen(false)
+              showToast('Customer added.', 'success')
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not save this customer.')
+            }
           }}
         />
       )}
@@ -690,7 +697,7 @@ export function PointOfSalePage() {
         <ReceiptModal
           sale={receiptSale}
           customer={selectedCustomer}
-          businessName={businessProfileQuery.data?.businessName ?? 'ImageCare'}
+          businessName={businessProfileQuery.data?.name ?? 'ImageCare'}
           receiptSettings={receiptSettingsQuery.data}
           cashierName={user.name}
           onClose={() => setReceiptSale(null)}

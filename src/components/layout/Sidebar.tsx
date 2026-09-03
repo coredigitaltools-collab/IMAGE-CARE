@@ -87,7 +87,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               IMC
             </div>
             <span className="truncate text-sm font-semibold text-white">
-              {businessProfileQuery.data?.businessName ?? 'ImageCare'}
+              {businessProfileQuery.data?.name ?? 'ImageCare'}
             </span>
           </div>
           <button

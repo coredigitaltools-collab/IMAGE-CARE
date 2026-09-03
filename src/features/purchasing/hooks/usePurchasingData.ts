@@ -4,6 +4,7 @@ import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listPurchases, createPurchase,
   listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, approvePurchaseOrder, getPurchaseDashboardKpis, rejectPurchase,
+  recordGoodsReceipt,
 } from '../../../services/purchasing/purchasingService';
 import type { PurchaseOrderInput } from '../../../types/purchasing';
 import type { UUID } from '../../../types/database';
@@ -160,8 +161,13 @@ export function useRecordGoodsReceipt(_approverName?: string, _userId?: string) 
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: ({ purchaseOrderId, items: _i, notes: _n }: { purchaseOrderId: UUID; items: any[]; notes: string }) => approvePurchaseOrder(ctx, purchaseOrderId).then(unwrap),
+    mutationFn: ({ purchaseOrderId, items, notes }: { purchaseOrderId: UUID; items: Array<{ productId: string; quantityReceived: number }>; notes: string }) =>
+      recordGoodsReceipt(
+        ctx,
+        purchaseOrderId,
+        (items ?? []).map(i => ({ product_id: i.productId as UUID, quantity_received: Number(i.quantityReceived) })),
+        notes,
+      ).then(unwrap),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['purchasing'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
   });
 }

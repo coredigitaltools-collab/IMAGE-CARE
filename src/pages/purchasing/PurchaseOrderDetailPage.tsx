@@ -23,7 +23,6 @@ import {
   useRejectPurchaseOrder,
   useSupplierInvoices,
 } from '../../features/purchasing/hooks/usePurchasingData'
-import { OverReceiptError } from '../../services/purchasingService'
 import { PO_STATUS_LABELS } from '../../types/purchasing'
 
 const STATUS_TONE = {
@@ -211,7 +210,7 @@ export function PurchaseOrderDetailPage() {
               showToast('Goods receipt recorded, inventory updated.', 'success')
               setIsReceiptOpen(false)
             } catch (err) {
-              setReceiptError(err instanceof OverReceiptError ? err.message : 'Could not record this receipt.')
+              setReceiptError(err instanceof Error ? err.message : 'Could not record this receipt.')
             }
           }}
         />

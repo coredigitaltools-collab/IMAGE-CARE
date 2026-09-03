@@ -34,6 +34,7 @@ export function SupplierInvoicesPage() {
   const recordPayment = useRecordInvoicePayment(user.id)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [addError, setAddError] = useState<string | undefined>()
   const [payingInvoice, setPayingInvoice] = useState<SupplierInvoice | null>(null)
   const [payError, setPayError] = useState<string | undefined>()
 
@@ -50,7 +51,7 @@ export function SupplierInvoicesPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Supplier Invoices</h1>
           <p className="mt-0.5 text-sm text-ink-500">What suppliers have billed, and what's still owed.</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}>
+        <Button onClick={() => { setAddError(undefined); setIsAddOpen(true) }}>
           <Plus size={15} /> Record invoice
         </Button>
       </div>
@@ -67,7 +68,7 @@ export function SupplierInvoicesPage() {
             icon={FileText}
             title="No supplier invoices yet"
             description="Record an invoice a supplier has billed you, so you can track what's owed and pay it."
-            action={{ label: '+ Record invoice', onClick: () => setIsAddOpen(true) }}
+            action={{ label: '+ Record invoice', onClick: () => { setAddError(undefined); setIsAddOpen(true) } }}
           />
         ) : (
           <ul className="divide-y divide-ink-100">
@@ -110,11 +111,16 @@ export function SupplierInvoicesPage() {
           suppliers={activeSuppliers}
           orders={ordersQuery.data ?? []}
           userId={user.id}
+          submitError={addError}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createInvoice.mutateAsync(input)
-            showToast('Invoice recorded.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createInvoice.mutateAsync(input)
+              showToast('Invoice recorded.', 'success')
+              setIsAddOpen(false)
+            } catch {
+              setAddError("Recording a supplier invoice directly isn't available yet.")
+            }
           }}
         />
       )}

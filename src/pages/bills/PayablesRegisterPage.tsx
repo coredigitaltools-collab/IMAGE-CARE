@@ -167,9 +167,17 @@ export function PayablesRegisterPage() {
           userId={user.id}
           onClose={() => setIsRecordOpen(false)}
           onSubmit={async (input) => {
-            await createInvoice.mutateAsync(input)
-            showToast('Bill recorded.', 'success')
-            setIsRecordOpen(false)
+            try {
+              await createInvoice.mutateAsync(input)
+              showToast('Bill recorded.', 'success')
+              setIsRecordOpen(false)
+            } catch {
+              // useCreateSupplierInvoice (Purchasing) is a Stage-5 stub that
+              // always throws - recording a bill directly has no real
+              // backend yet, so this is deliberately out of scope here.
+              // Fails honestly instead of showing a fake success toast.
+              showToast("Recording a new bill directly isn't available yet — bills are created from purchase orders.")
+            }
           }}
         />
       )}

@@ -3,6 +3,7 @@ import { Archive, Plus, SlidersHorizontal } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PayrollTabs } from '../../components/payroll/PayrollTabs'
 import { PayComponentTypeFormModal } from '../../components/payroll/PayComponentTypeFormModal'
+import { formatCurrency } from '../../lib/format'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -45,7 +46,7 @@ function ComponentList({ kind, title }: { kind: 'allowance' | 'deduction'; title
             <li key={t.id} className="flex items-center justify-between py-2.5 text-sm">
               <div>
                 <p className="font-medium text-ink-900">{t.name}</p>
-                <p className="text-xs text-ink-500">{t.isPercentageOfBase ? `${t.amount}% of base salary` : `UGX ${t.amount.toLocaleString()}`}</p>
+                <p className="text-xs text-ink-500">{t.isPercentageOfBase ? `${t.amount}% of base salary` : formatCurrency(t.amount, 'UGX')}</p>
               </div>
               <RowActionButton
                 icon={Archive}

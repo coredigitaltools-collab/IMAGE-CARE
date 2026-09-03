@@ -198,16 +198,28 @@ export async function listPayroll(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load payroll.', { requestId }); }
 }
 
+// options.metadata (optional): merged metadata to store alongside the
+// approval, e.g. the approver's name when a whole payroll period is
+// approved at once (see services/payroll/payrollPeriodService.ts).
+// Callers pass the already-merged object because PostgREST cannot patch
+// a jsonb column in place. Omitting it leaves metadata untouched.
 export async function approvePayroll(
   ctx: UserContext,
-  payrollId: UUID
+  payrollId: UUID,
+  options?: { metadata?: Record<string, unknown> }
 ): Promise<ServiceResponse<void>> {
   const requestId = makeRequestId();
   if (!canDo(ctx, 'payroll', 'approve')) {
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to approve payroll.', { requestId });
   }
   try {
-    const { error } = await supabase.schema('imagecare').from('payroll').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', payrollId).eq('business_id', ctx.business_id).eq('status', 'pending');
+    const patch: Record<string, unknown> = {
+      status:     'approved',
+      updated_at: new Date().toISOString(),
+      updated_by: ctx.user_id,
+    };
+    if (options?.metadata) patch.metadata = options.metadata;
+    const { error } = await supabase.schema('imagecare').from('payroll').update(patch).eq('id', payrollId).eq('business_id', ctx.business_id).eq('status', 'pending');
     if (error) return serviceFail('BUSINESS_RULE_VIOLATION', parseError(error).message, { requestId });
     return serviceOk(undefined, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to approve payroll.', { requestId }); }

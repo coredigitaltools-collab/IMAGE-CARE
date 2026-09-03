@@ -8,7 +8,6 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useBackupHistory, useCreateBackup, useRestoreBackup } from '../../features/settings/hooks/useSettingsData'
-import { InvalidBackupFileError } from '../../services/backupSyncService'
 import { formatRelativeTime } from '../../lib/format'
 
 function formatSize(bytes: number): string {
@@ -41,7 +40,7 @@ export function BackupRestorePage() {
       await restoreBackup.mutateAsync(text)
       showToast('Backup restored.', 'success')
     } catch (err) {
-      showToast(err instanceof InvalidBackupFileError ? err.message : 'Could not restore this backup.')
+      showToast(err instanceof Error ? err.message : 'Could not restore this backup.')
     } finally {
       setPendingFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -61,7 +60,7 @@ export function BackupRestorePage() {
             <div className="flex-1">
               <p className="text-sm font-medium text-ink-900">Create a backup</p>
               <p className="mt-0.5 text-xs text-ink-500">
-                Downloads a JSON file with your business profile, staff, branches, and all settings.
+                Downloads a JSON file with your business profile and settings.
               </p>
               <Button className="mt-3" onClick={handleCreateBackup} disabled={createBackup.isPending}>
                 {createBackup.isPending ? 'Preparing…' : 'Download backup'}
@@ -78,7 +77,7 @@ export function BackupRestorePage() {
             <div className="flex-1">
               <p className="text-sm font-medium text-ink-900">Restore from a backup</p>
               <p className="mt-0.5 text-xs text-ink-500">
-                This replaces your current business profile, staff, branches, and settings with the backup's contents.
+                This replaces your current business profile and settings with the backup's contents. Staff and branches are not affected.
               </p>
               <input
                 ref={fileInputRef}

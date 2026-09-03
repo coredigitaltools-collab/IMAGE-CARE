@@ -21,6 +21,14 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readAddress(address: any): string {
+  if (typeof address === 'string') return address;
+  if (!address || typeof address !== 'object') return '';
+  if (typeof address.raw === 'string') return address.raw;
+  return Object.keys(address).length > 0 ? JSON.stringify(address) : '';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapCustomer(c: any): SalesCustomer {
   return {
     id: c.id, created_at: c.created_at ?? '', updated_at: c.updated_at ?? '',
@@ -28,7 +36,10 @@ function mapCustomer(c: any): SalesCustomer {
     branch_id: c.branch_id ?? null, is_active: c.is_active ?? true,
     sync_status: 'synced' as const, last_synced_at: null,
     name: c.name ?? '', phone: c.phone ?? '', email: c.email ?? '',
-    address: typeof c.address === 'string' ? c.address : (c.address ? JSON.stringify(c.address) : ''),
+    // customers.address is JSONB; the write side stores a typed-in address
+    // as { raw: '...' }, so unwrap that back to plain text instead of
+    // showing the user '{"raw":"..."}'.
+    address: readAddress(c.address),
     notes: c.notes ?? '', tags: c.tags ?? [], status: 'active' as const,
     dateOfBirth: null, preferredBranchId: null, preferredPaymentMethod: null,
     creditLimit: c.credit_limit ?? 0, loyaltyPoints: 0,
@@ -58,12 +69,21 @@ export function useCreateCustomer(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
+    // 2026-09-03: this used to return the raw Supabase row, skipping
+    // mapCustomer() entirely - so the customer handed back to the caller
+    // (PointOfSalePage selects it into the sale straight away) had no
+    // creditLimit/creditBalance/status at all, only snake_case DB columns.
+    // Reads went through mapCustomer, writes didn't; now both do.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: async (input: any) => createCustomer(ctx, {
-      ...input,
-      address: typeof input.address === 'string' ? { raw: input.address } : (input.address ?? null),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any).then(unwrap),
+    mutationFn: async (input: any) => {
+      const row = await createCustomer(ctx, {
+        ...input,
+        address: typeof input.address === 'string' ? { raw: input.address } : (input.address ?? null),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any).then(unwrap);
+      if (!row || Array.isArray(row)) throw new Error('The customer was not saved. Please try again.');
+      return mapCustomer(row);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', 'customers'] }),
   });
 }
@@ -73,11 +93,15 @@ export function useUpdateCustomer(_userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: async ({ id, input }: { id: UUID; input: any }) => updateCustomer(ctx, id, {
-      ...input,
-      address: typeof input.address === 'string' ? { raw: input.address } : input.address,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any).then(unwrap),
+    mutationFn: async ({ id, input }: { id: UUID; input: any }) => {
+      const row = await updateCustomer(ctx, id, {
+        ...input,
+        address: typeof input.address === 'string' ? { raw: input.address } : input.address,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any).then(unwrap);
+      if (!row || Array.isArray(row)) throw new Error('The customer was not saved. Please try again.');
+      return mapCustomer(row);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', 'customers'] }),
   });
 }
@@ -99,7 +123,10 @@ export function useMergeCustomers(_userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ sourceId, targetId: _t }: { sourceId: UUID; targetId: UUID }) => archiveCustomer(ctx, sourceId).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales'] }),
+    // Only the customers list changes here (source customer archived) -
+    // invalidating the whole ['sales'] key was forcing every sale, parked
+    // sale, and CRM KPI query to refetch for no reason.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', 'customers'] }),
   });
 }
 

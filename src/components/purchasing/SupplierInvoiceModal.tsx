@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { NumberField } from '../ui/NumberField'
 import { SupplierFormModal } from '../inventory/SupplierFormModal'
+import { useToast } from '../ui/toastContext'
 import { useCreateSupplier } from '../../features/inventory/hooks/useInventoryData'
 import type { PurchaseOrder } from '../../types/purchasing'
 import type { Supplier } from '../../types/inventory'
@@ -18,6 +19,7 @@ interface SupplierInvoiceModalProps {
 
 export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSubmit, submitError }: SupplierInvoiceModalProps) {
   const createSupplier = useCreateSupplier(userId)
+  const { showToast } = useToast()
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
   const [purchaseOrderId, setPurchaseOrderId] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -52,9 +54,15 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
           }
         }}
         onSubmit={async (input) => {
-          const created = await createSupplier.mutateAsync(input)
-          setSupplierId(created.id)
-          setIsAddingSupplier(false)
+          // Without this, a failed supplier save was an unhandled promise
+          // rejection - the form stayed open saying nothing at all.
+          try {
+            const created = await createSupplier.mutateAsync(input)
+            setSupplierId(created.id)
+            setIsAddingSupplier(false)
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Could not save this supplier.')
+          }
         }}
       />
     )

@@ -28,10 +28,11 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 // src/services/financial/financialServices.ts and the imagecare.* migrations):
 //
 //  - imagecare.bank_accounts (database/migrations/0009_stage2_financial.sql)
-//    is a real table with RLS, but no service function anywhere in
-//    src/services/ reads or writes it via supabase - only the local
-//    IndexedDB-backed bankReconciliationService does. So bank accounts stay
-//    fully local below.
+//    is a real table with RLS. 2026-09-02: bankReconciliationService's bank
+//    account functions (listBankAccounts/createBankAccount/
+//    archiveBankAccount) now read and write it via supabase directly - see
+//    that file. Everything else in this module (statement lines, matching,
+//    reconciled balance) stays local below.
 //  - There is no imagecare.bank_statement_lines table at all, and no service
 //    function for transaction matching or a "reconciled balance". Those stay
 //    fully local below - see docs/MODULE_INTEGRATION_MAP.md gap.
@@ -100,27 +101,34 @@ export function useUnmatchedDeposits(bankAccountId: string) {
 // Local-only hooks - no real backend service exists for these operations yet.
 // ---------------------------------------------------------------------------
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap).
-// imagecare.bank_accounts has RLS but no service function reads/writes it -
-// see the module-scope note above.
+// REAL: reads imagecare.bank_accounts directly (see bankReconciliationService.listBankAccounts).
 export function useBankAccounts() {
-  return useQuery({ queryKey: ['bank-reconciliation', 'accounts'], queryFn: bankReconciliationService.listBankAccounts })
+  const ctx = useUserContext()
+  return useQuery({
+    queryKey: ['bank-reconciliation', 'accounts', ctx.business_id],
+    queryFn: () => bankReconciliationService.listBankAccounts(ctx),
+  })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+// REAL: inserts into imagecare.bank_accounts (see bankReconciliationService.createBankAccount).
 export function useCreateBankAccount(userId: string) {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: BankAccountInput) => bankReconciliationService.createBankAccount(input, userId),
+    mutationFn: (input: BankAccountInput) => bankReconciliationService.createBankAccount(ctx, input, userId),
     onSuccess: () => invalidateAll(qc),
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+// REAL: soft-archives the row in imagecare.bank_accounts (see bankReconciliationService.archiveBankAccount).
+// Still blocked locally when the account has statement lines recorded
+// against it (AccountInUseError) - that business rule has no real backend
+// equivalent since bank_statement_lines stays local (see note above).
 export function useArchiveBankAccount(userId: string) {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => bankReconciliationService.archiveBankAccount(id, userId),
+    mutationFn: (id: string) => bankReconciliationService.archiveBankAccount(ctx, id, userId),
     onSuccess: () => invalidateAll(qc),
   })
 }
@@ -178,9 +186,10 @@ export function useUnmatchTransaction() {
 // depends entirely on local statement lines and local matching state, neither
 // of which has a real backend (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useReconciledBalance(bankAccountId: string) {
+  const ctx = useUserContext()
   return useQuery({
-    queryKey: ['bank-reconciliation', 'balance', bankAccountId],
-    queryFn: () => bankReconciliationService.getReconciledBalance(bankAccountId),
+    queryKey: ['bank-reconciliation', 'balance', bankAccountId, ctx.business_id],
+    queryFn: () => bankReconciliationService.getReconciledBalance(ctx, bankAccountId),
     enabled: Boolean(bankAccountId),
   })
 }
@@ -191,5 +200,9 @@ export function useReconciledBalance(bankAccountId: string) {
 // way to source any of them from the real cash_transactions read alone
 // without changing what they mean (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useBankReconciliationDashboardKpis() {
-  return useQuery({ queryKey: ['bank-reconciliation', 'kpis'], queryFn: bankReconciliationService.getBankReconciliationDashboardKpis })
+  const ctx = useUserContext()
+  return useQuery({
+    queryKey: ['bank-reconciliation', 'kpis', ctx.business_id],
+    queryFn: () => bankReconciliationService.getBankReconciliationDashboardKpis(ctx),
+  })
 }

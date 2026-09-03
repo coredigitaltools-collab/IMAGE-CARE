@@ -349,7 +349,13 @@ export interface PayrollRecord {
   total_deductions: number;
   net_pay: number;
   payment_method: PaymentMethod;
-  status: 'pending' | 'approved' | 'paid' | 'cancelled';
+  // imagecare.payroll.status is plain TEXT with no CHECK constraint
+  // (verified against pg_constraint - only the numeric non-negativity
+  // checks and the period-order check exist). The payroll period
+  // lifecycle uses 'draft' before calculation and 'archived' after
+  // payment; 'pending' is the calculated-but-not-yet-approved state.
+  // See services/payroll/payrollPeriodService.ts.
+  status: 'draft' | 'pending' | 'approved' | 'paid' | 'cancelled' | 'archived';
   notes: string | null;
   metadata: Record<string, unknown>;
   journal_entry_id: UUID | null;
@@ -446,6 +452,11 @@ export interface Invoice {
   amount_paid: number;
   balance_due: number;
   notes: string | null;
+  // Real column (migration 0008), not previously modelled here. Used as
+  // extensible storage for fields the invoices table has no dedicated
+  // column for yet, e.g. { sent_at, cancel_reason } - see
+  // markInvoiceSent()/cancelInvoice() in src/services/credit/creditService.ts.
+  metadata: Record<string, unknown>;
   created_at: Timestamptz;
   updated_at: Timestamptz;
   deleted_at: Timestamptz | null;
@@ -465,6 +476,11 @@ export interface Bill {
   amount_paid: number;
   balance_due: number;
   notes: string | null;
+  // Real column (migration 0008), not previously modelled here. Used as
+  // extensible storage for fields the bills table has no dedicated column
+  // for yet, e.g. { closed_at, cancel_reason } - see closeBill()/
+  // cancelBill() in src/services/credit/creditService.ts.
+  metadata: Record<string, unknown>;
   created_at: Timestamptz;
   updated_at: Timestamptz;
   deleted_at: Timestamptz | null;

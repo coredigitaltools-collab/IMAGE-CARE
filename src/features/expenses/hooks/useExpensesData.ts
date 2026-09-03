@@ -4,6 +4,15 @@ import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import { createExpense, listExpenses, updateExpense, deleteExpense } from '../../../services/financial/financialServices';
 import type { UpdateExpenseInput } from '../../../services/financial/financialServices';
 import { listExpenseCategories, createExpenseCategory } from '../../../services/settings/settingsService';
+import {
+  getExpenseSettings as getExpenseSettingsLocal,
+  saveExpenseSettings as saveExpenseSettingsLocal,
+  listRecurringTemplates as listRecurringTemplatesLocal,
+  createRecurringTemplate as createRecurringTemplateLocal,
+  archiveRecurringTemplate as archiveRecurringTemplateLocal,
+  generateDueRecurringExpenses as generateDueRecurringExpensesLocal,
+} from '../../../services/expenseService';
+import type { ExpenseSettings, RecurringExpenseInput } from '../../../types/expenses';
 import type { UUID } from '../../../types/database';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +26,7 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 }
 
 export function useExpenseSettings(_userId?: string) {
-  return useQuery({ queryKey: ['expenses', 'settings'], queryFn: async () => ({ maxExpenseAmount: 0, requireReceipt: false, autoApproveThresholdUgx: 0, requireApprovalAboveUgx: 0 }), staleTime: Infinity });
+  return useQuery({ queryKey: ['expenses', 'settings'], queryFn: () => getExpenseSettingsLocal() });
 }
 
 export function useExpenseCategories() {
@@ -127,7 +136,13 @@ export function useArchiveExpenseCategory(_userId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'categories'] }),
   });
 }
-export function useSaveExpenseSettings() { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: Record<string, unknown>) => input, onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'settings'] }) }); }
+export function useSaveExpenseSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ExpenseSettings) => saveExpenseSettingsLocal(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'settings'] }),
+  });
+}
 
 export function useSpendByCategory(_branchId?: string, _from?: string, _to?: string) {
   const ctx = useUserContext();
@@ -146,8 +161,29 @@ export function useSpendByCategory(_branchId?: string, _from?: string, _to?: str
 }
 
 export function useRecurringTemplates() {
-  return useQuery({ queryKey: ['expenses', 'recurring'], queryFn: async () => [] as Array<{ id: string; categoryName: string; description: string; amount: number; frequency: string; nextDueDate: string; is_active: boolean; generated: string[] }>, staleTime: Infinity });
+  return useQuery({ queryKey: ['expenses', 'recurring'], queryFn: () => listRecurringTemplatesLocal() });
 }
-export function useCreateRecurringTemplate(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: Record<string, unknown>) => input, onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }) }); }
-export function useArchiveRecurringTemplate(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }) }); }
-export function useGenerateDueRecurringExpenses(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async () => ({ generated: 0, ids: [] as string[] }), onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }) }); }
+export function useCreateRecurringTemplate(userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RecurringExpenseInput) => createRecurringTemplateLocal(input, userId ?? ctx.user_id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }),
+  });
+}
+export function useArchiveRecurringTemplate(userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await archiveRecurringTemplateLocal(id, userId ?? ctx.user_id); return { id }; },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }),
+  });
+}
+export function useGenerateDueRecurringExpenses(userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => generateDueRecurringExpensesLocal(userId ?? ctx.user_id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }); },
+  });
+}

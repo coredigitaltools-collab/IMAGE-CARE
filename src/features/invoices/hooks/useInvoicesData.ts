@@ -4,11 +4,16 @@ import {
   getInvoice as getInvoiceReal,
   listInvoices as listInvoicesReal,
   recordInvoicePayment,
+  generateInvoice as generateInvoiceReal,
+  markInvoiceSent as markInvoiceSentReal,
+  cancelInvoice as cancelInvoiceReal,
 } from '../../../services/credit/creditService'
 import { supabase } from '../../../lib/supabase'
+import { getSetting, updateSetting } from '../../../services/settings/settingsService'
 import * as invoiceService from '../../../services/invoiceService'
 import type { InvoiceSettings, Invoice as LocalInvoice, InvoiceLineItem, InvoiceStatus } from '../../../types/invoices'
-import type { Invoice as DbInvoiceRow, UUID } from '../../../types/database'
+import type { Invoice as DbInvoiceRow, Sale as DbSaleRow, UUID } from '../../../types/database'
+import type { Sale as LocalSale } from '../../../types/sales'
 import type { UserContext } from '../../../types/app'
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
@@ -70,6 +75,11 @@ function mapDbInvoice(row: DbInvoiceWithRelations): LocalInvoice {
     lineTotal: it.line_total,
   }))
 
+  // Real invoices.* has no dedicated "sent"/"cancel reason" columns -
+  // markInvoiceSent()/cancelInvoice() (src/services/credit/creditService.ts)
+  // record them in the extensible `metadata` JSONB column instead.
+  const metadata = (row.metadata ?? {}) as { sent_at?: string; cancel_reason?: string }
+
   return {
     id: row.id,
     invoiceNumber: row.invoice_number,
@@ -92,12 +102,44 @@ function mapDbInvoice(row: DbInvoiceWithRelations): LocalInvoice {
     issuedAt: row.invoice_date,
     dueDate: row.due_date,
     paidAt: row.status === 'paid' ? row.updated_at : null,
-    sentAt: null,
+    sentAt: metadata.sent_at ?? null,
     cancelledAt: row.status === 'voided' ? row.updated_at : null,
-    cancelReason: null,
+    cancelReason: metadata.cancel_reason ?? null,
     notes: row.notes ?? '',
     createdAt: row.created_at,
     createdBy: '',
+  }
+}
+
+// Real sales use TransactionStatus ('draft' | 'confirmed' | 'cancelled' |
+// 'voided'), not the local SaleStatus union - 'confirmed' is a fully
+// posted/completed sale. Only the fields GenerateInvoiceModal actually
+// renders (id/reference/totalAmount/createdAt) carry real data; the rest
+// are filled with reasonable defaults purely to satisfy the shared local
+// Sale shape the modal already expects.
+function mapDbSaleToLocalSale(row: DbSaleRow): LocalSale {
+  return {
+    id: row.id,
+    reference: row.sale_number,
+    branchId: row.branch_id ?? null,
+    customerId: row.customer_id,
+    salesPersonId: row.served_by,
+    items: [],
+    subtotal: row.subtotal,
+    discountPercent: 0,
+    discountAmount: row.discount_amount,
+    taxRateId: null,
+    taxAmount: row.tax_amount,
+    totalAmount: row.total_amount,
+    paymentMethod: row.payment_method as LocalSale['paymentMethod'],
+    amountTendered: row.amount_paid,
+    changeDue: row.change_given,
+    paymentReference: null,
+    status: 'completed',
+    refundReason: null,
+    createdAt: row.created_at,
+    createdBy: row.served_by ?? '',
+    syncStatus: 'synced',
   }
 }
 
@@ -191,6 +233,81 @@ export function useMarkInvoicePaid() {
 }
 
 // ---------------------------------------------------------------------------
+// Real, Supabase-backed hooks (Save-button audit 2026-09-01)
+//
+// useGenerateInvoice/useMarkInvoiceSent/useCancelInvoice used to call the
+// LOCAL src/services/invoiceService.ts (IndexedDB): "Invoice a sale" wrote
+// to a collection the real list above can never see (looked like the
+// invoice vanished), and Mark Sent/Cancel looked up the real invoice's id
+// inside that same local collection, which never contains it ("Invoice not
+// found."). All three are now backed by the real functions added to
+// src/services/credit/creditService.ts. useUninvoicedSales now queries real
+// completed sales with no matching real invoices row, instead of local
+// sales.
+// ---------------------------------------------------------------------------
+
+export function useUninvoicedSales() {
+  const ctx = useUserContext()
+  return useQuery({
+    queryKey: ['invoices', 'uninvoiced-sales', ctx.business_id],
+    queryFn: async () => {
+      const { data: invoicedRows, error: invErr } = await supabase
+        .schema('imagecare')
+        .from('invoices')
+        .select('sale_id')
+        .eq('business_id', ctx.business_id)
+        .is('deleted_at', null)
+      if (invErr) throw new Error(invErr.message ?? 'Failed to load invoices.')
+      const invoicedSaleIds = new Set((invoicedRows ?? []).map((r) => r.sale_id).filter(Boolean))
+
+      const { data: sales, error } = await supabase
+        .schema('imagecare')
+        .from('sales')
+        .select('*')
+        .eq('business_id', ctx.business_id)
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .order('sale_date', { ascending: false })
+        .limit(200)
+      if (error) throw new Error(error.message ?? 'Failed to load uninvoiced sales.')
+
+      return (sales ?? [])
+        .filter((s: DbSaleRow) => !invoicedSaleIds.has(s.id))
+        .map(mapDbSaleToLocalSale)
+    },
+  })
+}
+
+export function useGenerateInvoice(_userId: string) {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ saleId, dueDate }: { saleId: string; dueDate: string | null }) =>
+      generateInvoiceReal(ctx, { sale_id: saleId as UUID, due_date: dueDate }).then(unwrap),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+export function useMarkInvoiceSent() {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => markInvoiceSentReal(ctx, id as UUID).then(unwrap),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+export function useCancelInvoice() {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      cancelInvoiceReal(ctx, { id: id as UUID, reason }).then(unwrap),
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Local-only hooks - no real backend service exists for these operations yet.
 // ---------------------------------------------------------------------------
 
@@ -203,48 +320,39 @@ export function useInvoiceForSale(saleId: string | undefined) {
   })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useUninvoicedSales() {
-  return useQuery({ queryKey: ['invoices', 'uninvoiced-sales'], queryFn: invoiceService.listUninvoicedCompletedSales })
+// Footer text / due days, wired through the real generic key/value settings
+// store (src/services/settings/settingsService.ts, read-only reference -
+// not modified here) instead of the LOCAL invoiceService singleton, so a
+// saved setting is visible from any device/session, not just this browser's
+// IndexedDB.
+const INVOICE_SETTINGS_CATEGORY = 'invoices'
+const INVOICE_SETTINGS_KEY = 'settings'
+
+function defaultInvoiceSettings(): InvoiceSettings {
+  return { defaultDueDays: 14, footerText: 'Thank you for your business.', showTaxBreakdown: true, showLogo: true }
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useGenerateInvoice(userId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ saleId, dueDate }: { saleId: string; dueDate: string | null }) => invoiceService.generateInvoice(saleId, dueDate, userId),
-    onSuccess: () => invalidateAll(qc),
-  })
-}
-
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useMarkInvoiceSent() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => invoiceService.markInvoiceSent(id),
-    onSuccess: () => invalidateAll(qc),
-  })
-}
-
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-export function useCancelInvoice() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => invoiceService.cancelInvoice(id, reason),
-    onSuccess: () => invalidateAll(qc),
-  })
-}
-
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useInvoiceSettings() {
-  return useQuery({ queryKey: ['invoices', 'settings'], queryFn: invoiceService.getInvoiceSettings })
+  const ctx = useUserContext()
+  return useQuery({
+    queryKey: ['invoices', 'settings', ctx.business_id],
+    queryFn: async () => {
+      const res = await getSetting(ctx, INVOICE_SETTINGS_CATEGORY, INVOICE_SETTINGS_KEY)
+      if (res.error) throw new Error(res.error.message)
+      return (res.data as InvoiceSettings | null) ?? defaultInvoiceSettings()
+    },
+  })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
 export function useSaveInvoiceSettings() {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: InvoiceSettings) => invoiceService.saveInvoiceSettings(input),
+    mutationFn: async (input: InvoiceSettings) => {
+      const res = await updateSetting(ctx, INVOICE_SETTINGS_CATEGORY, INVOICE_SETTINGS_KEY, input)
+      if (res.error) throw new Error(res.error.message)
+      return input
+    },
     onSuccess: () => invalidateAll(qc),
   })
 }

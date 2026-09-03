@@ -8,6 +8,7 @@ interface NumberFieldProps {
   value: number
   onChange: (value: number) => void
   onBlur?: () => void
+  onFocus?: (e: React.FocusEvent<HTMLInputElement>) => void
   placeholder?: string
   error?: string
   hint?: string
@@ -84,7 +85,7 @@ function cursorForDigitCount(formatted: string, digitCount: number): number {
 // into any existing form without changing modal/dialog dimensions.
 export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(function NumberField(
   {
-    id, name, label, value, onChange, onBlur, placeholder = '0', error, hint, suffix,
+    id, name, label, value, onChange, onBlur, onFocus, placeholder = '0', error, hint, suffix,
     min, max, allowDecimal = false, allowNegative = false, disabled, autoFocus, className = '',
     hideLabel = false, inputClassName = '',
   },
@@ -155,6 +156,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
           value={display}
           onChange={handleChange}
           onBlur={handleBlur}
+          onFocus={onFocus}
           placeholder={placeholder}
           disabled={disabled}
           autoFocus={autoFocus}

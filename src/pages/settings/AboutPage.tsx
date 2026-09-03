@@ -15,7 +15,7 @@ const PLANNED: string[] = []
 
 export function AboutPage() {
   const businessProfileQuery = useBusinessProfile()
-  const businessName = businessProfileQuery.data?.businessName ?? 'Your Business'
+  const businessName = businessProfileQuery.data?.name ?? 'Your Business'
 
   return (
     <div className="mx-auto max-w-2xl">

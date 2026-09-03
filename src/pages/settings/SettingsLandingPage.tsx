@@ -152,7 +152,7 @@ export function SettingsLandingPage() {
       <div>
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Settings</h1>
         <p className="mt-0.5 text-sm text-ink-500">
-          Administration centre for {businessProfileQuery.data?.businessName ?? 'your business'}
+          Administration centre for {businessProfileQuery.data?.name ?? 'your business'}
         </p>
       </div>
 
