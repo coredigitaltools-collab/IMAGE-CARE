@@ -88,8 +88,18 @@ export function useCreditDashboardKpis(branchId?: UUID) {
     queryKey: ['credit', 'kpis', ctx.business_id, branchId ?? branch],
     queryFn: async () => {
       const outstanding = await getOutstandingCredit(ctx, (branchId ?? branch) as UUID | undefined).then(unwrap);
+      // Bug fix (2026-09-04): this always computed 0 for every KPI on the
+      // Credit dashboard, even with real outstanding credit balances,
+      // because it summed `r.outstanding` straight off the raw RPC rows -
+      // fn_get_outstanding_credit_summary only returns `credit_balance`,
+      // never an `outstanding` field. The `outstanding` alias only exists
+      // after withLegacyAliases() runs (see useOutstandingCredit above,
+      // which already calls it) - this hook fetched the same RPC directly
+      // and skipped that step, so `r.outstanding` was always undefined and
+      // every `?? 0` silently zeroed the total. Reuse the same aliasing so
+      // both hooks read the same real field.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const items = Array.isArray(outstanding) ? outstanding as any[] : [];
+      const items = withLegacyAliases(Array.isArray(outstanding) ? outstanding as any[] : []);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const total = items.reduce((s: number, r: any) => s + (r.outstanding ?? 0), 0);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
