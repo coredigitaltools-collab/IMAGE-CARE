@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Wallet, Users, AlertTriangle, TrendingDown, Download, ListChecks, BarChart3, UserPlus } from 'lucide-react'
+import { Wallet, Users, AlertTriangle, TrendingDown, Download, ListChecks, UserPlus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CreditTabs } from '../../components/credit/CreditTabs'
 import { KpiCard } from '../../components/dashboard/KpiCard'
@@ -43,7 +43,6 @@ export function CreditDashboardPage() {
     { label: 'Give a customer credit', icon: UserPlus, onClick: () => navigate('/customers/directory') },
     { label: 'View accounts', icon: ListChecks, onClick: () => navigate('/credit/accounts') },
     { label: 'View overdue', icon: AlertTriangle, onClick: () => navigate('/credit/accounts?overdue=1') },
-    { label: 'Reports', icon: BarChart3, onClick: () => navigate('/credit/reports') },
     { label: 'Export', icon: Download, onClick: exportCsv },
   ]
 

@@ -140,13 +140,11 @@ export function useCreditAccounts(branchId?: UUID) {
   });
 }
 
-export function useAgingReport(_branchId?: UUID) {
-  const ctx = useUserContext();
-  return useQuery({
-    queryKey: ['credit', 'aging', ctx.business_id],
-    queryFn: async () => [] as Array<{ customerId: string; customerName: string; label: string; current: number; days30: number; days60: number; days90: number; over90: number; totalUgx: number; accounts: Array<{ customer: { id: string; name: string }; balance: number }> }>,
-  });
-}
+// useAgingReport removed (2026-09-04): it backed the "Reports" tab, which
+// was removed at the user's request - it was a stub that always returned
+// an empty result (no aging analysis was ever actually built behind it),
+// so it only ever showed "Nothing outstanding" regardless of real credit
+// balances.
 
 export const useRecordPayment = useRecordCreditPayment;
 

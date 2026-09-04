@@ -1,9 +1,15 @@
 import { Link, useLocation } from 'react-router-dom'
 
+// Bug fix (2026-09-04): "Reports" (aging analysis) was removed at the
+// user's request - it was a stub that always showed "Nothing
+// outstanding" regardless of real data (useAgingReport hard-coded an
+// empty result; the feature was never actually built), which was
+// confusing next to Dashboard/Accounts, which show real balances. Not
+// hiding a working feature - just removing a placeholder that had
+// nothing behind it.
 const TABS = [
   { to: '/credit', label: 'Dashboard', exact: true },
   { to: '/credit/accounts', label: 'Accounts' },
-  { to: '/credit/reports', label: 'Reports' },
 ]
 
 export function CreditTabs() {

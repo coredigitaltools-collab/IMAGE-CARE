@@ -79,7 +79,6 @@ const PurchaseReportsPage      = lazy(() => import('../pages/purchasing/Purchase
 // Credit
 const CreditDashboardPage = lazy(() => import('../pages/credit/CreditDashboardPage').then(m => ({ default: m.CreditDashboardPage })));
 const CreditAccountsPage  = lazy(() => import('../pages/credit/CreditAccountsPage').then(m => ({ default: m.CreditAccountsPage })));
-const CreditReportsPage   = lazy(() => import('../pages/credit/CreditReportsPage').then(m => ({ default: m.CreditReportsPage })));
 
 // Invoices
 const InvoiceDashboardPage = lazy(() => import('../pages/invoices/InvoiceDashboardPage').then(m => ({ default: m.InvoiceDashboardPage })));
@@ -370,14 +369,15 @@ export const router = createBrowserRouter([
             ],
           },
 
-          // Credit (Accounts, Reports - Payments are recorded via
-          // the existing RecordPaymentModal from a credit account)
+          // Credit (Accounts - Payments are recorded via the existing
+          // RecordPaymentModal from a credit account. "Reports" (aging
+          // analysis) was removed 2026-09-04 - it was a placeholder that
+          // never showed real data.)
           {
             path: 'credit',
             children: [
               { index: true, element: <CreditDashboardPage /> },
               { path: 'accounts', element: <CreditAccountsPage /> },
-              { path: 'reports', element: <CreditReportsPage /> },
             ],
           },
 
