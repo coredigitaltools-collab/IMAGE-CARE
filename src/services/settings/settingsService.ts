@@ -365,14 +365,29 @@ export async function createStaffMember(
   // supabase-js only sets `error` for a network failure or a non-2xx HTTP
   // status - on a non-2xx status `data` is left null and the function's
   // real JSON body (with the actual message) has to be read back off
-  // error.context (the raw Response), which is why both branches are
-  // checked before falling back to a generic message.
+  // error.context (the raw Response). Bug fix (2026-09-04): this used to
+  // fall all the way through to a single generic "Could not add this staff
+  // member." whenever that JSON body wasn't readable (e.g. a pure network/
+  // CORS failure, where error.context isn't a parseable Response at all) -
+  // which is exactly what happened on the owner's first live attempt: the
+  // request never even reached Supabase (confirmed via the project's edge
+  // function logs - only a CORS preflight was ever recorded, no actual
+  // POST), so there was never a JSON body to read, and the real reason
+  // (a network/CORS-level failure) was masked behind a message that gave
+  // no hint anything besides "add staff" itself had gone wrong. Falling
+  // back to error.message (which supabase-js sets to something concrete,
+  // e.g. "Failed to send a request to the Edge Function") surfaces that
+  // real reason instead, so the next failure is actually diagnosable from
+  // what the owner sees on screen.
   if (error || !data?.success) {
     let message: string | undefined = data?.message;
     if (!message && error && typeof error === 'object' && 'context' in error) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const context = (error as any).context;
       message = await context?.json?.().then((b: { message?: string }) => b?.message).catch(() => undefined);
+    }
+    if (!message && error instanceof Error && error.message) {
+      message = `Could not reach the server (${error.message}). Check your internet connection and try again.`;
     }
     if (message && /already exists/i.test(message)) {
       throw new DuplicateStaffEmailError(input.email);

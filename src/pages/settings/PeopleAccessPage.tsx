@@ -83,7 +83,15 @@ export function PeopleAccessPage() {
       }
       setModalState(null)
     } catch (err) {
-      if (err instanceof DuplicateUsernameError || err instanceof LastActiveOwnerError || err instanceof DuplicateStaffEmailError) {
+      // Bug fix (2026-09-04): every thrown Error here already carries a
+      // clear, human-readable message (see createStaffMember()/
+      // updateStaffMember() in settingsService.ts) - collapsing anything
+      // that wasn't one of these three known classes down to a single
+      // generic "Something went wrong" hid real, useful detail (e.g. a
+      // network/CORS failure reaching the create-staff Edge Function) with
+      // no way to tell what actually happened. Only a genuinely unknown
+      // thrown value (not an Error at all) falls back to the generic text.
+      if (err instanceof DuplicateUsernameError || err instanceof LastActiveOwnerError || err instanceof DuplicateStaffEmailError || err instanceof Error) {
         setFormError(err.message)
       } else {
         setFormError('Something went wrong. Please try again.')
