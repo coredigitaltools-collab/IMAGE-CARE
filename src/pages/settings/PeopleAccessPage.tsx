@@ -48,7 +48,17 @@ export function PeopleAccessPage() {
 
   const roles = rolesQuery.data ?? []
   const activeRoles = roles.filter((r) => r.is_active)
-  const roleName = (roleId: string) => roles.find((r) => r.id === roleId)?.name ?? 'Unknown role'
+  // Bug fix (2026-09-04): every business owner's staff row showed
+  // "Unknown role" here because the value stored on imagecare.users.role
+  // didn't exactly string-match a RoleDefinition.id in the local role
+  // catalogue (fixed at the source: fn_register_business() now writes the
+  // canonical OWNER_ROLE_ID). This fallback is defense in depth on top of
+  // that fix - is_owner is a real, authoritative boolean column (the same
+  // one permission checks use, see hooks/usePermission.ts), so an owner's
+  // label can never fall back to "Unknown role" again even if the `role`
+  // text value ever drifts.
+  const roleName = (roleId: string, isOwner?: boolean) =>
+    roles.find((r) => r.id === roleId)?.name ?? (isOwner ? 'Owner' : 'Unknown role')
 
   const [modalState, setModalState] = useState<{ mode: 'create' } | { mode: 'edit'; staff: StaffMember } | null>(null)
   const [formError, setFormError] = useState<string | undefined>()
@@ -139,7 +149,7 @@ export function PeopleAccessPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium text-ink-900">{member.fullName}</p>
-                    <RoleBadge roleId={member.role} roleName={roleName(member.role)} />
+                    <RoleBadge roleId={member.role} roleName={roleName(member.role, member.is_owner)} />
                     {!member.is_active && (
                       <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">Disabled</span>
                     )}

@@ -25,6 +25,12 @@ export interface StaffMember extends AuditFields {
   email: string
   role: StaffRole
   branchIds: string[]
+  // Real column from imagecare.users (mapStaffRow spreads the raw row in,
+  // this just gives it a declared type). Authoritative owner signal - see
+  // hooks/usePermission.ts. Used as a display fallback in PeopleAccessPage
+  // so the Owner's role label can never regress to "Unknown role" again,
+  // even if the `role` text value ever drifts from the role catalogue's id.
+  is_owner?: boolean
 }
 
 export type StaffInput = Pick<StaffMember, 'fullName' | 'username' | 'email' | 'role' | 'branchIds'>
