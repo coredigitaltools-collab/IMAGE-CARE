@@ -26,6 +26,7 @@ import {
 } from '../../features/settings/hooks/useSettingsData'
 import type { StaffInput, StaffMember } from '../../types/settings'
 import { DuplicateUsernameError, LastActiveOwnerError } from '../../services/staffService'
+import { DuplicateStaffEmailError } from '../../services/settings/settingsService'
 import { DuplicateRoleNameError, OwnerRoleProtectedError, RoleInUseError } from '../../services/roleService'
 
 export function PeopleAccessPage() {
@@ -74,12 +75,15 @@ export function PeopleAccessPage() {
         await updateStaff.mutateAsync({ id: modalState.staff.id, input })
         showToast('Staff member updated.', 'success')
       } else {
-        await createStaff.mutateAsync(input)
-        showToast('Staff member added.', 'success')
+        const result = await createStaff.mutateAsync(input)
+        // Bug fix (2026-09-04): "Add staff" now actually creates a login -
+        // the owner needs to see the one-time temporary password here to
+        // relay it to the new staff member, since it's never shown again.
+        showToast(`Staff member added. Temporary password: ${result.temporaryPassword}`, 'success')
       }
       setModalState(null)
     } catch (err) {
-      if (err instanceof DuplicateUsernameError || err instanceof LastActiveOwnerError) {
+      if (err instanceof DuplicateUsernameError || err instanceof LastActiveOwnerError || err instanceof DuplicateStaffEmailError) {
         setFormError(err.message)
       } else {
         setFormError('Something went wrong. Please try again.')

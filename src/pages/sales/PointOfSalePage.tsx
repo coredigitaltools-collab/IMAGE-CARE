@@ -279,6 +279,10 @@ export function PointOfSalePage() {
           productName: product.name,
           sku: product.sku,
           unitPrice: product.sellingPrice,
+          // Bug fix (2026-09-04): see CartItem.costPrice in types/sales.ts -
+          // this is the value that was never being captured, so every sale
+          // recorded unit_cost 0 regardless of the product's real cost.
+          costPrice: product.buyingPrice,
           quantity,
           availableStock: product.currentStock,
         },
@@ -402,6 +406,11 @@ export function PointOfSalePage() {
         productName: i.productName,
         sku: i.sku,
         unitPrice: i.unitPrice,
+        // Same fix as addToCart - carry the cost forward when resuming a
+        // held sale instead of dropping it (i.unitCost is whatever was
+        // captured when the sale was parked, 0 for sales parked before
+        // this fix, real cost for anything parked after).
+        costPrice: i.unitCost,
         quantity: i.quantity,
         availableStock: productsQuery.data?.find((p) => p.id === i.productId)?.currentStock ?? i.quantity,
       })),

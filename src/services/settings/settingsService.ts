@@ -172,7 +172,7 @@ export async function getReceiptPrefix(ctx: UserContext): Promise<string> {
 // Stage 5: Business profile, staff, expense categories.
 // ============================================================
 
-import type { StaffMember as SettingsStaffMember } from '../../types/settings';
+import type { StaffMember as SettingsStaffMember, StaffInput } from '../../types/settings';
 export type { StaffMember } from '../../types/settings';
 
 export interface BusinessProfile {
@@ -327,6 +327,63 @@ export async function updateStaffMember(
     .select(STAFF_COLUMNS).single();
   if (error) throw new Error(parseError(error).message ?? 'Failed to update staff member.');
   return mapStaffRow(data);
+}
+
+export class DuplicateStaffEmailError extends Error {
+  constructor(email: string) {
+    super(`A staff member with the email "${email}" already exists.`);
+    this.name = 'DuplicateStaffEmailError';
+  }
+}
+
+// Bug fix (2026-09-04): "Add staff" always showed "Staff member added."
+// and reset the form, but never wrote anything to the database -
+// useCreateStaff() in useSettingsData.ts was a pure mock (`async (input) =>
+// ({ ...input, id: crypto.randomUUID() })`) - see the comment there for why
+// it was left that way (creating a real login needs the Auth Admin API,
+// which needs the service-role key, which must never run in browser code).
+// That gap is why staff added here never showed up anywhere real, including
+// the "Add employee to payroll" dropdown, which reads this same real table.
+//
+// This calls the `create-staff` Edge Function (server-side, uses the
+// service-role key there, never in the browser) to create the Supabase
+// Auth login AND the imagecare.users row together. Returns a one-time
+// temporary password for the owner to relay to the new staff member.
+export async function createStaffMember(
+  ctx: UserContext,
+  input: StaffInput
+): Promise<{ staff: SettingsStaffMember; temporaryPassword: string }> {
+  const { data, error } = await supabase.functions.invoke('create-staff', {
+    body: {
+      fullName: input.fullName,
+      email: input.email,
+      role: input.role,
+      branchId: input.branchIds[0] ?? null,
+    },
+  });
+
+  // supabase-js only sets `error` for a network failure or a non-2xx HTTP
+  // status - on a non-2xx status `data` is left null and the function's
+  // real JSON body (with the actual message) has to be read back off
+  // error.context (the raw Response), which is why both branches are
+  // checked before falling back to a generic message.
+  if (error || !data?.success) {
+    let message: string | undefined = data?.message;
+    if (!message && error && typeof error === 'object' && 'context' in error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const context = (error as any).context;
+      message = await context?.json?.().then((b: { message?: string }) => b?.message).catch(() => undefined);
+    }
+    if (message && /already exists/i.test(message)) {
+      throw new DuplicateStaffEmailError(input.email);
+    }
+    throw new Error(message ?? 'Could not add this staff member.');
+  }
+
+  return {
+    staff: mapStaffRow(data.staff),
+    temporaryPassword: data.temporaryPassword as string,
+  };
 }
 
 export async function setStaffActive(

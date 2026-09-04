@@ -1,7 +1,7 @@
 // Stage 5: Settings feature hooks - rewired to Stage 4 services.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext } from '../../../context/AppContext';
-import { getBusinessProfile, saveBusinessProfile, listStaff, updateStaffMember, setStaffActive, getSetting, updateSetting } from '../../../services/settings/settingsService';
+import { getBusinessProfile, saveBusinessProfile, listStaff, createStaffMember, updateStaffMember, setStaffActive, getSetting, updateSetting } from '../../../services/settings/settingsService';
 import { listBranches, createBranch, updateBranch } from '../../../services/masterData/masterDataService';
 import { listRoles, createRole as createRoleReal, renameRole as renameRoleReal, archiveRole as archiveRoleReal } from '../../../services/roleService';
 import { getPermissionMatrix, setPermission as setPermissionReal } from '../../../services/permissionsService';
@@ -323,13 +323,29 @@ export function useRestoreBackup(_userId?: string) {
 export function useLastSyncedAt(_userId?: string) { return useQuery({ queryKey: ['sync', 'last-synced'], queryFn: async () => new Date().toISOString(), staleTime: 30_000 }); }
 export function usePendingSyncItems(_userId?: string) { return useQuery({ queryKey: ['sync', 'pending'], queryFn: async () => [] as Array<{ id: string; operation: string; entityType: string; entityId: string; createdAt: string; status: string }>, staleTime: 15_000 }); }
 export function useRunSync(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async () => ({ success: true, syncedCount: 0, failedCount: 0, errors: [] as string[] }), onSuccess: () => qc.invalidateQueries({ queryKey: ['sync'] }) }); }
-// Create Staff and Reset Password remain mocks: creating a login or setting
-// a password needs the Supabase Auth Admin API (a service-role key), which
-// can't safely run from browser code - see the comment on
-// updateStaffMember()/setStaffActive() in settingsService.ts. Left as-is,
-// not a new bug introduced here.
-export function useCreateStaff(_userId?: string) { const qc = useQueryClient(); return useMutation({ // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: async (input: Record<string, unknown>): Promise<any> => ({ ...input, id: crypto.randomUUID(), temporaryPassword: 'ImageCare@123' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }) }); }
+// Bug fix (2026-09-04): useCreateStaff used to be a pure mock (`async
+// (input) => ({ ...input, id: crypto.randomUUID(), temporaryPassword:
+// 'ImageCare@123' })`) that always reported success but never wrote
+// anything to Supabase - "Add staff" looked like it worked, but the staff
+// member never existed anywhere real, including the "Add employee to
+// payroll" dropdown, which reads this same real table. Now calls the
+// `create-staff` Edge Function (createStaffMember() in settingsService.ts),
+// which uses the Auth Admin API server-side (the service-role key it needs
+// can never run in browser code) to create both the real login and the
+// imagecare.users row together, and returns a real one-time temporary
+// password for the owner to relay to the new staff member.
+//
+// Reset Password remains a mock for the same underlying reason (setting an
+// existing user's password also needs the Auth Admin API) - not touched by
+// this fix.
+export function useCreateStaff(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: StaffInput) => createStaffMember(ctx, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
+  });
+}
 export function useResetStaffPassword(_userId?: string) { return useMutation({ mutationFn: async (id: string) => ({ id, temporaryPassword: 'ImageCare@123' }) }); }
 
 // Bug fix (Settings save-button audit 2026-09-03): these three used to be

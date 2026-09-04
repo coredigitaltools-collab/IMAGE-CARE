@@ -143,6 +143,16 @@ export interface CartItem {
   productName: string
   sku: string
   unitPrice: number
+  // Bug fix (2026-09-04): missing entirely before - every sale ever rung
+  // up through the POS recorded unit_cost as 0 in the database, no matter
+  // what a product's real cost price was, because nothing on the cart
+  // item ever carried it through to checkout (see PointOfSalePage.tsx
+  // addToCart/handleResumeParked and useCheckout in useSalesData.ts,
+  // which has always correctly mapped `costPrice` into `unit_cost` - it
+  // just never received a real value). This silently zeroed COGS, and
+  // therefore inflated Gross Profit and Net Profit, on every Daily/
+  // Monthly/Annual Summary and the main Dashboard, for every sale.
+  costPrice: number
   quantity: number
   availableStock: number
 }
