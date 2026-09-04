@@ -199,6 +199,17 @@ export function parseError(err: unknown): AppError {
     return { code: 'VALIDATION_ERROR', message: 'One of the selected records no longer exists. Please refresh and try again.' };
   }
 
+  // Postgres insufficient_privilege - almost always a Supabase Row Level
+  // Security policy rejecting the request, not a real server error. This
+  // fell through to the generic SERVER_ERROR message below before (bug
+  // fix 2026-09-04: "Add branch" showed "Something went wrong. Please try
+  // again." for exactly this reason, with no way to tell it was actually
+  // a permissions check). Naming it lets the person actually act on it
+  // instead of retrying something that will keep failing the same way.
+  if (pgCode === '42501' || raw.includes('violates row-level security policy')) {
+    return { code: 'PERMISSION_DENIED', message: 'You do not have permission to do that. This usually means the action is restricted to the business owner.' };
+  }
+
   if (raw.includes('INSUFFICIENT_STOCK'))        return { code: 'INSUFFICIENT_STOCK',        message: 'Insufficient stock to complete this operation.' };
   if (raw.includes('PERMISSION_DENIED'))         return { code: 'PERMISSION_DENIED',         message: 'You do not have permission to perform this action.' };
   if (raw.includes('BRANCH_ACCESS_DENIED'))      return { code: 'BRANCH_ACCESS_DENIED',      message: 'You do not have access to this branch.' };

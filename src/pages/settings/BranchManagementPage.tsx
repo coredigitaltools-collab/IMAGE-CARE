@@ -14,7 +14,6 @@ import {
   useUpdateBranch,
 } from '../../features/settings/hooks/useSettingsData'
 import type { BranchInput, BranchRecord } from '../../types/settings'
-import { DuplicateBranchCodeError } from '../../services/branchService'
 
 export function BranchManagementPage() {
   const { user } = useAuth()
@@ -40,7 +39,19 @@ export function BranchManagementPage() {
       }
       setModalState(null)
     } catch (err) {
-      setFormError(err instanceof DuplicateBranchCodeError ? err.message : 'Something went wrong. Please try again.')
+      // Bug fix (2026-09-04): this used to only special-case
+      // DuplicateBranchCodeError - a class from an unused, pre-Stage-4
+      // mock file that createBranch/updateBranch (masterDataService.ts,
+      // the real Supabase-backed path) never actually throws. So every
+      // real failure, of any kind, fell through to the generic
+      // "Something went wrong. Please try again." with no way to tell
+      // what was actually wrong. createBranch/updateBranch already run
+      // every Supabase error through parseError() (types/app.ts), which
+      // turns known Postgres error codes into clear, specific messages
+      // (a duplicate code, a permissions problem, a missing field, etc.)
+      // - that message is what err.message already carries here, so
+      // just show it instead of re-masking it.
+      setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     }
   }
 
