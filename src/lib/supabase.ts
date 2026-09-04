@@ -23,6 +23,25 @@ export const supabase = createClient<Database, 'imagecare'>(supabaseUrl, supabas
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    // Bug fix (2026-09-04): "Add branch" (and potentially other saves)
+    // intermittently failed with a genuine, correctly-enforced permission
+    // rejection for the confirmed business owner. Root cause traced to
+    // the browser, not the database: this computer also runs Traxxo (a
+    // separate real product, same developer, same Supabase project -
+    // same auth.users table), and neither app told the Supabase client
+    // where to keep its login session. Without an explicit storageKey,
+    // supabase-js defaults to a fixed key derived only from the project
+    // ref (`sb-<project-ref>-auth-token`) - since both apps share that
+    // project ref and, on this machine, the same browser storage origin,
+    // whichever app last signed in/refreshed silently overwrote the
+    // other's saved session. ImageCare would then occasionally send a
+    // real, valid, but WRONG-tenant login (e.g. a Traxxo account) - which
+    // Postgres correctly rejected, since that account genuinely isn't
+    // this business's owner. Giving this client its own dedicated
+    // storage key means it can never again share that slot with Traxxo
+    // (or anything else on this machine), regardless of what those other
+    // apps do on their end.
+    storageKey: 'sb-imagecare-erp-auth-token',
   },
   db: {
     // All ImageCare tables live in the imagecare schema
