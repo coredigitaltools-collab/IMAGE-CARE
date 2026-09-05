@@ -38,13 +38,26 @@ function normalizeUsername(username: string): string {
   return username.trim().toLowerCase()
 }
 
+// Bug fix (2026-09-05): StaffInput dropped username/email entirely (see
+// types/settings.ts - staff are PIN-only now, see 0030_stage9_pin_staff.sql).
+// This file is unused dead code already (kept only for its error classes,
+// re-exported via a dynamic import for `instanceof` checks in
+// PeopleAccessPage.tsx - see the real implementation in
+// src/services/settings/settingsService.ts) - these two functions are
+// never actually called, so this just derives a username from the name so
+// the local-store shape stays internally consistent rather than crashing
+// the type checker.
+function usernameFromInput(input: StaffInput): string {
+  return normalizeUsername(input.fullName.replace(/\s+/g, '.'))
+}
+
 export async function createStaff(input: StaffInput, userId: string): Promise<StaffMember> {
   const staff = await listStaff()
-  const username = normalizeUsername(input.username)
+  const username = usernameFromInput(input)
   if (staff.some((s) => normalizeUsername(s.username) === username)) {
     throw new DuplicateUsernameError(username)
   }
-  const member: StaffMember = { ...stampNew(userId), ...input, username }
+  const member: StaffMember = { ...stampNew(userId), ...input, username, email: '' }
   const next = [...staff, member]
   await setCollection(KEY, next)
   await enqueueSync({ entityType: 'staff', entityId: member.id, operation: 'create' })
@@ -53,7 +66,7 @@ export async function createStaff(input: StaffInput, userId: string): Promise<St
 
 export async function updateStaff(id: string, input: StaffInput, userId: string): Promise<StaffMember> {
   const staff = await listStaff()
-  const username = normalizeUsername(input.username)
+  const username = usernameFromInput(input)
   if (staff.some((s) => s.id !== id && normalizeUsername(s.username) === username)) {
     throw new DuplicateUsernameError(username)
   }

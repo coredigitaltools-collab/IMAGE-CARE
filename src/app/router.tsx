@@ -238,6 +238,21 @@ function RequireAuth() {
   return <Outlet />;
 }
 
+// ---- Require owner view (not acting as staff) ----------------
+// Bug fix (2026-09-05, PIN-only staff - see 0030_stage9_pin_staff.sql):
+// AppShell's Sidebar already hides the Settings link while a staff
+// member is identified via PIN on a shared device, but hiding a link
+// doesn't stop someone typing /settings/... directly into the address
+// bar. This is the same safety net at the route level - Settings (staff
+// PINs, roles, business config) always redirects to the dashboard while
+// activeStaff is set, regardless of what the owner's own real
+// permissions would otherwise allow.
+function RequireOwnerView() {
+  const { activeStaff } = useApp();
+  if (activeStaff) return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}
+
 // ---- Suspense wrapper -------------------------------------
 function SuspenseShell() {
   return (
@@ -450,6 +465,7 @@ export const router = createBrowserRouter([
           // Access = Users module)
           {
             path: 'settings',
+            element: <RequireOwnerView />,
             children: [
               { index: true, element: <SettingsLandingPage /> },
               { path: 'business-profile', element: <BusinessProfilePage /> },

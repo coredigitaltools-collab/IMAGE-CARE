@@ -123,7 +123,7 @@ export function AppShell({ children }: AppShellProps) {
 // ---- Sidebar -----------------------------------------------
 
 function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
-  const { userContext } = useApp();
+  const { userContext, activeStaff } = useApp();
   const { can } = usePermission(userContext);
 
   return (
@@ -181,6 +181,18 @@ function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }
         {NAV_ITEMS.map(item => {
           const hasAccess = can(item.module, 'view');
           if (!hasAccess && item.module !== 'reports') return null;
+          // PIN staff mode (2026-09-05, see 0030_stage9_pin_staff.sql):
+          // the owner's real permissions (ctx.permissions, via
+          // fn_get_user_context) are still what's checked above - this is
+          // an additional, coarse restriction layered on top while a
+          // staff member is identified on a shared device. Settings
+          // (business config, staff PINs, roles/permissions) always stays
+          // hidden while acting as staff, regardless of the owner's own
+          // access - real per-role restrictions for everything else are a
+          // separate, larger follow-up (the Roles/Permission Matrix
+          // screens don't persist to the database yet - see
+          // claude/add-staff-not-persisting-fix-2026-09-04.md).
+          if (activeStaff && item.module === 'settings') return null;
           return (
             <SidebarNavItem
               key={item.path}

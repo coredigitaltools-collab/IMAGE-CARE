@@ -1,7 +1,7 @@
 // Stage 5: Settings feature hooks - rewired to Stage 4 services.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext } from '../../../context/AppContext';
-import { getBusinessProfile, saveBusinessProfile, listStaff, createStaffMember, updateStaffMember, setStaffActive, getSetting, updateSetting } from '../../../services/settings/settingsService';
+import { getBusinessProfile, saveBusinessProfile, listStaff, createStaffWithPin, resetStaffPin, updateStaffMember, setStaffActive, getSetting, updateSetting } from '../../../services/settings/settingsService';
 import { listBranches, createBranch, updateBranch } from '../../../services/masterData/masterDataService';
 import { listRoles, createRole as createRoleReal, renameRole as renameRoleReal, archiveRole as archiveRoleReal } from '../../../services/roleService';
 import { getPermissionMatrix, setPermission as setPermissionReal } from '../../../services/permissionsService';
@@ -328,25 +328,35 @@ export function useRunSync(_userId?: string) { const qc = useQueryClient(); retu
 // 'ImageCare@123' })`) that always reported success but never wrote
 // anything to Supabase - "Add staff" looked like it worked, but the staff
 // member never existed anywhere real, including the "Add employee to
-// payroll" dropdown, which reads this same real table. Now calls the
-// `create-staff` Edge Function (createStaffMember() in settingsService.ts),
-// which uses the Auth Admin API server-side (the service-role key it needs
-// can never run in browser code) to create both the real login and the
-// imagecare.users row together, and returns a real one-time temporary
-// password for the owner to relay to the new staff member.
+// payroll" dropdown, which reads this same real table. That was first
+// fixed with a `create-staff` Edge Function (real Supabase Auth login +
+// service-role key), but that flow's POST request never once reached
+// Supabase in production for this owner (a client-network-path issue, not
+// a code bug - see claude/add-staff-not-persisting-fix-2026-09-04.md).
 //
-// Reset Password remains a mock for the same underlying reason (setting an
-// existing user's password also needs the Auth Admin API) - not touched by
-// this fix.
+// 2026-09-05: replaced with createStaffWithPin() - a simpler, owner-
+// requested model (matching a reference product, "TRAXXO") with no
+// email/password/Edge Function at all: name, role, and a 4-digit PIN,
+// written directly to imagecare.users under the owner's own already-
+// working RLS insert policy. Staff identify themselves by PIN later (see
+// AppContext's switchToStaff()) rather than signing in themselves.
 export function useCreateStaff(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: StaffInput) => createStaffMember(ctx, input),
+    mutationFn: (input: StaffInput) => createStaffWithPin(ctx, input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
   });
 }
-export function useResetStaffPassword(_userId?: string) { return useMutation({ mutationFn: async (id: string) => ({ id, temporaryPassword: 'ImageCare@123' }) }); }
+
+// Replaces the old useResetStaffPassword mock (`async (id) => ({ id,
+// temporaryPassword: 'ImageCare@123' })`, which never touched Supabase) -
+// there's no password to reset any more in the PIN-only staff model, so
+// this resets the staff member's real PIN via fn_set_staff_pin instead.
+export function useResetStaffPin(_userId?: string) {
+  const ctx = useUserContext();
+  return useMutation({ mutationFn: ({ id, pin }: { id: string; pin: string }) => resetStaffPin(ctx, id, pin) });
+}
 
 // Bug fix (Settings save-button audit 2026-09-03): these three used to be
 // identity-function mocks (`async (id) => ({id})`, `async ({id,input}) =>

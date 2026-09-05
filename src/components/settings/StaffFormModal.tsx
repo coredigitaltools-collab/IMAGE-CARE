@@ -8,13 +8,47 @@ import { RoleQuickSelect } from './RoleQuickSelect'
 import { Button } from '../ui/Button'
 import type { BranchRecord, RoleDefinition, StaffInput, StaffMember } from '../../types/settings'
 
-const schema = z.object({
+// Bug fix (2026-09-05): "Add staff" used to require an email + password
+// (a real Supabase Auth login, created via a server-side Edge Function).
+// That path never once reached Supabase in production for this owner (a
+// client network issue - see claude/add-staff-not-persisting-fix-2026-09-04.md)
+// and, separately, the owner asked for a simpler model matching a
+// reference product ("TRAXXO"): name, optional job title, a 4-digit PIN,
+// optional phone/salary - no email, no password, no separate login
+// account. Staff identify themselves with their PIN on a shared,
+// already-signed-in device (see StaffSwitcherModal) instead of signing in
+// themselves. Email/username fields are gone from this form entirely.
+const formFields = {
   fullName: z.string().trim().min(1, 'Full name is required.'),
-  username: z.string().trim().min(3, 'Username must be at least 3 characters.'),
-  email: z.string().trim().email('Enter a valid email address.'),
+  jobTitle: z.string().trim().optional(),
   role: z.string().min(1, 'Select a role.'),
   branchIds: z.array(z.string()).min(1, 'Assign at least one branch.'),
+  phone: z.string().trim().optional(),
+  monthlySalary: z.string().trim().optional(),
+}
+
+// PIN is required to create a new staff member (that's their only way to
+// identify themselves) but is not part of the Edit form - changing an
+// existing staff member's PIN goes through the separate "Reset PIN"
+// action instead, so one accidental edit can never silently lock them out.
+const createSchema = z.object({
+  ...formFields,
+  pin: z.string().regex(/^\d{4}$/, 'PIN must be exactly 4 digits.'),
 })
+const editSchema = z.object({ ...formFields, pin: z.string().optional() })
+
+// The form's own shape - every field is free text (HTML inputs only ever
+// produce strings), unlike StaffInput.monthlySalary (a number). `submit`
+// below converts between the two before calling onSubmit.
+interface FormValues {
+  fullName: string
+  jobTitle?: string
+  role: string
+  branchIds: string[]
+  phone?: string
+  monthlySalary?: string
+  pin?: string
+}
 
 interface StaffFormModalProps {
   branches: BranchRecord[]
@@ -33,17 +67,26 @@ export function StaffFormModal({ branches, roles, userId, initial, onClose, onSu
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<StaffInput>({
-    resolver: zodResolver(schema),
+  } = useForm<FormValues>({
+    resolver: zodResolver(initial ? editSchema : createSchema),
     defaultValues: initial
       ? {
           fullName: initial.fullName,
-          username: initial.username,
-          email: initial.email,
+          jobTitle: initial.jobTitle ?? '',
           role: initial.role,
           branchIds: initial.branchIds,
+          phone: initial.phone ?? '',
+          monthlySalary: initial.monthlySalary != null ? String(initial.monthlySalary) : '',
         }
-      : { fullName: '', username: '', email: '', role: roles.find((r) => r.id !== 'owner')?.id ?? roles[0]?.id ?? '', branchIds: [] },
+      : {
+          fullName: '',
+          jobTitle: '',
+          role: roles.find((r) => r.id !== 'owner')?.id ?? roles[0]?.id ?? '',
+          branchIds: [],
+          phone: '',
+          monthlySalary: '',
+          pin: '',
+        },
   })
 
   const selectedBranchIds = watch('branchIds')
@@ -56,13 +99,35 @@ export function StaffFormModal({ branches, roles, userId, initial, onClose, onSu
     setValue('branchIds', next, { shouldValidate: true, shouldDirty: true })
   }
 
+  const submit = handleSubmit(async (values) => {
+    await onSubmit({
+      ...values,
+      // Monthly Salary is optional and typed as free text in the form (a
+      // plain numeric <input>) - normalize blank to undefined rather than
+      // sending an empty string or NaN through to the database.
+      monthlySalary: values.monthlySalary?.trim() ? Number(values.monthlySalary) : undefined,
+      jobTitle: values.jobTitle?.trim() || undefined,
+      phone: values.phone?.trim() || undefined,
+    })
+  })
+
   return (
     <Modal title={initial ? 'Edit staff member' : 'Add staff member'} onClose={onClose} size="lg">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        <FormField label="Full name" {...register('fullName')} error={errors.fullName?.message} />
+      <form onSubmit={submit} className="space-y-5">
+        <FormField label="Full name" placeholder="e.g. Joy Nakato" {...register('fullName')} error={errors.fullName?.message} />
+
         <FormRow>
-          <FormField label="Username" {...register('username')} error={errors.username?.message} />
-          <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
+          <FormField label="Position (optional)" placeholder="e.g. Cashier" {...register('jobTitle')} error={errors.jobTitle?.message} />
+          {!initial && (
+            <FormField
+              label="4-Digit PIN"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="0000"
+              {...register('pin')}
+              error={errors.pin?.message}
+            />
+          )}
         </FormRow>
 
         <RoleQuickSelect
@@ -73,6 +138,11 @@ export function StaffFormModal({ branches, roles, userId, initial, onClose, onSu
           userId={userId}
           error={errors.role?.message}
         />
+
+        <FormRow>
+          <FormField label="Phone (optional)" type="tel" placeholder="e.g. 0700111222" {...register('phone')} error={errors.phone?.message} />
+          <FormField label="Monthly Salary (optional)" inputMode="decimal" placeholder="e.g. 150000" {...register('monthlySalary')} error={errors.monthlySalary?.message} />
+        </FormRow>
 
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink-700">Assigned branches</p>
@@ -99,7 +169,7 @@ export function StaffFormModal({ branches, roles, userId, initial, onClose, onSu
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : 'Save'}
+            {isSubmitting ? 'Saving…' : initial ? 'Save' : 'Add Staff'}
           </Button>
         </div>
       </form>

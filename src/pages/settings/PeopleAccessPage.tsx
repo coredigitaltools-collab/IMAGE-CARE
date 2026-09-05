@@ -10,6 +10,7 @@ import { StaffFormModal } from '../../components/settings/StaffFormModal'
 import { PermissionMatrixTable } from '../../components/settings/PermissionMatrixTable'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
+import { formatCurrency, formatDate } from '../../utils/formatters'
 import {
   useArchiveRole,
   useBranches,
@@ -18,7 +19,7 @@ import {
   useDisableStaff,
   usePermissionMatrix,
   useReactivateStaff,
-  useResetStaffPassword,
+  useResetStaffPin,
   useRoles,
   useSetPermission,
   useStaff,
@@ -26,7 +27,7 @@ import {
 } from '../../features/settings/hooks/useSettingsData'
 import type { StaffInput, StaffMember } from '../../types/settings'
 import { DuplicateUsernameError, LastActiveOwnerError } from '../../services/staffService'
-import { DuplicateStaffEmailError } from '../../services/settings/settingsService'
+import { DuplicateStaffEmailError, InvalidStaffPinError } from '../../services/settings/settingsService'
 import { DuplicateRoleNameError, OwnerRoleProtectedError, RoleInUseError } from '../../services/roleService'
 
 export function PeopleAccessPage() {
@@ -42,7 +43,7 @@ export function PeopleAccessPage() {
   const updateStaff = useUpdateStaff(user.id)
   const disableStaff = useDisableStaff(user.id)
   const reactivateStaff = useReactivateStaff(user.id)
-  const resetPassword = useResetStaffPassword()
+  const resetPin = useResetStaffPin(user.id)
   const setPermission = useSetPermission(user.id)
   const createRole = useCreateRole(user.id)
   const archiveRole = useArchiveRole(user.id)
@@ -65,6 +66,7 @@ export function PeopleAccessPage() {
   const [formError, setFormError] = useState<string | undefined>()
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false)
   const [archivingRole, setArchivingRole] = useState<{ id: string; name: string } | null>(null)
+  const [resettingPin, setResettingPin] = useState<StaffMember | null>(null)
 
   const branches = branchesQuery.data ?? []
 
@@ -75,23 +77,24 @@ export function PeopleAccessPage() {
         await updateStaff.mutateAsync({ id: modalState.staff.id, input })
         showToast('Staff member updated.', 'success')
       } else {
-        const result = await createStaff.mutateAsync(input)
-        // Bug fix (2026-09-04): "Add staff" now actually creates a login -
-        // the owner needs to see the one-time temporary password here to
-        // relay it to the new staff member, since it's never shown again.
-        showToast(`Staff member added. Temporary password: ${result.temporaryPassword}`, 'success')
+        // Bug fix (2026-09-05): "Add staff" is now PIN-only (no email,
+        // password, or Edge Function - see createStaffWithPin() in
+        // settingsService.ts) - the owner picks the PIN themselves in the
+        // form, so unlike the old temporary-password flow there's nothing
+        // extra to relay back here.
+        await createStaff.mutateAsync(input)
+        showToast('Staff member added.', 'success')
       }
       setModalState(null)
     } catch (err) {
       // Bug fix (2026-09-04): every thrown Error here already carries a
-      // clear, human-readable message (see createStaffMember()/
+      // clear, human-readable message (see createStaffWithPin()/
       // updateStaffMember() in settingsService.ts) - collapsing anything
-      // that wasn't one of these three known classes down to a single
-      // generic "Something went wrong" hid real, useful detail (e.g. a
-      // network/CORS failure reaching the create-staff Edge Function) with
-      // no way to tell what actually happened. Only a genuinely unknown
-      // thrown value (not an Error at all) falls back to the generic text.
-      if (err instanceof DuplicateUsernameError || err instanceof LastActiveOwnerError || err instanceof DuplicateStaffEmailError || err instanceof Error) {
+      // that wasn't one of these known classes down to a single generic
+      // "Something went wrong" hid real, useful detail. Only a genuinely
+      // unknown thrown value (not an Error at all) falls back to the
+      // generic text.
+      if (err instanceof DuplicateUsernameError || err instanceof LastActiveOwnerError || err instanceof DuplicateStaffEmailError || err instanceof InvalidStaffPinError || err instanceof Error) {
         setFormError(err.message)
       } else {
         setFormError('Something went wrong. Please try again.')
@@ -108,9 +111,25 @@ export function PeopleAccessPage() {
     }
   }
 
-  const handleResetPassword = async (member: StaffMember) => {
-    const result = await resetPassword.mutateAsync(member.id)
-    showToast(`Temporary password for ${member.fullName}: ${result.temporaryPassword}`)
+  // Bug fix (2026-09-05): replaces the old "Reset password" mock (which
+  // always returned a fake temporary password and never touched Supabase)
+  // - there's no password in the PIN-only staff model, so this sets a new
+  // real PIN via fn_set_staff_pin instead. The owner types the new PIN
+  // themselves (same as when adding a staff member) rather than the app
+  // generating one, so there's nothing secret to display back afterwards.
+  const handleResetPin = async (newPin: string) => {
+    if (!resettingPin) return
+    if (!/^\d{4}$/.test(newPin)) {
+      showToast('PIN must be exactly 4 digits.')
+      return
+    }
+    try {
+      await resetPin.mutateAsync({ id: resettingPin.id, pin: newPin })
+      showToast(`PIN reset for ${resettingPin.fullName}.`, 'success')
+      setResettingPin(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not reset this PIN.')
+    }
   }
 
   const handleAddRole = async (name: string) => {
@@ -162,12 +181,21 @@ export function PeopleAccessPage() {
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium text-ink-900">{member.fullName}</p>
                     <RoleBadge roleId={member.role} roleName={roleName(member.role, member.is_owner)} />
-                    {!member.is_active && (
-                      <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">Disabled</span>
-                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${member.is_active ? 'bg-success-100 text-success-700' : 'bg-ink-50 text-ink-500'}`}>
+                      {member.is_active ? 'ACTIVE' : 'DISABLED'}
+                    </span>
                   </div>
+                  {/* Bug fix (2026-09-05): PIN-only staff have no email/
+                      username - this used to always show "@username · email"
+                      even when both were blank. Now shows position/salary/
+                      added-date instead, matching what's actually collected
+                      for a PIN-only staff member (see StaffFormModal). */}
                   <p className="text-xs text-ink-500">
-                    @{member.username} · {member.email}
+                    {[
+                      member.jobTitle || roleName(member.role, member.is_owner),
+                      member.monthlySalary != null ? `${formatCurrency(member.monthlySalary)}/mo` : null,
+                      member.created_at ? `added ${formatDate(member.created_at)}` : null,
+                    ].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -177,12 +205,14 @@ export function PeopleAccessPage() {
                   >
                     Edit
                   </button>
-                  <button
-                    onClick={() => handleResetPassword(member)}
-                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
-                  >
-                    <KeyRound size={13} /> Reset password
-                  </button>
+                  {!member.is_owner && (
+                    <button
+                      onClick={() => setResettingPin(member)}
+                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    >
+                      <KeyRound size={13} /> Reset PIN
+                    </button>
+                  )}
                   {member.is_active ? (
                     <button
                       onClick={() => handleDisable(member)}
@@ -236,6 +266,18 @@ export function PeopleAccessPage() {
           }}
           onSubmit={handleSubmit}
           submitError={formError}
+        />
+      )}
+
+      {resettingPin && (
+        <ConfirmDialog
+          title={`Reset PIN for ${resettingPin.fullName}`}
+          message="Enter a new 4-digit PIN for this staff member. They'll use it to identify themselves on the till - let them know it changed."
+          confirmLabel="Reset PIN"
+          reasonLabel="New 4-digit PIN"
+          reasonPlaceholder="e.g. 4821"
+          onConfirm={(pin) => handleResetPin(pin ?? '')}
+          onCancel={() => setResettingPin(null)}
         />
       )}
 

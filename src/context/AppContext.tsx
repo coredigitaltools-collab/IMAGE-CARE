@@ -63,9 +63,26 @@ import {
   login, logout, register, loadUserContext, onAuthStateChange,
   getMyBusinessId, hasPin as hasPinRpc, setPin as setPinRpc, verifyPin,
 } from '../services/auth/authService';
+import { verifyStaffPin } from '../services/settings/settingsService';
 import type { RegisterInput } from '../services/auth/authService';
 import type { UserContext } from '../types/app';
 import type { UUID } from '../types/database';
+
+// ---- Active staff (PIN identification) shape ----------------
+//
+// Distinct from userContext: userContext is always the real, actually
+// authenticated Supabase Auth user (the owner, on a shared device).
+// activeStaff is a lightweight, PIN-verified overlay identifying which
+// staff member is currently operating that already-authenticated
+// session - see 0030_stage9_pin_staff.sql for the full design rationale.
+// It is NOT a second real login and never changes auth.uid()/RLS - it
+// only drives which name/role shows in the header and which sidebar
+// modules are visible (see AppShell's Sidebar).
+export interface ActiveStaff {
+  id: string;
+  fullName: string;
+  role: string;
+}
 
 // ---- Context shape -----------------------------------------
 
@@ -96,6 +113,14 @@ interface AppContextValue {
   unlockWithPin:      (pin: string) => Promise<{ success: boolean; error?: string; locked?: boolean }>;
   setPin:             (pin: string, confirmPin: string) => Promise<{ success: boolean; error?: string }>;
   refreshHasPin:      () => Promise<void>;
+
+  // ---- Active staff (PIN switcher) ---------------------------
+  activeStaff:        ActiveStaff | null;
+  switchToStaff:      (staffId: string, pin: string) => Promise<{ success: boolean; error?: string; locked?: boolean }>;
+  // Requires the OWNER's own daily unlock PIN (fn_verify_pin) - not the
+  // staff PIN - so a staff member operating the till can't simply click
+  // their way back into the owner's full access.
+  switchBackToOwner:  (ownerPin: string) => Promise<{ success: boolean; error?: string; locked?: boolean }>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -128,6 +153,39 @@ function clearCachedContext(): void {
   }
 }
 
+// ---- Active staff session storage ---------------------------
+// Own key, separate from SESSION_KEY - survives a page refresh mid-shift
+// (a staff member on a shared till reloading the page shouldn't silently
+// bounce back to full owner access) but is explicitly cleared on lock()
+// and signOut() below, since a shared device being locked or signed out
+// is exactly when "who's currently identified" should reset.
+const ACTIVE_STAFF_KEY = 'imc_active_staff';
+
+function getCachedActiveStaff(): ActiveStaff | null {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_STAFF_KEY);
+    return raw ? (JSON.parse(raw) as ActiveStaff) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedActiveStaff(staff: ActiveStaff): void {
+  try {
+    sessionStorage.setItem(ACTIVE_STAFF_KEY, JSON.stringify(staff));
+  } catch {
+    // non-fatal
+  }
+}
+
+function clearCachedActiveStaff(): void {
+  try {
+    sessionStorage.removeItem(ACTIVE_STAFF_KEY);
+  } catch {
+    // non-fatal
+  }
+}
+
 // ---- Provider ----------------------------------------------
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -137,6 +195,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeBranchId, setActiveBranchId] = useState<UUID | null>(null);
   const [isLocked, setIsLocked]             = useState(false);
   const [hasPinState, setHasPinState]       = useState(false);
+  const [activeStaff, setActiveStaff]       = useState<ActiveStaff | null>(() => getCachedActiveStaff());
   const mountedRef = useRef(true);
 
   const isAuthenticated = userContext !== null;
@@ -266,7 +325,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsContextStale(false);
         setIsLocked(false);
         setHasPinState(false);
+        setActiveStaff(null);
         clearCachedContext();
+        clearCachedActiveStaff();
         return;
       }
 
@@ -370,7 +431,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsContextStale(false);
       setIsLocked(false);
       setHasPinState(false);
+      setActiveStaff(null);
       clearCachedContext();
+      clearCachedActiveStaff();
     } finally {
       setIsLoading(false);
     }
@@ -389,9 +452,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ---- Lock ---------------------------------------------------
   // The "Lock" action, distinct from Sign Out. Returns to the PIN
   // screen without touching the Supabase session or userContext -
-  // this is the normal, expected daily action.
+  // this is the normal, expected daily action. Also clears any active
+  // staff identification - a locked device shows the owner's own unlock
+  // screen next, not a staff member's view, and unlocking always starts
+  // from "owner" until the staff switcher is used again.
   const lock = useCallback(() => {
     setIsLocked(true);
+    setActiveStaff(null);
+    clearCachedActiveStaff();
   }, []);
 
   // ---- Unlock with PIN -----------------------------------------
@@ -452,6 +520,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setHasPinState(userHasPin);
   }, []);
 
+  // ---- Switch to staff (PIN identification) ---------------------
+  // Verifies the staff member's PIN server-side (fn_verify_staff_pin -
+  // rate-limited per staff row, same 5-attempts/30-minute pattern as the
+  // owner's own unlock PIN). Does NOT touch auth.uid()/the real Supabase
+  // session - it only records which staff member is now identified on
+  // this already-authenticated device (see AppShell's Sidebar, which
+  // hides Settings while a staff member is active).
+  const switchToStaff = useCallback(async (
+    staffId: string,
+    pin: string
+  ): Promise<{ success: boolean; error?: string; locked?: boolean }> => {
+    const result = await verifyStaffPin(staffId, pin);
+
+    if (!result.success) {
+      if (result.reason === 'LOCKED') {
+        return { success: false, locked: true, error: 'Too many incorrect attempts. Try again later.' };
+      }
+      if (result.reason === 'NO_PIN_SET') {
+        return { success: false, error: 'No PIN has been set for this staff member yet.' };
+      }
+      if (result.reason === 'NOT_FOUND') {
+        return { success: false, error: 'Staff member not found.' };
+      }
+      const remaining = result.attemptsRemaining;
+      return {
+        success: false,
+        error: typeof remaining === 'number'
+          ? `Incorrect PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Incorrect PIN.',
+      };
+    }
+
+    const next: ActiveStaff = { id: result.staffId ?? staffId, fullName: result.fullName ?? '', role: result.role ?? '' };
+    setActiveStaff(next);
+    setCachedActiveStaff(next);
+    return { success: true };
+  }, []);
+
+  // ---- Switch back to owner ---------------------------------------
+  // Deliberately reuses the OWNER's own daily unlock PIN (fn_verify_pin -
+  // the same one used to unlock the device each day), not a staff PIN -
+  // this is the whole point of gating "switch back" at all: a staff
+  // member using the till can identify themselves and be shown a
+  // restricted view, but cannot self-escalate back to full owner access
+  // just by clicking a button.
+  const switchBackToOwner = useCallback(async (
+    ownerPin: string
+  ): Promise<{ success: boolean; error?: string; locked?: boolean }> => {
+    const result = await verifyPin(ownerPin);
+
+    if (!result.success) {
+      if (result.reason === 'LOCKED') {
+        return { success: false, locked: true, error: 'Too many incorrect attempts. Try again later, or use email and password instead.' };
+      }
+      const remaining = result.attemptsRemaining;
+      return {
+        success: false,
+        error: typeof remaining === 'number'
+          ? `Incorrect PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Incorrect PIN.',
+      };
+    }
+
+    setActiveStaff(null);
+    clearCachedActiveStaff();
+    return { success: true };
+  }, []);
+
   const handleSetActiveBranch = useCallback((branchId: UUID) => {
     setActiveBranchId(branchId);
   }, []);
@@ -474,6 +610,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshHasPin,
       signOut,
       refreshUserContext,
+      activeStaff,
+      switchToStaff,
+      switchBackToOwner,
     }}>
       {children}
     </AppContext.Provider>

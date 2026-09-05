@@ -249,14 +249,17 @@ export async function saveBusinessProfile(
 }
 
 // Explicit column list (not '*'): imagecare.users also carries
-// pin_hash/pin_failed_attempts/pin_locked_until/pin_set_at (daily unlock
-// PIN - see 0020_stage7_pin_auth.sql). Those must never be included in an
-// API response, even a bcrypt hash, so they are deliberately left out.
+// pin_hash/pin_failed_attempts/pin_locked_until (daily unlock PIN - see
+// 0020_stage7_pin_auth.sql). Those must never be included in an API
+// response, even a bcrypt hash, so they are deliberately left out.
+// pin_set_at IS included - it's just a timestamp (not the hash), used to
+// show whether a PIN-only staff member has a PIN configured at all (see
+// mapStaffRow's `hasPin` below).
 const STAFF_COLUMNS = `
   id, business_id, branch_id, auth_user_id, first_name, last_name,
   email, phone, role, is_owner, employment_type, hire_date, salary,
   salary_currency, avatar_url, is_active, last_login_at, settings,
-  metadata, created_at, updated_at, deleted_at
+  metadata, created_at, updated_at, deleted_at, job_title, pin_set_at
 `;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -271,6 +274,9 @@ function mapStaffRow(u: any): SettingsStaffMember {
     // of the real value, so "Assigned branches" always rendered with
     // nothing checked even for staff who do have a branch_id set.
     branchIds:      u.branch_id ? [u.branch_id as string] : [],
+    jobTitle:       u.job_title ?? undefined,
+    monthlySalary:  u.salary != null ? Number(u.salary) : undefined,
+    hasPin:         u.pin_set_at != null,
     updated_at:     u.updated_at ?? new Date().toISOString(),
     created_by:     u.created_by ?? '',
     updated_by:     u.updated_by ?? '',
@@ -309,7 +315,7 @@ export async function listStaff(ctx: UserContext): Promise<ApiResult<SettingsSta
 export async function updateStaffMember(
   ctx: UserContext,
   id: UUID,
-  input: { fullName?: string; email?: string; role?: string; branchIds?: string[] }
+  input: { fullName?: string; email?: string; role?: string; branchIds?: string[]; jobTitle?: string; phone?: string; monthlySalary?: number }
 ): Promise<SettingsStaffMember> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.fullName !== undefined) {
@@ -321,6 +327,13 @@ export async function updateStaffMember(
   if (input.email !== undefined) row.email = input.email;
   if (input.role !== undefined) row.role = input.role;
   if (input.branchIds !== undefined) row.branch_id = input.branchIds[0] ?? null;
+  // Bug fix (2026-09-05): Edit staff collects job title/phone/monthly
+  // salary too (see StaffFormModal) - these used to be silently dropped
+  // here, so an edit would look like it saved (the toast said "updated")
+  // but those three fields never actually persisted.
+  if (input.jobTitle !== undefined) row.job_title = input.jobTitle ?? null;
+  if (input.phone !== undefined) row.phone = input.phone ?? null;
+  if (input.monthlySalary !== undefined) row.salary = input.monthlySalary ?? null;
 
   const { data, error } = await supabase.schema('imagecare').from('users')
     .update(row).eq('id', id).eq('business_id', ctx.business_id)
@@ -349,9 +362,17 @@ export class DuplicateStaffEmailError extends Error {
 // service-role key there, never in the browser) to create the Supabase
 // Auth login AND the imagecare.users row together. Returns a one-time
 // temporary password for the owner to relay to the new staff member.
+//
+// Kept in place but UNUSED as of 2026-09-05 (see createStaffWithPin below,
+// which useCreateStaff() now calls instead) - the owner asked for a
+// simpler PIN-only staff model (no email/password) matching a reference
+// product, so this Edge-Function-based flow is no longer wired into the
+// UI. Left here deliberately rather than deleted, in case a real email
+// login for staff is wanted again later (same precedent as the old local
+// staffService.ts staying in the codebase unused for its error classes).
 export async function createStaffMember(
   ctx: UserContext,
-  input: StaffInput
+  input: { fullName: string; email: string; role: string; branchIds: string[] }
 ): Promise<{ staff: SettingsStaffMember; temporaryPassword: string }> {
   const { data, error } = await supabase.functions.invoke('create-staff', {
     body: {
@@ -398,6 +419,133 @@ export async function createStaffMember(
   return {
     staff: mapStaffRow(data.staff),
     temporaryPassword: data.temporaryPassword as string,
+  };
+}
+
+// ------------------------------------------------------------
+// PIN-only staff (2026-09-05)
+//
+// No email, no password, no Supabase Auth account, no Edge Function.
+// The owner picks a name, role, and a 4-digit PIN; the row is inserted
+// directly into imagecare.users (RLS already lets the owner INSERT into
+// their own business - rls_s1_users_insert, 0001_stage1_foundation.sql),
+// then the PIN is hashed and stored server-side via fn_set_staff_pin
+// (needs pgcrypto, which can't run in browser code, same reason the old
+// self-unlock PIN uses fn_set_pin instead of hashing client-side).
+//
+// Staff identify themselves later via verifyStaffPin() on a shared,
+// already-authenticated device (see StaffSwitcherModal / AppContext's
+// switchToStaff()) - this is NOT a second real login. See
+// 0030_stage9_pin_staff.sql for the full design rationale, agreed with
+// the business owner.
+// ------------------------------------------------------------
+
+export class InvalidStaffPinError extends Error {
+  constructor() {
+    super('PIN must be exactly 4 digits.');
+    this.name = 'InvalidStaffPinError';
+  }
+}
+
+export async function createStaffWithPin(
+  ctx: UserContext,
+  input: StaffInput
+): Promise<SettingsStaffMember> {
+  if (!input.pin || !/^\d{4}$/.test(input.pin)) {
+    throw new InvalidStaffPinError();
+  }
+
+  const trimmed = input.fullName.trim();
+  const spaceIdx = trimmed.indexOf(' ');
+  const first_name = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+  const last_name = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1).trim();
+
+  const { data: row, error: insertErr } = await supabase.schema('imagecare').from('users')
+    .insert({
+      business_id: ctx.business_id,
+      branch_id: input.branchIds[0] ?? null,
+      first_name,
+      last_name,
+      email: null,
+      phone: input.phone ?? null,
+      role: input.role,
+      job_title: input.jobTitle ?? null,
+      salary: input.monthlySalary ?? null,
+      is_owner: false,
+      is_active: true,
+    })
+    .select(STAFF_COLUMNS).single();
+
+  if (insertErr || !row) {
+    throw new Error(parseError(insertErr).message ?? 'Could not add this staff member.');
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: pinResult, error: pinErr } = await (supabase as any).rpc('fn_set_staff_pin', {
+    p_staff_id: row.id,
+    p_pin: input.pin,
+    p_pin_confirm: input.pin,
+  });
+
+  if (pinErr || !(pinResult as { success?: boolean } | null)?.success) {
+    // Roll back the just-inserted row so a failed PIN step never leaves a
+    // staff member with no way to identify themselves - same
+    // never-leave-a-half-finished-record principle as the old
+    // create-staff Edge Function's Auth-account rollback.
+    await supabase.schema('imagecare').from('users').delete().eq('id', row.id).eq('business_id', ctx.business_id).then(() => null, () => null);
+    throw new Error(parseError(pinErr).message ?? 'Could not set the PIN for this staff member. Please try again.');
+  }
+
+  return mapStaffRow({ ...row, pin_set_at: new Date().toISOString() });
+}
+
+export async function resetStaffPin(
+  ctx: UserContext, staffId: UUID, newPin: string
+): Promise<void> {
+  if (!/^\d{4}$/.test(newPin)) {
+    throw new InvalidStaffPinError();
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('fn_set_staff_pin', {
+    p_staff_id: staffId,
+    p_pin: newPin,
+    p_pin_confirm: newPin,
+  });
+  if (error || !(data as { success?: boolean } | null)?.success) {
+    throw new Error(parseError(error).message ?? 'Could not reset this staff member’s PIN.');
+  }
+}
+
+export interface VerifyStaffPinResult {
+  success: boolean;
+  reason?: 'NOT_FOUND' | 'NO_PIN_SET' | 'LOCKED' | 'WRONG_PIN';
+  staffId?: string;
+  fullName?: string;
+  role?: string;
+  attemptsRemaining?: number;
+  lockedUntil?: string;
+}
+
+// No UserContext argument: this can run for anyone with a live session
+// (it's how the app figures out which STAFF member is now at the
+// keyboard), not just the owner - fn_verify_staff_pin checks the caller's
+// own business membership server-side.
+export async function verifyStaffPin(staffId: UUID, pin: string): Promise<VerifyStaffPinResult> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('fn_verify_staff_pin', { p_staff_id: staffId, p_pin: pin });
+  if (error) throw new Error(parseError(error).message ?? 'Could not verify this PIN.');
+  const result = data as {
+    success: boolean; reason?: string; staff_id?: string; full_name?: string;
+    role?: string; attempts_remaining?: number; locked_until?: string;
+  };
+  return {
+    success: result.success,
+    reason: result.reason as VerifyStaffPinResult['reason'],
+    staffId: result.staff_id,
+    fullName: result.full_name,
+    role: result.role,
+    attemptsRemaining: result.attempts_remaining,
+    lockedUntil: result.locked_until,
   };
 }
 
