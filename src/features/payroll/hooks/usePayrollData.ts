@@ -46,11 +46,14 @@ export function usePayrollEmployees() {
   return useQuery({ queryKey: ['payroll', 'employees'], queryFn: payrollService.listPayrollEmployees })
 }
 
-// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+// LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap).
+// staffId is still validated against the REAL staff list (imagecare.users)
+// inside addEmployeeToPayroll, which is why ctx is needed here too.
 export function useAddEmployeeToPayroll(userId: string) {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: PayrollEmployeeInput) => payrollService.addEmployeeToPayroll(input, userId),
+    mutationFn: (input: PayrollEmployeeInput) => payrollService.addEmployeeToPayroll(ctx, input, userId),
     onSuccess: () => invalidateAll(qc),
   })
 }

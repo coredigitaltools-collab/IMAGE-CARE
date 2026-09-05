@@ -18,7 +18,8 @@
 
 import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
 import { stampNew, stampUpdated } from '../lib/audit'
-import { listStaff } from './staffService'
+import { listStaff as listRealStaff } from './settings/settingsService'
+import type { UserContext } from '../types/app'
 import type {
   EmployeePayComponent,
   PayComponentType,
@@ -37,8 +38,19 @@ export async function listPayrollEmployees(): Promise<PayrollEmployeeRecord[]> {
   return getCollection<PayrollEmployeeRecord>(EMPLOYEES_KEY, () => [])
 }
 
-export async function addEmployeeToPayroll(input: PayrollEmployeeInput, userId: string): Promise<PayrollEmployeeRecord> {
-  const staff = await listStaff()
+// Bug fix (2026-09-05): this used to validate staffId against
+// services/staffService.ts's local-storage staff collection (seeded with
+// unrelated fake records), while the "Staff member" dropdown that feeds
+// staffId is built from the REAL staff list (imagecare.users, via
+// settingsService.listStaff - see PayrollEmployeesPage's useStaff()). The
+// two lists never share ids, so choosing any real staff member (e.g. a
+// PIN-only staff member added under Settings -> People & Access) always
+// failed with "Select a valid staff member." even though a valid one was
+// selected. Validate against the same real staff list the dropdown uses.
+export async function addEmployeeToPayroll(ctx: UserContext, input: PayrollEmployeeInput, userId: string): Promise<PayrollEmployeeRecord> {
+  const staffResult = await listRealStaff(ctx)
+  if (staffResult.error) throw new Error(staffResult.error.message || 'Could not load staff.')
+  const staff = staffResult.data ?? []
   if (!staff.some((s) => s.id === input.staffId)) throw new Error('Select a valid staff member.')
   const existing = await listPayrollEmployees()
   if (existing.some((e) => e.staffId === input.staffId && e.is_active)) {

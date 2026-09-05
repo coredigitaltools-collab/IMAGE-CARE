@@ -12,7 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
-import { useStaff } from '../../features/settings/hooks/useSettingsData'
+import { useRoles, useStaff } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'
 import {
   useAddEmployeeToPayroll,
@@ -29,6 +29,7 @@ export function PayrollEmployeesPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const staffQuery = useStaff()
+  const rolesQuery = useRoles()
   const employeesQuery = usePayrollEmployees()
   const allowanceTypesQuery = useComponentTypes('allowance')
   const deductionTypesQuery = useComponentTypes('deduction')
@@ -147,6 +148,7 @@ export function PayrollEmployeesPage() {
       {isAddOpen && (
         <AddEmployeeToPayrollModal
           eligibleStaff={eligibleStaff}
+          roles={rolesQuery.data ?? []}
           submitError={addError}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (staffId, baseSalaryUgx) => {
