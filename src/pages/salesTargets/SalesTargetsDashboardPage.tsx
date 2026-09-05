@@ -49,7 +49,7 @@ export function SalesTargetsDashboardPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Sales Targets</h1>
-        <p className="mt-0.5 text-sm text-ink-500">How the business is tracking against the current business-wide target.</p>
+        <p className="mt-0.5 text-sm text-ink-500">How the business, and top performers, are tracking against current sales targets.</p>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -67,43 +67,61 @@ export function SalesTargetsDashboardPage() {
         ))}
       </div>
 
-      {dataQuery.isLoading ? null : !data?.current ? (
-        <Card className="p-6">
-          <EmptyState
-            icon={Target}
-            title="No active business target"
-            description="Create a business-wide target for the current period to see progress here."
-            action={{ label: 'New target', onClick: () => setIsCreateOpen(true) }}
-          />
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <KpiCard label="Target" value={formatCurrency(data.current.target.targetAmountUgx, 'UGX')} icon={Target} tone="blue" isLoading={false} />
-          <KpiCard label="Sales achieved" value={formatCurrency(data.current.achievedUgx, 'UGX')} icon={TrendingUp} tone="success" isLoading={false} />
-          <KpiCard label="Remaining target" value={formatCurrency(data.current.remainingUgx, 'UGX')} icon={Flag} tone="neutral" isLoading={false} />
-          <KpiCard
-            label="Achievement"
-            value={`${data.current.achievementPercent}%`}
-            icon={Percent}
-            tone={data.current.achievementPercent >= 100 ? 'success' : 'neutral'}
-            isLoading={false}
-          />
-          <KpiCard
-            label="Top performer"
-            value={data.topPerformer ? data.topPerformer.name : 'No staff targets yet'}
-            hint={data.topPerformer ? `${data.topPerformer.achievementPercent}% of target` : undefined}
-            icon={Award}
-            tone="neutral"
-            isLoading={false}
-          />
-          <KpiCard
-            label="Best branch"
-            value={data.bestBranch ? data.bestBranch.name : 'No branch targets yet'}
-            hint={data.bestBranch ? `${data.bestBranch.achievementPercent}% of target` : undefined}
-            icon={Building2}
-            tone="neutral"
-            isLoading={false}
-          />
+      {dataQuery.isLoading ? null : (
+        <div className="space-y-4">
+          {/* Bug fix (2026-09-05): this whole KPI section used to be one
+              block, so a staff target (e.g. Mariam's) with real progress
+              never appeared anywhere on this page unless a business-wide
+              target ALSO happened to be active for the current period -
+              "Top performer"/"Best branch" were computed correctly but
+              stayed hidden behind an unrelated condition. They're now
+              always shown (each already has its own "No staff/branch
+              targets yet" fallback for when there truly is none), while
+              the business-wide KPIs keep their own empty state when there
+              is no active business-wide target. See
+              claude/sales-targets-dashboard-fix-2026-09-05.md. */}
+          {data?.current ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <KpiCard label="Target" value={formatCurrency(data.current.target.targetAmountUgx, 'UGX')} icon={Target} tone="blue" isLoading={false} />
+              <KpiCard label="Sales achieved" value={formatCurrency(data.current.achievedUgx, 'UGX')} icon={TrendingUp} tone="success" isLoading={false} />
+              <KpiCard label="Remaining target" value={formatCurrency(data.current.remainingUgx, 'UGX')} icon={Flag} tone="neutral" isLoading={false} />
+              <KpiCard
+                label="Achievement"
+                value={`${data.current.achievementPercent}%`}
+                icon={Percent}
+                tone={data.current.achievementPercent >= 100 ? 'success' : 'neutral'}
+                isLoading={false}
+              />
+            </div>
+          ) : (
+            <Card className="p-6">
+              <EmptyState
+                icon={Target}
+                title="No active business-wide target"
+                description="Create a business-wide target for the current period to track overall progress here."
+                action={{ label: 'New target', onClick: () => setIsCreateOpen(true) }}
+              />
+            </Card>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <KpiCard
+              label="Top performer"
+              value={data?.topPerformer ? data.topPerformer.name : 'No staff targets yet'}
+              hint={data?.topPerformer ? `${data.topPerformer.achievementPercent}% of target` : undefined}
+              icon={Award}
+              tone="neutral"
+              isLoading={false}
+            />
+            <KpiCard
+              label="Best branch"
+              value={data?.bestBranch ? data.bestBranch.name : 'No branch targets yet'}
+              hint={data?.bestBranch ? `${data.bestBranch.achievementPercent}% of target` : undefined}
+              icon={Building2}
+              tone="neutral"
+              isLoading={false}
+            />
+          </div>
         </div>
       )}
 
