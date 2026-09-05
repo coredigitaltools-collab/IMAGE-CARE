@@ -144,14 +144,25 @@ export async function listRedemptions(customerId?: string): Promise<LoyaltyRedem
   return customerId ? sorted.filter((r) => r.customerId === customerId) : sorted
 }
 
-export async function redeemReward(customerId: string, rewardId: string, userId: string): Promise<LoyaltyRedemption> {
-  const [customers, rewards, settings] = await Promise.all([listCustomers(), listRewards(), getLoyaltySettings()])
-  const customer = customers.find((c) => c.id === customerId)
+// Bug fix (2026-09-05): this used to look up the customer's balance in
+// listCustomers() here - the OLD, local-storage-only mock customer store
+// (see customerService.ts), completely disconnected from the real
+// customers a business actually has in Supabase. Every real customer's id
+// is foreign to that mock list, so this always threw "Customer not
+// found." for any real redemption attempt. The real points balance now
+// lives in imagecare.loyalty_accounts and is debited there via
+// fn_redeem_loyalty_points (see useRedeemReward in useLoyaltyData.ts,
+// which fetches the real balance first and passes it in here just for
+// the reward-catalogue-level validation below). This function still owns
+// the local redemption record only - which reward was redeemed and for
+// how many points - since no loyalty_redemptions table exists in the
+// real schema.
+export async function redeemReward(customerId: string, currentPointsBalance: number, rewardId: string, userId: string): Promise<LoyaltyRedemption> {
+  const [rewards, settings] = await Promise.all([listRewards(), getLoyaltySettings()])
   const reward = rewards.find((r) => r.id === rewardId)
-  if (!customer) throw new Error('Customer not found.')
   if (!reward) throw new Error('Reward not found.')
   if (reward.pointsCost < settings.minPointsToRedeem) throw new BelowMinimumRedemptionError(settings.minPointsToRedeem)
-  if (customer.loyaltyPoints < reward.pointsCost) throw new InsufficientPointsError(customer.loyaltyPoints, reward.pointsCost)
+  if (currentPointsBalance < reward.pointsCost) throw new InsufficientPointsError(currentPointsBalance, reward.pointsCost)
 
   const redemption: LoyaltyRedemption = {
     id: crypto.randomUUID(),
@@ -165,17 +176,6 @@ export async function redeemReward(customerId: string, rewardId: string, userId:
   const redemptions = await getCollection<LoyaltyRedemption>(REDEMPTIONS_KEY, () => [])
   await setCollection(REDEMPTIONS_KEY, [...redemptions, redemption])
   await enqueueSync({ entityType: 'loyalty_redemption', entityId: redemption.id, operation: 'create' })
-
-  await adjustCustomerLoyaltyPoints(customerId, -reward.pointsCost, userId)
-  await logTransaction({
-    customerId,
-    type: 'redeem',
-    points: -reward.pointsCost,
-    relatedSaleId: null,
-    relatedRedemptionId: redemption.id,
-    reason: `Redeemed for ${reward.name}`,
-    createdBy: userId,
-  })
 
   return redemption
 }

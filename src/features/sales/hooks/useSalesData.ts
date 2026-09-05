@@ -6,6 +6,12 @@ import {
   archiveCustomer, reactivateCustomer, listCustomerNotes, addCustomerNote, findCustomerDuplicates,
 } from '../../../services/masterData/masterDataService';
 import { createSale, listSales, getSale, cancelSale } from '../../../services/sales/salesService';
+import {
+  listLoyaltyAccounts as listLoyaltyAccountsReal,
+  getLoyaltyAccountByCustomer as getLoyaltyAccountByCustomerReal,
+  awardLoyaltyPoints,
+} from '../../../services/loyalty/loyaltyService';
+import { getLoyaltySettings } from '../../../services/loyaltyService';
 import type { UUID } from '../../../types/database';
 import type { Customer as SalesCustomer } from '../../../types/sales';
 import type { UserContext } from '../../../types/app';
@@ -28,8 +34,17 @@ function readAddress(address: any): string {
   return Object.keys(address).length > 0 ? JSON.stringify(address) : '';
 }
 
+// Bug fix (2026-09-05): loyaltyPoints was hardcoded to 0 here always - the
+// real balance lives in imagecare.loyalty_accounts.points_balance (a
+// separate table, joined in by caller), not on the customers row itself.
+// A customer who has genuinely earned points (see fn_award_loyalty_points)
+// was still shown "0 pts" everywhere (Customer Detail's Loyalty tab, the
+// Redeem points picker) because of this. loyaltyPoints is now a parameter
+// instead of a hardcoded literal; callers that don't have a real balance
+// handy (create/update customer, CRM KPIs) still default to 0, which is
+// correct for those cases since nothing there changes an existing balance.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapCustomer(c: any): SalesCustomer {
+function mapCustomer(c: any, loyaltyPoints = 0): SalesCustomer {
   return {
     id: c.id, created_at: c.created_at ?? '', updated_at: c.updated_at ?? '',
     created_by: c.created_by ?? '', updated_by: c.updated_by ?? '',
@@ -42,7 +57,7 @@ function mapCustomer(c: any): SalesCustomer {
     address: readAddress(c.address),
     notes: c.notes ?? '', tags: c.tags ?? [], status: 'active' as const,
     dateOfBirth: null, preferredBranchId: null, preferredPaymentMethod: null,
-    creditLimit: c.credit_limit ?? 0, loyaltyPoints: 0,
+    creditLimit: c.credit_limit ?? 0, loyaltyPoints,
     lifetimePurchases: 0, creditBalance: c.credit_balance ?? 0,
   };
 }
@@ -51,8 +66,17 @@ export function useCustomers() {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['sales', 'customers', ctx.business_id],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    queryFn: async () => (await listCustomers(ctx).then(unwrap) as any[]).map(mapCustomer),
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (await listCustomers(ctx).then(unwrap)) as any[];
+      // Best-effort: the customer list itself must still render even if
+      // this second, loyalty-specific read fails for any reason.
+      const accounts: Array<{ customer_id: string; points_balance: number }> = await listLoyaltyAccountsReal(ctx, { is_active: true })
+        .then((r) => (r.error ? [] : r.data ?? []))
+        .catch(() => []);
+      const pointsByCustomer = new Map<string, number>(accounts.map((a): [string, number] => [a.customer_id, a.points_balance]));
+      return rows.map((c) => mapCustomer(c, pointsByCustomer.get(c.id) ?? 0));
+    },
   });
 }
 
@@ -60,7 +84,14 @@ export function useCustomer(id: string | undefined) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['sales', 'customer', id],
-    queryFn: async () => { const c = await getCustomer(ctx, id as UUID).then(unwrap); return c ? mapCustomer(c) : null; },
+    queryFn: async () => {
+      const c = await getCustomer(ctx, id as UUID).then(unwrap);
+      if (!c) return null;
+      const account = await getLoyaltyAccountByCustomerReal(ctx, id as UUID)
+        .then((r) => (r.error ? null : r.data))
+        .catch(() => null);
+      return mapCustomer(c, account?.points_balance ?? 0);
+    },
     enabled: Boolean(id),
   });
 }
@@ -162,15 +193,21 @@ export function useCrmKpis() {
     queryKey: ['sales', 'crm-kpis', ctx.business_id],
     queryFn: async () => {
       const raw = await listCustomers(ctx).then(unwrap);
-      const customers = (Array.isArray(raw) ? raw : []).map(mapCustomer);
+      const customers = (Array.isArray(raw) ? raw : []).map((c) => mapCustomer(c));
       const thirtyAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
       const new30 = customers.filter(c => (c.created_at ?? '') > thirtyAgo).length;
+      // Bug fix (2026-09-05): hardcoded to 0 - now a real count of
+      // enrolled loyalty accounts with a positive balance (see
+      // fn_award_loyalty_points). Best-effort, same reasoning as useCustomers.
+      const loyaltyAccounts: Array<{ points_balance: number }> = await listLoyaltyAccountsReal(ctx, { is_active: true })
+        .then((r) => (r.error ? [] : r.data ?? []))
+        .catch(() => []);
       return {
         totalCustomers: customers.length, activeCustomers: customers.filter(c => c.is_active).length,
         newCustomers30d: new30, activeCustomers30d: customers.filter(c => c.is_active).length,
         lifetimeValueUgx: customers.reduce((s, c) => s + c.lifetimePurchases, 0),
         outstandingCreditUgx: customers.reduce((s, c) => s + c.creditBalance, 0),
-        loyaltyMembers: 0,
+        loyaltyMembers: loyaltyAccounts.filter((a) => a.points_balance > 0).length,
       };
     },
   });
@@ -216,13 +253,13 @@ export function useCheckout(_userId?: string) {
   const branch = useActiveBranch();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CheckoutInput) => {
+    mutationFn: async (input: CheckoutInput) => {
       const subtotal = input.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
       const discountAmt = Math.round((subtotal * input.discountPercent) / 100);
       const total = subtotal - discountAmt;
       const isCredit = input.paymentMethod === 'credit';
       const saleCtx: UserContext = ctx;
-      return createSale(saleCtx, {
+      const sale = await createSale(saleCtx, {
         branch_id:      (input.branchId ?? branch ?? ctx.branch_id) as UUID,
         payment_method: input.paymentMethod as 'cash' | 'mobile_money' | 'bank_transfer' | 'card' | 'credit',
         customer_id:    (input.customerId ?? undefined) as UUID | undefined,
@@ -232,6 +269,26 @@ export function useCheckout(_userId?: string) {
         notes:          input.paymentReference ?? undefined,
         items: input.items.map(i => ({ product_id: i.productId as UUID, quantity: i.quantity, unit_price: i.unitPrice, unit_cost: i.costPrice ?? 0 })),
       }).then(unwrap);
+
+      // Bug fix (2026-09-05): completing a sale never awarded any real
+      // loyalty points - see claude/loyalty-not-connected-to-sales-fix-
+      // 2026-09-05.md. Only a completed sale (not a parked one) with a
+      // customer attached qualifies, matching "points awarded after
+      // completed sales" / "only registered customers earn points."
+      // Best-effort: a loyalty hiccup must never undo or block a sale
+      // that has already been recorded and paid for.
+      if (input.status === 'completed' && input.customerId && sale?.sale_id) {
+        try {
+          const settings = await getLoyaltySettings();
+          const amountUgx = typeof sale.total_amount === 'number' && sale.total_amount > 0 ? sale.total_amount : total;
+          await awardLoyaltyPoints(saleCtx, input.customerId as UUID, sale.sale_id as UUID, amountUgx, settings.ugxPerPoint);
+        } catch {
+          // Sale already succeeded; the loyalty award can be retried by
+          // support if needed, it must not surface as a checkout failure.
+        }
+      }
+
+      return sale;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sales'] });
@@ -244,6 +301,12 @@ export function useCheckout(_userId?: string) {
       // not immediately. Needed now that Complete Sale navigates straight
       // to the Dashboard to show the sale that was just recorded.
       qc.invalidateQueries({ queryKey: ['recent-sales'] });
+      // 2026-09-05: a completed sale can now award real loyalty points -
+      // refresh the Loyalty pages and the customer list (loyaltyPoints)
+      // so the award is visible without a manual refresh.
+      qc.invalidateQueries({ queryKey: ['loyalty'] });
+      qc.invalidateQueries({ queryKey: ['sales', 'customers'] });
+      qc.invalidateQueries({ queryKey: ['sales', 'crm-kpis'] });
     },
   });
 }

@@ -1,36 +1,36 @@
 // ============================================================
 // IMC-BLD-003 | ImageCare ERP API & Service Contract v1.0
 // File: src/services/loyalty/loyaltyService.ts
-// Purpose: Loyalty programme - REAL backend wiring, minimum safe subset.
+// Purpose: Loyalty programme - REAL backend wiring.
 //
-// SCOPE NOTE (do not extend without a product decision):
+// SCOPE NOTE (updated 2026-09-05 - see
+// claude/loyalty-not-connected-to-sales-fix-2026-09-05.md):
 // imagecare.loyalty_accounts / imagecare.loyalty_transactions exist in
 // the DB (database/migrations/0011_stage2_supporting_domains.sql) but
 // nothing in the schema computes points_balance from transactions - no
-// trigger, no function (confirmed by grepping every migration file for
-// "loyalty"). The migration comment "points_balance derives from
-// loyalty_transactions" is aspirational, not enforced. There is also no
-// points-per-currency conversion rate, no redemption minimum, no
-// expiry policy, and no loyalty_rewards / loyalty_redemptions table
-// anywhere in the schema.
+// trigger, no function. There is still no loyalty_rewards /
+// loyalty_redemptions table anywhere in the schema, so the reward
+// catalogue and redemption log stay local-storage (see
+// src/services/loyaltyService.ts / docs/MODULE_INTEGRATION_MAP.md gap).
 //
-// This file therefore contains ONLY rule-free reads plus one
-// zero-balance row insert:
-//   - listLoyaltyAccounts        real SELECT, business-scoped
+// What IS now real (0031_stage9_loyalty_award.sql):
+//   - listLoyaltyAccounts         real SELECT, business-scoped
 //   - getLoyaltyAccountByCustomer real SELECT single row
-//   - listLoyaltyTransactions    real SELECT, business+account-scoped
-//   - enrollLoyaltyAccount       real INSERT of schema defaults only
-//     (points_balance: 0, tier: 'standard', is_active: true - no
-//     invented numbers)
+//   - listLoyaltyTransactions     real SELECT, business+account-scoped
+//   - enrollLoyaltyAccount        real INSERT of schema defaults only
+//   - awardLoyaltyPoints          real, atomic award via
+//     fn_award_loyalty_points (auto-enrolls on first qualifying sale,
+//     idempotent per sale_id) - called from useCheckout on every
+//     completed sale that has a customer attached
+//   - redeemLoyaltyPoints         real, atomic debit via
+//     fn_redeem_loyalty_points - called from useRedeemReward after the
+//     local reward catalogue confirms the reward and its point cost
 //
-// It deliberately does NOT implement awarding points, redeeming
-// points/rewards, tier calculation, or expiration: every one of those
-// requires a business rule (conversion rate, redemption minimum, tier
-// thresholds, expiry window) that does not exist anywhere in the real
-// schema. Writing those rules into code that reads from real tables
-// would make invented numbers look like verified backend behaviour.
-// Those operations remain local-only in src/services/loyaltyService.ts
-// (see src/features/loyalty/hooks/useLoyaltyData.ts for the split).
+// The UGX-per-point conversion rate is still read from the local,
+// owner-editable Loyalty Settings (getLoyaltySettings() in
+// src/services/loyaltyService.ts) rather than hardcoded here or in the
+// DB function - that number has nowhere else to live (no schema column
+// for it), but the award/redeem WRITES themselves are real and atomic.
 // ============================================================
 
 import { supabase } from '../../lib/supabase';
@@ -156,5 +156,90 @@ export async function listLoyaltyTransactions(
     return serviceOk((data ?? []) as LoyaltyTransaction[], requestId);
   } catch {
     return serviceFail('INTERNAL_ERROR', 'Failed to load loyalty transactions.', { requestId });
+  }
+}
+
+// ===========================================================
+// AWARD / REDEEM (real, atomic - see scope note above)
+// ===========================================================
+
+export interface AwardLoyaltyPointsResult {
+  points: number;
+  newBalance: number | null;
+  alreadyAwarded: boolean;
+}
+
+// Called once per completed sale with a customer attached. A best-effort
+// side effect of checkout, not a condition for it - see useCheckout in
+// useSalesData.ts, which swallows a failure here rather than failing an
+// otherwise-successful sale over the loyalty programme.
+export async function awardLoyaltyPoints(
+  ctx: UserContext,
+  customerId: UUID,
+  saleId: UUID,
+  amountUgx: number,
+  ugxPerPoint: number
+): Promise<ServiceResponse<AwardLoyaltyPointsResult>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'loyalty', 'create')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to award loyalty points.', { requestId });
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('fn_award_loyalty_points', {
+      p_customer_id: customerId,
+      p_sale_id: saleId,
+      p_amount_ugx: amountUgx,
+      p_ugx_per_point: ugxPerPoint,
+    });
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to award loyalty points.', { requestId });
+    const result = data as { points?: number; new_balance?: number; already_awarded?: boolean } | null;
+    return serviceOk(
+      {
+        points: result?.points ?? 0,
+        newBalance: result?.new_balance ?? null,
+        alreadyAwarded: result?.already_awarded ?? false,
+      },
+      requestId
+    );
+  } catch {
+    return serviceFail('INTERNAL_ERROR', 'Failed to award loyalty points.', { requestId });
+  }
+}
+
+export interface RedeemLoyaltyPointsResult {
+  newBalance: number;
+}
+
+// Debits the same real balance awardLoyaltyPoints credits. The reward
+// catalogue (which reward, its point cost) stays local - see
+// useRedeemReward in useLoyaltyData.ts for how the two are combined.
+export async function redeemLoyaltyPoints(
+  ctx: UserContext,
+  customerId: UUID,
+  points: number,
+  description: string
+): Promise<ServiceResponse<RedeemLoyaltyPointsResult>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'loyalty', 'create')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to redeem loyalty points.', { requestId });
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).rpc('fn_redeem_loyalty_points', {
+      p_customer_id: customerId,
+      p_points: points,
+      p_description: description,
+    });
+    if (error) {
+      const raw = String(error.message ?? '');
+      if (raw.includes('INSUFFICIENT_POINTS')) return serviceFail('BUSINESS_RULE_VIOLATION', 'This customer does not have enough points for this reward.', { requestId });
+      if (raw.includes('NOT_FOUND')) return serviceFail('RESOURCE_NOT_FOUND', 'This customer is not enrolled in the loyalty programme yet.', { requestId });
+      return serviceFail('INTERNAL_ERROR', 'Failed to redeem loyalty points.', { requestId });
+    }
+    const result = data as { new_balance?: number } | null;
+    return serviceOk({ newBalance: result?.new_balance ?? 0 }, requestId);
+  } catch {
+    return serviceFail('INTERNAL_ERROR', 'Failed to redeem loyalty points.', { requestId });
   }
 }

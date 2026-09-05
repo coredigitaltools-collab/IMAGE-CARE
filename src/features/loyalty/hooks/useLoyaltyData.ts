@@ -4,6 +4,7 @@ import {
   listLoyaltyAccounts as listLoyaltyAccountsReal,
   getLoyaltyAccountByCustomer as getLoyaltyAccountByCustomerReal,
   listLoyaltyTransactions as listLoyaltyTransactionsReal,
+  redeemLoyaltyPoints as redeemLoyaltyPointsReal,
 } from '../../../services/loyalty/loyaltyService'
 import * as loyaltyService from '../../../services/loyaltyService'
 import type { LoyaltyRewardInput, LoyaltySettings, LoyaltyTransaction as LocalLoyaltyTransaction } from '../../../types/loyalty'
@@ -185,13 +186,40 @@ export function useLoyaltyRedemptions(customerId?: string) {
   return useQuery({ queryKey: ['loyalty', 'redemptions', customerId ?? 'all'], queryFn: () => loyaltyService.listRedemptions(customerId) })
 }
 
-// LOCAL-ONLY: redeeming requires an invented redemption minimum and a
-// loyalty_rewards catalogue, neither of which exists in the real DB schema
-// (see docs/MODULE_INTEGRATION_MAP.md gap)
+// HYBRID (2026-09-05): the reward catalogue and minimum-points rule stay
+// local (no loyalty_rewards table in the real schema), but the balance
+// being redeemed against is real now (imagecare.loyalty_accounts, see
+// fn_award_loyalty_points/fn_redeem_loyalty_points in
+// 0031_stage9_loyalty_award.sql). This used to validate and debit against
+// the OLD local-storage mock customer list (see the bug-fix comment on
+// loyaltyService.redeemReward), which never matched a real customer's id
+// - every real redemption attempt failed with "Customer not found."
+// Fetches the real balance first, lets the local catalogue validate the
+// reward/minimum/sufficiency and record which reward was redeemed, then
+// debits the real balance for real.
 export function useRedeemReward(userId: string) {
+  const ctx = useUserContext()
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ customerId, rewardId }: { customerId: string; rewardId: string }) => loyaltyService.redeemReward(customerId, rewardId, userId),
+    mutationFn: async ({ customerId, rewardId }: { customerId: string; rewardId: string }) => {
+      const rewards = await loyaltyService.listRewards()
+      const reward = rewards.find((r) => r.id === rewardId)
+      if (!reward) throw new Error('Reward not found.')
+
+      const accountResp = await getLoyaltyAccountByCustomerReal(ctx, customerId)
+      if (accountResp.error) throw new Error(accountResp.error.message)
+      const currentBalance = accountResp.data?.points_balance ?? 0
+
+      // Throws InsufficientPointsError / BelowMinimumRedemptionError
+      // before any real points move, and records the local redemption
+      // entry (which reward, for how many points) once validated.
+      const redemption = await loyaltyService.redeemReward(customerId, currentBalance, rewardId, userId)
+
+      const debitResp = await redeemLoyaltyPointsReal(ctx, customerId, reward.pointsCost, `Redeemed for ${reward.name}`)
+      if (debitResp.error) throw new Error(debitResp.error.message)
+
+      return redemption
+    },
     onSuccess: () => invalidateAll(qc),
   })
 }
