@@ -242,9 +242,21 @@ export function usePayrollDashboardKpis() {
       // pay_date first, so this reads the most recent 200.
       const items = (await listPayroll(ctx, {}, { page_size: APP_CONSTANTS.MAX_PAGE_SIZE }).then(unwrap)) as PayrollRecord[]
 
-      const activeEmployeeCount = new Set(
-        items.filter((r) => r.status !== 'cancelled' && r.status !== 'archived').map((r) => r.user_id),
-      ).size
+      // Bug fix (2026-09-05): this counted distinct user_id across real
+      // imagecare.payroll rows, which only exist once a payroll PERIOD has
+      // actually been created/run (see payrollPeriodService.createPeriod).
+      // "Employees on payroll" reads as "how many staff have I added to
+      // payroll" - matching the Employees tab's own copy ("Staff on
+      // payroll, with their base salary...") - not "how many were paid in
+      // a completed run," so a business that just added an employee (e.g.
+      // Mariam) but hasn't run payroll yet always showed 0 here even
+      // though the Employees tab correctly listed them. The employee
+      // register itself (still local-only - no table in the real schema,
+      // see services/payrollService.ts) is the right source for this
+      // count; the other KPIs below stay period/run-based, which is
+      // correctly empty/zero until a payroll run actually happens.
+      const payrollEmployees = await payrollService.listPayrollEmployees()
+      const activeEmployeeCount = payrollEmployees.filter((e) => e.is_active).length
 
       const sortedByDate = [...items].sort((a, b) => new Date(b.pay_date).getTime() - new Date(a.pay_date).getTime())
       const currentPeriodStatus = sortedByDate.length > 0 ? payrollPeriodService.rowStatusToPeriodStatus(sortedByDate[0].status) : null
