@@ -109,6 +109,9 @@ export interface CreateSaleInput {
   credit_amount: number;
   notes?: string;
   items: CreateSaleItemInput[];
+  // Bug fix (2026-09-05): see the comment on CreateSaleCommand.served_by
+  // in engines/types.ts - plumbed through from here to the real insert.
+  served_by?: UUID;
 }
 
 export interface SaleResult {
@@ -135,6 +138,7 @@ export async function createAndPostSale(
     sale_date:      input.sale_date,
     payment_method: input.payment_method,
     notes:          input.notes,
+    served_by:      input.served_by,
     lines: input.items.map(item => ({
       product_id:   item.product_id,
       quantity:     item.quantity,

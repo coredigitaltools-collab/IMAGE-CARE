@@ -267,6 +267,9 @@ export function useCheckout(_userId?: string) {
         change_given:   isCredit ? 0 : Math.max(0, (input.amountTendered ?? total) - total),
         credit_amount:  isCredit ? total : 0,
         notes:          input.paymentReference ?? undefined,
+        // Bug fix (2026-09-05): checkout captured "Sold by" but never
+        // saved it - see claude/sales-targets-dashboard-fix-2026-09-05.md.
+        served_by:      (input.salesPersonId ?? undefined) as UUID | undefined,
         items: input.items.map(i => ({ product_id: i.productId as UUID, quantity: i.quantity, unit_price: i.unitPrice, unit_cost: i.costPrice ?? 0 })),
       }).then(unwrap);
 

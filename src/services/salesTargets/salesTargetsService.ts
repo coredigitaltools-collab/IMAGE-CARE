@@ -9,24 +9,31 @@
 // (src/services/salesTargetsService.ts, kept for the one scope it can
 // still honestly represent, see the note on createTarget below).
 //
-// This file adds real create/delete for BRANCH- and STAFF-scoped
-// targets, following the same ServiceResponse/canDo pattern as
-// src/services/financial/financialServices.ts. BUSINESS-wide targets
-// are the one case this table cannot represent:
-// chk_s2_target_scope requires branch_id OR user_id to be set, so a
-// business-wide row (both null, exactly what "business" scope means)
-// is rejected by the database outright. Rather than block the default,
-// most-common "Business-wide" option in the New Target modal on a
-// schema limitation nobody asked to change, useCreateTarget (see
-// features/salesTargets/hooks/useSalesTargetsData.ts) routes that one
-// scope to the existing local store and everything else here.
+// This file adds real create/delete for BRANCH-, STAFF-, and (as of the
+// 2026-09-05 Sales Targets dashboard fix) BUSINESS-scoped targets, plus
+// real achievement computation against imagecare.sales, following the
+// same ServiceResponse/canDo pattern as
+// src/services/financial/financialServices.ts.
+//
+// Bug fix (2026-09-05): chk_s2_target_scope used to require branch_id OR
+// user_id to be set, so a business-wide row (both null) was rejected by
+// the database outright, and every dashboard/leaderboard/report view read
+// only the old local-only store (services/salesTargetsService.ts) and
+// computed achievement against fake local sales data - so a real target
+// (e.g. a staff target for Mariam) never showed real progress. The owner
+// approved (AskUserQuestion, 2026-09-05) both fixes: migration
+// 0032_stage9_salestargets_business_scope.sql replaced that constraint
+// with chk_s2_target_scope_mutex (branch_id IS NULL OR user_id IS NULL),
+// and imagecare.sales.served_by is now written for real at checkout (see
+// engines/business/businessEngine.ts createSale()). See
+// claude/sales-targets-dashboard-fix-2026-09-05.md.
 
 import { supabase } from '../../lib/supabase';
 import { canDo } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
-import type { SalesTarget, SalesTargetInput, TargetScope } from '../../types/salesTargets';
+import type { SalesTarget, SalesTargetInput, TargetProgress, TargetScope } from '../../types/salesTargets';
 // Reused so TargetsListPage's `instanceof OverlappingTargetError` /
 // `instanceof InvalidTargetScopeError` checks keep working no matter
 // which store (real or local) actually handled the request.
@@ -44,7 +51,7 @@ interface SalesTargetRow {
 }
 
 function mapRow(row: SalesTargetRow): SalesTarget {
-  const scope: TargetScope = row.branch_id ? 'branch' : 'staff';
+  const scope: TargetScope = row.branch_id ? 'branch' : row.user_id ? 'staff' : 'business';
   return {
     id: row.id,
     scope,
@@ -79,8 +86,8 @@ export async function listTargets(ctx: UserContext): Promise<ServiceResponse<Sal
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load sales targets.', { requestId }); }
 }
 
-// Only ever called for scope 'branch' | 'staff' (see the module note
-// above) - 'business' is routed to the local store by the calling hook.
+// Handles all three scopes - 'business' (both branch_id/user_id null) is
+// now a real row too, per the 2026-09-05 schema fix (see module note).
 export async function createTarget(ctx: UserContext, input: SalesTargetInput): Promise<ServiceResponse<SalesTarget>> {
   const requestId = makeRequestId();
   if (!canDo(ctx, 'salesTargets', 'create')) {
@@ -105,7 +112,12 @@ export async function createTarget(ctx: UserContext, input: SalesTargetInput): P
       .from('sales_targets')
       .select('id, period_start, period_end')
       .eq('business_id', ctx.business_id);
-    existingQuery = input.scope === 'branch' ? existingQuery.eq('branch_id', input.branchId as string) : existingQuery.eq('user_id', input.staffId as string);
+    existingQuery =
+      input.scope === 'branch'
+        ? existingQuery.eq('branch_id', input.branchId as string)
+        : input.scope === 'staff'
+          ? existingQuery.eq('user_id', input.staffId as string)
+          : existingQuery.is('branch_id', null).is('user_id', null);
     const { data: existing, error: existingErr } = await existingQuery;
     if (existingErr) return serviceFail('INTERNAL_ERROR', 'Failed to check existing targets.', { requestId });
     if ((existing ?? []).some((t) => periodsOverlap(t.period_start, t.period_end, input.periodStart, input.periodEnd))) {
@@ -155,4 +167,89 @@ export async function deleteTarget(ctx: UserContext, id: string): Promise<Servic
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to delete sales target.', { requestId });
     return serviceOk({ deleted: (data ?? []).length > 0 }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to delete sales target.', { requestId }); }
+}
+
+// ---------------------------------------------------------------------
+// Real achievement computation (2026-09-05 Sales Targets dashboard fix)
+//
+// Works for a SalesTarget regardless of which store it came from (real
+// row or a legacy local one) - it only needs the scope/branchId/staffId/
+// period/targetAmountUgx already on the object, and queries real
+// imagecare.sales directly. This replaces the old local
+// services/salesTargetsService.ts's achievedForTarget(), which matched
+// against a fake, purely-local sales list and could never see a real
+// checkout - the actual root cause of the Sales Targets dashboard
+// showing nothing for a real target. See
+// claude/sales-targets-dashboard-fix-2026-09-05.md.
+
+// periodEnd is a plain date (YYYY-MM-DD) but sale_date is a timestamptz -
+// this pushes the boundary to the start of the next day so the whole end
+// date is included, mirroring the old local store's end-of-day
+// (`+ 86_399_000` ms) adjustment.
+function periodEndExclusive(periodEnd: string): string {
+  const d = new Date(periodEnd);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
+async function achievedForTarget(ctx: UserContext, target: SalesTarget): Promise<ServiceResponse<number>> {
+  const requestId = makeRequestId();
+  try {
+    let query = supabase
+      .schema('imagecare')
+      .from('sales')
+      .select('total_amount')
+      .eq('business_id', ctx.business_id)
+      .eq('status', 'confirmed')
+      .gte('sale_date', target.periodStart)
+      .lt('sale_date', periodEndExclusive(target.periodEnd));
+    if (target.scope === 'branch' && target.branchId) query = query.eq('branch_id', target.branchId);
+    else if (target.scope === 'staff' && target.staffId) query = query.eq('served_by', target.staffId);
+    // 'business' scope: no extra filter - every confirmed sale counts.
+    const { data, error } = await query;
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to compute target achievement.', { requestId });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const achieved = ((data ?? []) as any[]).reduce((sum, r) => sum + Number(r.total_amount ?? 0), 0);
+    return serviceOk(achieved, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to compute target achievement.', { requestId }); }
+}
+
+export async function getProgress(ctx: UserContext, target: SalesTarget): Promise<ServiceResponse<TargetProgress>> {
+  const requestId = makeRequestId();
+  const achievedResp = await achievedForTarget(ctx, target);
+  if (!achievedResp.success) {
+    return serviceFail(achievedResp.error?.code ?? 'INTERNAL_ERROR', achievedResp.error?.message ?? 'Failed to compute target achievement.', { requestId });
+  }
+  const achievedUgx = achievedResp.data ?? 0;
+  return serviceOk(
+    {
+      target,
+      achievedUgx,
+      remainingUgx: Math.max(0, target.targetAmountUgx - achievedUgx),
+      achievementPercent: target.targetAmountUgx > 0 ? Math.round((achievedUgx / target.targetAmountUgx) * 100) : 0,
+    },
+    requestId,
+  );
+}
+
+// Best-effort per target: a single target's query failing (e.g. a
+// transient error) falls back to zero achievement for that one target
+// rather than failing the whole dashboard/leaderboard.
+export async function getAllProgress(ctx: UserContext, targets: SalesTarget[]): Promise<TargetProgress[]> {
+  const results = await Promise.all(targets.map((t) => getProgress(ctx, t)));
+  return results.map((r, i) =>
+    r.success && r.data
+      ? r.data
+      : {
+          target: targets[i],
+          achievedUgx: 0,
+          remainingUgx: targets[i].targetAmountUgx,
+          achievementPercent: 0,
+        },
+  );
+}
+
+export function isCurrentPeriod(target: SalesTarget): boolean {
+  const now = Date.now();
+  return new Date(target.periodStart).getTime() <= now && new Date(target.periodEnd).getTime() + 86_399_000 >= now;
 }

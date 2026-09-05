@@ -230,6 +230,9 @@ export class BusinessEngine {
         credit_amount:  isCreditSale ? subtotal : 0,
         notes:          cmd.notes ?? null,
         created_by:     ctx.user_id,
+        // Bug fix (2026-09-05): never set before - see the comment on
+        // CreateSaleCommand.served_by in engines/types.ts.
+        served_by:      cmd.served_by ?? null,
       })
       .select('id, sale_number, total_amount, status')
       .single();

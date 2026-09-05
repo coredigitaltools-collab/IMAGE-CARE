@@ -97,6 +97,13 @@ export interface CreateSaleCommand {
   lines:             SaleLineInput[];
   idempotency_key?:  string;
   notes?:            string;
+  // Bug fix (2026-09-05): "Sold by" was captured in the checkout UI
+  // (PointOfSalePage's salesPersonId) but never reached this far - a real
+  // sale's imagecare.sales.served_by column was always left NULL, which
+  // meant a staff Sales Target could never show real progress (there was
+  // no data connecting any sale to who made it). See
+  // claude/sales-targets-dashboard-fix-2026-09-05.md.
+  served_by?:        UUID;
 }
 
 export interface PostSaleCommand {
