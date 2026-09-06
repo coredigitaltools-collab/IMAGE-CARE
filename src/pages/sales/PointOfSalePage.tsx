@@ -16,7 +16,7 @@ import { ReceiptModal } from '../../components/sales/ReceiptModal'
 import type { ProductPickerHandle } from '../../components/sales/ProductPicker'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
-import { useUserContext } from '../../context/AppContext'
+import { useUserContext, useActiveBranch } from '../../context/AppContext'
 import { canDo } from '../../types/app'
 import { useProducts } from '../../features/inventory/hooks/useInventoryData'
 import { useTaxRates, useStaff, useBranches } from '../../features/settings/hooks/useSettingsData'
@@ -169,23 +169,13 @@ const STATUS_TONE: Record<SaleStatus, 'success' | 'warning' | 'danger' | 'neutra
 export function PointOfSalePage() {
   const { user } = useAuth()
   const ctx = useUserContext()
+  // The "active branch" set from the header's Branch selector (top-right,
+  // BranchSelector.tsx) - Dashboard, Inventory, Reports, Expenses, Credit,
+  // Purchasing and nearly every other module already scope their data to
+  // this same value via useActiveBranch(). Record Sale is read below.
+  const globalActiveBranch = useActiveBranch()
   const { showToast } = useToast()
   const productPickerRef = useRef<ProductPickerHandle>(null)
-
-  const productsQuery = useProducts()
-  const taxRatesQuery = useTaxRates()
-  const customersQuery = useCustomers()
-  const salesQuery = useSales()
-  const salesSettingsQuery = useSalesSettings()
-  const receiptSettingsQuery = useReceiptSettings()
-  const businessProfileQuery = useBusinessProfile()
-  const parkedSalesQuery = useParkedSales()
-
-  const checkout = useCheckout(user.id)
-  const createCustomer = useCreateCustomer(user.id)
-  const resumeParked = useResumeParkedSale()
-  const deleteParked = useDeleteParkedSale()
-  const deleteSale = useDeleteSale(user.id)
 
   const [isRecordSaleOpen, setIsRecordSaleOpen] = useState(false)
   const [cart, setCart] = useState<CartItem[]>([])
@@ -215,12 +205,51 @@ export function PointOfSalePage() {
     return filtered.length > 0 ? filtered : all
   }, [branchesQuery.data, ctx.branches])
 
+  // Bug fix (2026-09-06), part 2: "that sale is being made on Nkoowe but it
+  // shows Machakos." Record Sale used to default to "whichever accessible
+  // branch sorts first alphabetically," completely disconnected from the
+  // branch already shown/selected everywhere else in the app (the header's
+  // Branch selector, i.e. globalActiveBranch above) - for an owner with
+  // access to every branch, that alphabetical pick (Machakos before
+  // Nkoowe) always won, regardless of which branch they were actually
+  // working from. Now it prefers that same global active branch first,
+  // and only falls back to "first accessible branch" if there isn't one
+  // (e.g. it was never set, or points at a branch this till user can no
+  // longer access).
   useEffect(() => {
     if (branchId === null) {
-      const firstActive = accessibleBranches.find((b) => b.is_active)
-      if (firstActive) setBranchId(firstActive.id)
+      const preferred = globalActiveBranch
+        ? accessibleBranches.find((b) => b.id === globalActiveBranch && b.is_active)
+        : undefined
+      const chosen = preferred ?? accessibleBranches.find((b) => b.is_active)
+      if (chosen) setBranchId(chosen.id)
     }
-  }, [accessibleBranches, branchId])
+  }, [accessibleBranches, branchId, globalActiveBranch])
+
+  // Bug fix (2026-09-06), part 3: "when I click Machakos, sales of Nkoowe
+  // show up there." useProducts() computes each product's `currentStock`
+  // from real stock movements - passing no branch (as this call used to)
+  // sums stock across EVERY branch, so switching the Sale details branch
+  // dropdown never actually changed what the product picker showed: the
+  // same combined total kept appearing regardless of which branch was
+  // selected, exactly as if the till weren't branch-aware at all. Passing
+  // the currently selected branchId here makes the product list and stock
+  // counts genuinely reflect the branch this sale is actually for.
+  const productsQuery = useProducts(branchId ?? undefined)
+  const taxRatesQuery = useTaxRates()
+  const customersQuery = useCustomers()
+  const salesQuery = useSales()
+  const salesSettingsQuery = useSalesSettings()
+  const receiptSettingsQuery = useReceiptSettings()
+  const businessProfileQuery = useBusinessProfile()
+  const parkedSalesQuery = useParkedSales()
+
+  const checkout = useCheckout(user.id)
+  const createCustomer = useCreateCustomer(user.id)
+  const resumeParked = useResumeParkedSale()
+  const deleteParked = useDeleteParkedSale()
+  const deleteSale = useDeleteSale(user.id)
+
   const [discountPercent, setDiscountPercent] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
