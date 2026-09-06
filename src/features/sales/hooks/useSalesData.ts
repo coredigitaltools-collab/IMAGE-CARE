@@ -213,11 +213,25 @@ export function useCrmKpis() {
   });
 }
 
-export function useSales() {
+// Bug fix (2026-09-06): "when I click branch Machakos, I keep seeing the
+// same sales from Nkoowe." listSales() (services/sales/salesService.ts)
+// already supports a branch_id filter, but this hook never passed one, so
+// the Sales page's table always showed every branch's sales together no
+// matter which branch was selected in the header - the one part of that
+// page that wasn't actually branch-aware, unlike Inventory/Dashboard/
+// Reports/Expenses/Credit/Purchasing etc. (all scoped via useActiveBranch()
+// already). `branchId` is opt-in (undefined by default) rather than always
+// reading useActiveBranch() internally, because two existing callers
+// genuinely need the UNFILTERED, all-branch list: CustomerDetailPage.tsx
+// (a customer's full purchase history, wherever they bought) and
+// ReportsPage.tsx's SalesReport(). Only the till (PointOfSalePage.tsx)
+// passes the header's active branch in.
+export function useSales(options?: { branchId?: UUID | null }) {
   const ctx = useUserContext();
+  const branchId = options?.branchId ?? null;
   return useQuery({
-    queryKey: ['sales', 'sales', ctx.business_id],
-    queryFn: () => listSales(ctx).then(unwrap),
+    queryKey: ['sales', 'sales', ctx.business_id, branchId],
+    queryFn: () => listSales(ctx, branchId ? { branch_id: branchId } : {}).then(unwrap),
   });
 }
 
@@ -230,12 +244,16 @@ export function useSale(id: string | undefined) {
   });
 }
 
-export function useParkedSales() {
+// Same branch-filter opt-in as useSales() above, and for the same reason -
+// the till's "On Hold" list should follow the header's selected branch,
+// while nothing else currently calls this with a branch in mind.
+export function useParkedSales(options?: { branchId?: UUID | null }) {
   const ctx = useUserContext();
+  const branchId = options?.branchId ?? null;
   return useQuery({
-    queryKey: ['sales', 'parked', ctx.business_id],
+    queryKey: ['sales', 'parked', ctx.business_id, branchId],
     queryFn: async () => {
-      const all = await listSales(ctx).then(unwrap);
+      const all = await listSales(ctx, branchId ? { branch_id: branchId } : {}).then(unwrap);
       return (Array.isArray(all) ? all : []).filter((s: { status: string }) => s.status === 'draft');
     },
   });

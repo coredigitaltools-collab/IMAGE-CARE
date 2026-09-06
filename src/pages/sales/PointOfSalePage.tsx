@@ -238,11 +238,16 @@ export function PointOfSalePage() {
   const productsQuery = useProducts(branchId ?? undefined)
   const taxRatesQuery = useTaxRates()
   const customersQuery = useCustomers()
-  const salesQuery = useSales()
+  // Bug fix (2026-09-06): "when I click branch Machakos, I keep seeing the
+  // same sales from Nkoowe." The Sales table and On Hold list now follow
+  // the same header branch selection as the rest of the app (see
+  // globalActiveBranch above) instead of always showing every branch's
+  // sales together - see claude/pos-staff-permission-enforcement-2026-09-05.md.
+  const salesQuery = useSales({ branchId: globalActiveBranch })
   const salesSettingsQuery = useSalesSettings()
   const receiptSettingsQuery = useReceiptSettings()
   const businessProfileQuery = useBusinessProfile()
-  const parkedSalesQuery = useParkedSales()
+  const parkedSalesQuery = useParkedSales({ branchId: globalActiveBranch })
 
   const checkout = useCheckout(user.id)
   const createCustomer = useCreateCustomer(user.id)
