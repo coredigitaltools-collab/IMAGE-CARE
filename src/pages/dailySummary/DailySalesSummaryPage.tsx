@@ -6,6 +6,7 @@ import { useSelectedDate } from '../../components/dailySummary/useSelectedDate'
 import { Card } from '../../components/ui/Card'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ErrorState } from '../../components/ui/ErrorState'
 import { formatCurrency } from '../../lib/format'
 import { useDailySalesSummary } from '../../features/dailySummary/hooks/useDailySummaryData'
 
@@ -29,6 +30,13 @@ export function DailySalesSummaryPage() {
 
       {salesQuery.isLoading ? (
         <Skeleton className="h-40 w-full" />
+      ) : salesQuery.isError ? (
+        // Bug fix (2026-09-06): same consistency fix applied to Monthly and
+        // Annual Summary's Sales pages - a failed load should never be
+        // indistinguishable from a genuinely sales-free day.
+        <Card className="p-6">
+          <ErrorState title="Couldn't load sales for this day" onRetry={() => salesQuery.refetch()} />
+        </Card>
       ) : !data || data.transactionCount === 0 ? (
         <Card className="p-6">
           <EmptyState icon={TrendingUp} title="No sales this day" description="Completed sales for the selected day will appear here." />

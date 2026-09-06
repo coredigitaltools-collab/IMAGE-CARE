@@ -6,6 +6,7 @@ import { useSelectedYear } from '../../components/annualSummary/useSelectedYear'
 import { Card } from '../../components/ui/Card'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ErrorState } from '../../components/ui/ErrorState'
 import { formatCurrency } from '../../lib/format'
 import { useAnnualSalesSummary } from '../../features/annualSummary/hooks/useAnnualSummaryData'
 
@@ -29,6 +30,16 @@ export function AnnualSalesSummaryPage() {
 
       {salesQuery.isLoading ? (
         <Skeleton className="h-64 w-full" />
+      ) : salesQuery.isError ? (
+        // Bug fix (2026-09-06): same fix as Monthly Summary's Sales page -
+        // a failed load (e.g. getTopProducts, before it was fixed) used to
+        // land in the same "!data" branch as a genuinely sales-free year,
+        // hiding real data behind "No sales this year." See
+        // reportingService.ts's getTopProducts and
+        // useAnnualSummaryData.ts's useAnnualSalesSummary.
+        <Card className="p-6">
+          <ErrorState title="Couldn't load sales for this year" onRetry={() => salesQuery.refetch()} />
+        </Card>
       ) : !data || data.transactionCount === 0 ? (
         <Card className="p-6">
           <EmptyState icon={TrendingUp} title="No sales this year" description="Completed sales for the selected year will appear here." />

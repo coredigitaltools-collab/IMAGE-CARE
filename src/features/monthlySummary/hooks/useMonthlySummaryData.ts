@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useUserContext, useActiveBranch } from '../../../context/AppContext'
 import {
   getDashboardKPIs,
-  getSalesByPeriod,
   getTopProducts,
   getStockSummary,
   getCashPosition,
@@ -10,7 +9,7 @@ import {
 } from '../../../services/reporting/reportingService'
 import { listCashTransactions } from '../../../services/financial/financialServices'
 import { supabase } from '../../../lib/supabase'
-import type { SalesByPeriodRow, TopProductRow as RealTopProductRow, CashPosition, CreditSummaryRow } from '../../../services/reporting/reportingService'
+import type { TopProductRow as RealTopProductRow, CashPosition, CreditSummaryRow } from '../../../services/reporting/reportingService'
 import type {
   MonthlySalesSummary,
   TopProductRow as LocalTopProductRow,
@@ -72,11 +71,12 @@ function mapFinancialSummary(kpis: DashboardKPIs): FinancialSummary {
 // Real, Supabase-backed hooks
 //
 // Every export below is real for this module: getDashboardKPIs,
-// getSalesByPeriod, getTopProducts, getStockSummary, getCashPosition and
-// getOutstandingCredit (all reportingService.ts, backed by the DB-003/DB-006
-// RPCs / views) plus financialServices.listCashTransactions cover every
-// figure the Monthly Summary pages render. There is no LOCAL-ONLY block in
-// this file - unlike invoices, nothing here has a real-backend gap.
+// getTopProducts, getStockSummary, getCashPosition and getOutstandingCredit
+// (all reportingService.ts, backed by real tables/views - see that file's
+// header for the getTopProducts fix history) plus
+// financialServices.listCashTransactions cover every figure the Monthly
+// Summary pages render. There is no LOCAL-ONLY block in this file - unlike
+// invoices, nothing here has a real-backend gap.
 // ---------------------------------------------------------------------------
 
 export function useMonthlyFinancials(monthStr: string) {
@@ -92,6 +92,18 @@ export function useMonthlyFinancials(monthStr: string) {
   })
 }
 
+// Bug fix (2026-09-06): "the sales show nothing yet we have sales" (Monthly
+// Summary, Nkoowe, September 2026 - 14 real confirmed sales, totalling UGX
+// 2,620,000, all hidden). Root cause: getSalesByPeriod's RPC
+// (fn_get_sales_by_period) does not exist live and always threw; this hook
+// fetched it via Promise.all alongside getTopProducts (also broken until
+// today - see reportingService.ts), so the whole query failed and the page
+// showed its "No sales this month" empty state instead of a real error, as
+// if the month were genuinely empty. totalSalesUgx/transactionCount now
+// come from getDashboardKPIs for the same date range instead - already the
+// real, working source of these exact figures (same call Daily Summary's
+// useDailySalesSummary and Annual Summary's useAnnualSalesSummary already
+// use) - so this no longer depends on the still-broken RPC at all.
 export function useMonthlySalesSummary(monthStr: string) {
   const ctx = useUserContext()
   const branch = useActiveBranch()
@@ -99,14 +111,14 @@ export function useMonthlySalesSummary(monthStr: string) {
     queryKey: ['monthly-summary', 'sales', monthStr, ctx.business_id, branch],
     queryFn: async (): Promise<MonthlySalesSummary> => {
       const { from, to } = monthRangeIso(monthStr)
-      const [periodRows, topRows] = await Promise.all([
-        getSalesByPeriod(ctx, { from_date: from, to_date: to, group_by: 'day', branch_id: branch ?? undefined }).then(unwrap) as Promise<SalesByPeriodRow[]>,
+      const [kpis, topRows] = await Promise.all([
+        getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap) as Promise<DashboardKPIs>,
         // Same top-5 cutoff the old local implementation used (slice(0, 5)).
         getTopProducts(ctx, { from_date: from, to_date: to, limit: 5, branch_id: branch ?? undefined }).then(unwrap) as Promise<RealTopProductRow[]>,
       ])
 
-      const totalSalesUgx = periodRows.reduce((sum, r) => sum + r.total_revenue, 0)
-      const transactionCount = periodRows.reduce((sum, r) => sum + r.sale_count, 0)
+      const totalSalesUgx = kpis.revenue
+      const transactionCount = kpis.sale_count
       const topProducts: LocalTopProductRow[] = topRows.map((r) => ({
         productId: r.product_id,
         productName: r.product_name,

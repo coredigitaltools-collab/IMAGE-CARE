@@ -6,6 +6,7 @@ import { useSelectedMonth } from '../../components/monthlySummary/useSelectedMon
 import { Card } from '../../components/ui/Card'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ErrorState } from '../../components/ui/ErrorState'
 import { formatCurrency } from '../../lib/format'
 import { useMonthlySalesSummary } from '../../features/monthlySummary/hooks/useMonthlySummaryData'
 
@@ -29,6 +30,16 @@ export function MonthlySalesSummaryPage() {
 
       {salesQuery.isLoading ? (
         <Skeleton className="h-64 w-full" />
+      ) : salesQuery.isError ? (
+        // Bug fix (2026-09-06): a failed load used to fall into the same
+        // "!data" branch as a genuinely sales-free month, showing "No sales
+        // this month" even when real sales existed but the fetch itself
+        // failed - see useMonthlySummaryData.ts's useMonthlySalesSummary
+        // for the root cause this was masking. Checked first, ahead of the
+        // empty-state check below.
+        <Card className="p-6">
+          <ErrorState title="Couldn't load sales for this month" onRetry={() => salesQuery.refetch()} />
+        </Card>
       ) : !data || data.transactionCount === 0 ? (
         <Card className="p-6">
           <EmptyState icon={TrendingUp} title="No sales this month" description="Completed sales for the selected month will appear here." />
