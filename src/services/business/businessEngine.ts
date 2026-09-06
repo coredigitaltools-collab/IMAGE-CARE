@@ -119,6 +119,13 @@ export interface SaleResult {
   sale_number: string;
   status: string;
   journal_entry_id: UUID | null;
+  // Perf fix (2026-09-06, "the system is slow"): the real engine result
+  // (postSale()'s SaleResult in engines/types.ts) already carries the
+  // sale's total_amount - this wrapper used to drop it on the floor,
+  // forcing salesService.createSale() to make a whole extra Supabase
+  // round trip just to re-fetch a number that was already sitting right
+  // here. Carrying it through removes that round trip from every sale.
+  total_amount?: number;
 }
 
 export async function createAndPostSale(
@@ -170,6 +177,7 @@ export async function createAndPostSale(
     sale_number:       postResult.data!.sale_number,
     status:            postResult.data!.status,
     journal_entry_id:  postResult.data!.journal_entry_id,
+    total_amount:      postResult.data!.total_amount,
   });
 }
 

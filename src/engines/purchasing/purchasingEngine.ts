@@ -80,17 +80,32 @@ export class PurchasingEngine {
       return engineFail(makeError('VALIDATION_ERROR', 'Purchase must have at least one line.'));
     }
 
-    // Validate products
-    for (const line of cmd.lines) {
-      const { data: product, error: pErr } = await db.products()
-        
+    // Perf fix (2026-09-06, "the system is slow"): product validation
+    // and the next purchase number are independent of each other, but
+    // the product check was also a separate round trip PER LINE in a
+    // sequential loop - the same N+1 pattern already fixed on the sale
+    // side (see createSale() in engines/business/businessEngine.ts).
+    // On a 5-item purchase order that was 5 sequential round trips
+    // before any real work started. Batching the product lookups into
+    // a single `.in(...)` query and running it alongside
+    // nextPurchaseNumber() cuts this to one round trip's worth of wait
+    // regardless of how many lines the order has.
+    const productIds = [...new Set(cmd.lines.map(l => l.product_id))];
+    const [{ data: products }, purchaseNum] = await Promise.all([
+      db.products()
         .select('id, is_purchasable, business_id')
-        .eq('id', line.product_id)
+        .in('id', productIds)
         .eq('business_id', ctx.business_id)
-        .is('deleted_at', null)
-        .single();
+        .is('deleted_at', null),
+      nextPurchaseNumber(ctx.business_id),
+    ]);
 
-      if (pErr || !product) {
+    for (const line of cmd.lines) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const product = (products ?? []).find((p: any) => p.id === line.product_id) as
+        | { id: string; is_purchasable: boolean }
+        | undefined;
+      if (!product) {
         return engineFail(makeError('RECORD_NOT_FOUND', `Product ${line.product_id} not found.`, undefined, 'product_id'));
       }
       if (!product.is_purchasable) {
@@ -107,8 +122,6 @@ export class PurchasingEngine {
       subtotal += lineTotal;
       return { ...line, discount_amount: discAmt, tax_amount: taxAmt, line_total: lineTotal };
     });
-
-    const purchaseNum = await nextPurchaseNumber(ctx.business_id);
 
     const { data: purchase, error: pErr } = await db.purchases()
       
@@ -336,11 +349,17 @@ export class PurchasingEngine {
     }
 
     // Post accounting: Dr Accounts Payable, Cr Cash
-    const payableAcct = await accountingEngine.resolveAccountCode(ctx.business_id, '2000');
+    // Perf fix (2026-09-06, "the system is slow"): these two account
+    // lookups are independent of each other - run together instead of
+    // one after another (see the identical fix already applied to the
+    // sale/expense/purchase account lookups in accountingEngine.ts).
     let cashCode = '1100';
     if (cmd.payment_method === 'mobile_money') cashCode = '1120';
     else if (cmd.payment_method === 'bank_transfer' || cmd.payment_method === 'card') cashCode = '1130';
-    const cashAcct = await accountingEngine.resolveAccountCode(ctx.business_id, cashCode);
+    const [payableAcct, cashAcct] = await Promise.all([
+      accountingEngine.resolveAccountCode(ctx.business_id, '2000'),
+      accountingEngine.resolveAccountCode(ctx.business_id, cashCode),
+    ]);
 
     const jeResult = await accountingEngine.postJournal(ctx, {
       branch_id:      cmd.branch_id,

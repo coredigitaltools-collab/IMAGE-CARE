@@ -50,18 +50,18 @@ export async function createSale(
     return serviceFail(mapErrorCode(result.error.code), result.error.message, { requestId });
   }
 
-  const { data } = await supabase
-    .schema('imagecare')
-    .from('sales')
-    .select('total_amount')
-    .eq('id', result.data!.sale_id)
-    .single();
-
+  // Perf fix (2026-09-06, "the system is slow"): this used to make a
+  // whole extra Supabase round trip here just to fetch total_amount for
+  // the sale that createAndPostSale() had literally just posted a
+  // moment earlier - the engine result already carries it (see
+  // total_amount on SaleResult in services/business/businessEngine.ts),
+  // it just wasn't being passed through. Using it directly removes one
+  // full sequential round trip from every single "Complete Sale."
   return serviceOk<SaleResult>({
     sale_id:          result.data!.sale_id,
     sale_number:      result.data!.sale_number,
     status:           result.data!.status,
-    total_amount:     data?.total_amount ?? 0,
+    total_amount:     result.data!.total_amount ?? 0,
     journal_entry_id: result.data!.journal_entry_id,
   }, requestId);
 }

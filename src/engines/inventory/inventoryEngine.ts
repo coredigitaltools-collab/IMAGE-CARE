@@ -105,9 +105,12 @@ export class InventoryEngine {
       return engineFail(makeError('VALIDATION_ERROR', 'Inventory movement quantity must be positive.', undefined, 'quantity'));
     }
 
-    // For sale movements, verify stock availability first
+    // For sale movements, verify stock availability first - unless the
+    // caller already just verified it for this exact line a moment ago
+    // (see skipAvailabilityCheck on InventoryMovementCommand in
+    // engines/types.ts; only deductForSale() sets this).
     const outTypes = ['sale','adjustment_out','transfer_out','return_out','damage','expiry'];
-    if (outTypes.includes(cmd.movement_type)) {
+    if (!cmd.skipAvailabilityCheck && outTypes.includes(cmd.movement_type)) {
       const check = await this.checkAvailable(ctx, cmd.product_id, cmd.branch_id, cmd.quantity);
       if (!check.ok) return engineFail(check.error!);
     }
@@ -173,25 +176,37 @@ export class InventoryEngine {
       return engineFail(makeError('RECORD_NOT_FOUND', 'Purchase not found.'));
     }
 
-    const movementIds: UUID[] = [];
-
-    for (const item of items ?? []) {
+    // Perf fix (2026-09-06, "the system is slow"): each line's movement
+    // insert is independent (its own product, no shared state, no
+    // availability check for a stock-IN movement type) - a sequential
+    // for-loop was paying for one full network round trip per line, one
+    // after another, so a 5-item purchase order took 5x as long to
+    // receive stock as a 1-item one. Running them together cuts that to
+    // about one round trip's worth of wait regardless of how many lines
+    // the order has.
+    const stockableItems = (items ?? []).filter((item) => {
       type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
+      return (item as ItemWithProduct).products?.is_stockable;
+    });
 
-      const result = await this.recordMovement(ctx, {
-        branch_id:      purchase.branch_id,
-        product_id:     item.product_id,
-        movement_type:  'purchase',
-        quantity:       Number(item.quantity),
-        unit_cost:      Number(item.unit_cost),
-        reference_type: 'purchase',
-        reference_id:   purchaseId,
-        expiry_date:    item.expiry_date ?? undefined,
-        batch_number:   item.batch_number ?? undefined,
-      });
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:      purchase.branch_id,
+          product_id:     item.product_id,
+          movement_type:  'purchase',
+          quantity:       Number(item.quantity),
+          unit_cost:      Number(item.unit_cost),
+          reference_type: 'purchase',
+          reference_id:   purchaseId,
+          expiry_date:    item.expiry_date ?? undefined,
+          batch_number:   item.batch_number ?? undefined,
+        })
+      )
+    );
 
+    const movementIds: UUID[] = [];
+    for (const result of results) {
       if (!result.ok) return engineFail(result.error!);
       movementIds.push(result.data!.movement_id);
     }
@@ -243,23 +258,39 @@ export class InventoryEngine {
       branchId = sale.branch_id;
     }
 
+    type ItemWithProduct = Record<string, unknown> & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+    const stockableItems = (items ?? [])
+      .map((item) => item as ItemWithProduct)
+      .filter((item) => item.products?.is_stockable);
+
+    // Perf fix (2026-09-06, "the system is slow"): this used to check
+    // availability AND insert the movement for one cart line at a time,
+    // sequentially - up to two full network round trips per line before
+    // the next line even started. postSale() in businessEngine.ts
+    // already verified every line's availability together, in one
+    // batched Promise.all, immediately before calling here (see
+    // skipAvailabilityCheck above), so this now only needs to insert -
+    // and every line's insert is independent of every other line's, so
+    // they run together instead of one after another. A 3-item sale
+    // that used to take 6 sequential round trips to deduct stock now
+    // takes about 1.
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:     branchId as UUID,
+          product_id:    item.product_id,
+          movement_type: 'sale',
+          quantity:      Number(item.quantity),
+          unit_cost:     Number(item.unit_cost),
+          reference_type:'sale',
+          reference_id:  saleId,
+          skipAvailabilityCheck: true,
+        })
+      )
+    );
+
     const movementIds: UUID[] = [];
-
-    for (const item of items ?? []) {
-      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
-
-      const result = await this.recordMovement(ctx, {
-        branch_id:     branchId as UUID,
-        product_id:    typedItem.product_id,
-        movement_type: 'sale',
-        quantity:      Number(typedItem.quantity),
-        unit_cost:     Number(typedItem.unit_cost),
-        reference_type:'sale',
-        reference_id:  saleId,
-      });
-
+    for (const result of results) {
       if (!result.ok) return engineFail(result.error!);
       movementIds.push(result.data!.movement_id);
     }
@@ -305,23 +336,33 @@ export class InventoryEngine {
       branchId = sale.branch_id;
     }
 
+    // Perf fix (2026-09-06, "the system is slow"): same fix as
+    // deductForSale() above - each line's reversal insert is
+    // independent (no availability check applies to a stock-IN
+    // movement), so a sequential for-loop was paying for one full
+    // round trip per line for no reason. Running them together cuts a
+    // multi-item sale's deletion time roughly in half or more.
+    type ItemWithProduct = Record<string, unknown> & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+    const stockableItems = (items ?? [])
+      .map((item) => item as ItemWithProduct)
+      .filter((item) => item.products?.is_stockable);
+
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:     branchId as UUID,
+          product_id:    item.product_id,
+          movement_type: 'return_in',
+          quantity:      Number(item.quantity),
+          unit_cost:     Number(item.unit_cost),
+          reference_type:'sale',
+          reference_id:  saleId,
+        })
+      )
+    );
+
     const reverseMovementIds: UUID[] = [];
-
-    for (const item of items ?? []) {
-      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
-
-      const result = await this.recordMovement(ctx, {
-        branch_id:     branchId as UUID,
-        product_id:    typedItem.product_id,
-        movement_type: 'return_in',
-        quantity:      Number(typedItem.quantity),
-        unit_cost:     Number(typedItem.unit_cost),
-        reference_type:'sale',
-        reference_id:  saleId,
-      });
-
+    for (const result of results) {
       if (!result.ok) return engineFail(result.error!);
       reverseMovementIds.push(result.data!.movement_id);
     }
@@ -373,24 +414,35 @@ export class InventoryEngine {
       branchId = purchase.branch_id;
     }
 
+    // Perf fix (2026-09-06, "the system is slow"): each line here is a
+    // different product (each still gets its own real availability
+    // check inside recordMovement, unchanged - unlike deductForSale/
+    // reverseForSale above, there's no prior bulk check for this path
+    // to reuse), but the lines don't depend on each other, so running
+    // them together instead of one after another still cuts the wait
+    // for a multi-item purchase order's void roughly in half or more.
+    type ItemWithProduct = Record<string, unknown> & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+    const stockableItems = (items ?? [])
+      .map((item) => item as ItemWithProduct)
+      .filter((item) => item.products?.is_stockable);
+
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:     branchId as UUID,
+          product_id:    item.product_id,
+          movement_type: 'return_out',
+          quantity:      Number(item.quantity),
+          unit_cost:     Number(item.unit_cost),
+          reference_type:'purchase',
+          reference_id:  purchaseId,
+          notes:         'Voided purchase order - stock reversed',
+        })
+      )
+    );
+
     const reverseMovementIds: UUID[] = [];
-
-    for (const item of items ?? []) {
-      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
-
-      const result = await this.recordMovement(ctx, {
-        branch_id:     branchId as UUID,
-        product_id:    typedItem.product_id,
-        movement_type: 'return_out',
-        quantity:      Number(typedItem.quantity),
-        unit_cost:     Number(typedItem.unit_cost),
-        reference_type:'purchase',
-        reference_id:  purchaseId,
-        notes:         'Voided purchase order - stock reversed',
-      });
-
+    for (const result of results) {
       if (!result.ok) return engineFail(result.error!);
       reverseMovementIds.push(result.data!.movement_id);
     }

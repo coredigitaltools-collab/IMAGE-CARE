@@ -194,6 +194,18 @@ export interface InventoryMovementCommand {
   batch_number?:    string;
   notes?:           string;
   idempotency_key?: string;
+  // Perf fix (2026-09-06, "the system is slow"): recordMovement()
+  // re-checks stock availability for every "out" movement type by
+  // default (a real safety check for most callers). deductForSale()
+  // in inventoryEngine.ts is called immediately after postSale() in
+  // businessEngine.ts has already verified availability for every
+  // line on the cart in one batched Promise.all - re-running that same
+  // check again per line here was pure duplicated work, done one line
+  // at a time, adding a full extra sequential round trip per cart item
+  // to every single "Complete Sale." Set only by deductForSale's own
+  // call into recordMovement; every other caller is unaffected and
+  // keeps the check.
+  skipAvailabilityCheck?: boolean;
 }
 
 export interface TransferStockCommand {
