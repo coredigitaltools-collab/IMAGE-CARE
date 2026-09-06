@@ -13,6 +13,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { BarcodeDisplay } from '../../components/inventory/BarcodeDisplay'
 import { CategoryQuickSelect } from '../../components/inventory/CategoryQuickSelect'
+import { BrandQuickSelect } from '../../components/inventory/BrandQuickSelect'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
@@ -273,21 +274,13 @@ export function ProductDetailPage() {
                 userId={user.id}
                 error={generalForm.formState.errors.categoryId?.message}
               />
-              <div>
-                <label htmlFor="pd-brand" className="mb-1.5 block text-sm font-medium text-ink-700">Brand</label>
-                <select
-                  id="pd-brand"
-                  {...generalForm.register('brandId')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
-                >
-                  <option value="">None</option>
-                  {brandsQuery.data?.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <BrandQuickSelect
+                id="pd-brand"
+                brands={brandsQuery.data ?? []}
+                value={generalForm.watch('brandId')}
+                onChange={(id) => generalForm.setValue('brandId', id, { shouldValidate: true, shouldDirty: true })}
+                userId={user.id}
+              />
             </div>
             <div>
               <label htmlFor="pd-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description</label>

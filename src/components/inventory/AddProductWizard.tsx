@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CategoryQuickSelect } from './CategoryQuickSelect'
+import { BrandQuickSelect } from './BrandQuickSelect'
 import { FormField } from '../settings/FormField'
 import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
@@ -222,13 +223,19 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
                   />
                 )}
               />
-              <div>
-                <label htmlFor="w-brand" className="mb-1.5 block text-sm font-medium text-ink-700">Brand</label>
-                <select id="w-brand" {...register('brandId')} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500">
-                  <option value="">None</option>
-                  {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
+              <Controller
+                name="brandId"
+                control={control}
+                render={({ field }) => (
+                  <BrandQuickSelect
+                    id="w-brand"
+                    brands={brands}
+                    value={field.value}
+                    onChange={field.onChange}
+                    userId={userId}
+                  />
+                )}
+              />
             </div>
           </div>
         </div>
