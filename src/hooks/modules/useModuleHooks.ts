@@ -502,9 +502,13 @@ export function useBankReconciliation(branchId?: UUID) {
   const { can } = usePermission(ctx);
   const hasAccess = can('bank', 'approve');
 
+  // Bug fix (2026-09-06): transaction_type never holds 'bank_transfer' (see
+  // cashEngine.ts's recordMovement - it only ever writes 'cash_in'/
+  // 'cash_out'); "how" the cash moved is carried on payment_method instead.
+  // Same fix as useBankReconciliationData.ts's useUnmatchedDeposits.
   const transactions = useAsyncData(
     listCashTransactions,
-    [ctx, { branch_id: bid, transaction_type: 'bank_transfer' }],
+    [ctx, { branch_id: bid, transaction_type: 'cash_in', payment_method: 'bank_transfer' }],
     [ctx.business_id, bid]
   );
 

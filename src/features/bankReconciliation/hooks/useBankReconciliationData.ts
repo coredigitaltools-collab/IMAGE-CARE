@@ -37,14 +37,31 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 //    function for transaction matching or a "reconciled balance". Those stay
 //    fully local below - see docs/MODULE_INTEGRATION_MAP.md gap.
 //  - The one genuinely real read is imagecare.cash_transactions filtered to
-//    transaction_type = 'bank_transfer' (the same query
-//    src/hooks/modules/useModuleHooks.ts's useBankReconciliation makes for
-//    SRS-019). It is branch-scoped only, with no bank_account_id filter,
-//    because cash_transactions.bank_account_id points at real
-//    imagecare.bank_accounts rows and nothing in this app ever creates one -
-//    filtering on it would silently return zero rows. useUnmatchedDeposits
-//    below uses this real read as its candidate-deposit source; everything
-//    about *matching* those deposits to a statement line stays local.
+//    transaction_type = 'cash_in' AND payment_method = 'bank_transfer'. It is
+//    branch-scoped only, with no bank_account_id filter, because
+//    cash_transactions.bank_account_id points at real imagecare.bank_accounts
+//    rows and nothing in this app ever creates one - filtering on it would
+//    silently return zero rows. useUnmatchedDeposits below uses this real
+//    read as its candidate-deposit source; everything about *matching* those
+//    deposits to a statement line stays local.
+//
+//    Bug fix (2026-09-06): this used to filter on transaction_type =
+//    'bank_transfer' instead - a value cash_transactions.transaction_type
+//    never actually holds (see cashEngine.ts's recordMovement: it only ever
+//    writes 'cash_in'/'cash_out', and "how" the cash moved - cash, mobile
+//    money, card, bank transfer - is carried on payment_method instead). That
+//    meant "Recorded deposits (unmatched)" showed empty for every business,
+//    every time, regardless of what was recorded elsewhere - not because
+//    there was no bank-transfer activity, but because the query was looking
+//    at the wrong column for a value that was never written to it. A real
+//    bank-transfer deposit already exists today whenever a customer's credit
+//    repayment is recorded with "Bank Transfer" as the method (see
+//    RecordPaymentModal.tsx -> processCreditRepayment ->
+//    creditEngine.recordPayment -> cashEngine.recordMovement, which writes
+//    transaction_type: 'cash_in', payment_method: 'bank_transfer') - that is
+//    what this query now actually finds. src/hooks/modules/useModuleHooks.ts's
+//    useBankReconciliation (SRS-019, currently unused by any page) had the
+//    same bug and was fixed the same way.
 // ---------------------------------------------------------------------------
 
 interface DbCashTransactionRow {
@@ -75,20 +92,23 @@ function mapCashTransactionToDeposit(row: DbCashTransactionRow): CashMovement {
 // Real, Supabase-backed hooks
 // ---------------------------------------------------------------------------
 
-// Candidate deposits come from real imagecare.cash_transactions rows tagged
-// bank_transfer for the active branch (see note above for why this can't be
-// scoped to the specific bank account). What counts as "matched" is still a
-// purely local concept: it excludes any real transaction id already recorded
-// as a matchedMovementId on one of this account's local statement lines.
+// Candidate deposits come from real imagecare.cash_transactions rows that
+// are cash-in AND paid by bank transfer, for the active branch (see note
+// above for why this can't be scoped to the specific bank account). What
+// counts as "matched" is still a purely local concept: it excludes any real
+// transaction id already recorded as a matchedMovementId on one of this
+// account's local statement lines.
 export function useUnmatchedDeposits(bankAccountId: string) {
   const ctx = useUserContext()
   const branch = useActiveBranch()
   return useQuery({
     queryKey: ['bank-reconciliation', 'unmatched-deposits', bankAccountId, ctx.business_id, branch],
     queryFn: async () => {
-      const rows = (await listCashTransactionsReal(ctx, { branch_id: branch ?? undefined, transaction_type: 'bank_transfer' }, { page_size: 200 }).then(
-        unwrap,
-      )) as DbCashTransactionRow[]
+      const rows = (await listCashTransactionsReal(
+        ctx,
+        { branch_id: branch ?? undefined, transaction_type: 'cash_in', payment_method: 'bank_transfer' },
+        { page_size: 200 },
+      ).then(unwrap)) as DbCashTransactionRow[]
       const lines = await bankReconciliationService.listStatementLines(bankAccountId)
       const matchedIds = new Set(lines.filter((l) => l.matchedMovementId).map((l) => l.matchedMovementId))
       return rows.filter((r) => !matchedIds.has(r.id)).map(mapCashTransactionToDeposit)

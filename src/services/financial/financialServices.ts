@@ -266,7 +266,15 @@ export async function getCashBalance(
 
 export async function listCashTransactions(
   ctx: UserContext,
-  filter: { branch_id?: UUID; transaction_type?: string; date?: DateFilter } = {},
+  // Bug fix (2026-09-06): payment_method added. Bank Reconciliation's
+  // "unmatched deposits" needs to find real cash-in transactions that were
+  // paid by bank transfer - that is carried on payment_method (same field
+  // POS/credit-repayment/expense-import already set to 'bank_transfer'),
+  // never on transaction_type (which only ever holds direction values like
+  // 'cash_in'/'cash_out' - see cashEngine.ts's recordMovement). See
+  // useBankReconciliationData.ts's useUnmatchedDeposits for the caller this
+  // was added for.
+  filter: { branch_id?: UUID; transaction_type?: string; payment_method?: string; date?: DateFilter } = {},
   pagination: PaginationRequest = {}
 ): Promise<ServiceResponse<PagedResponse<CashTransaction>>> {
   const requestId = makeRequestId();
@@ -279,6 +287,7 @@ export async function listCashTransactions(
     let query = supabase.schema('imagecare').from('cash_transactions').select('*', { count: 'exact' }).eq('business_id', ctx.business_id).is('deleted_at', null).range(offset, offset + pageSize - 1).order('transaction_date', { ascending: false });
     if (filter.branch_id)       query = query.eq('branch_id', filter.branch_id);
     if (filter.transaction_type) query = query.eq('transaction_type', filter.transaction_type);
+    if (filter.payment_method)  query = query.eq('payment_method', filter.payment_method);
     if (filter.date?.from) query = query.gte('transaction_date', filter.date.from);
     if (filter.date?.to)   query = query.lte('transaction_date', filter.date.to);
     const { data, error, count } = await query;
