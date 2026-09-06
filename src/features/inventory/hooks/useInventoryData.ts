@@ -7,6 +7,7 @@ import {
   listCategories, createCategory, updateCategory, archiveCategory, mergeCategories,
   listUnits, createUnit, updateUnit, archiveUnit,
   listSuppliers, createSupplier, updateSupplier, archiveSupplier,
+  listProductBranchIds, listBranchProductIds, setProductBranches,
 } from '../../../services/masterData/masterDataService';
 import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
 import { listBrands, createBrand, updateBrand, archiveBrand } from '../../../services/brandService';
@@ -75,26 +76,68 @@ export function useBrands() {
 // of any real movements (opening stock, purchases, sales, adjustments).
 // Stock is deliberately never a column on products (see inventoryEngine's
 // own rule) - it has to come from vw_stock_summary via listInventory(),
-// same view the Inventory dashboard already reads. Not branch-filtered
-// here (this list is company-wide across branches) - summed per product
-// so "in stock" reflects the real total, not always zero.
+// same view the Inventory dashboard already reads.
+//
+// Bug fix (2026-09-06), "branch product visibility": when a branchId IS
+// passed, the returned list is now also filtered down to only products
+// assigned to that branch (imagecare.product_branches - see
+// masterDataService.ts). Every caller that does NOT pass a branchId
+// (Purchasing, the Inventory product catalog, Barcode Management, Stock
+// Adjustments/Movements) is completely unaffected and keeps seeing the
+// full, unfiltered, business-wide catalog exactly as before - only
+// PointOfSalePage's call (the Sales/Record Sale product picker) passes one,
+// which is the one operational list this was actually reported for:
+// products not carried at the active branch used to still appear there as
+// permanently-disabled "out of stock" tiles instead of not appearing at
+// all.
 export function useProducts(branchId?: UUID) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['inventory', 'products', ctx.business_id, branchId],
     queryFn: async () => {
-      const [products, stockRows] = await Promise.all([
+      const [products, stockRows, allowedProductIds] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         listProducts(ctx).then(unwrap) as Promise<any[]>,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         listInventory(ctx, branchId ? { branch_id: branchId } : {}, { page_size: 500 }).then(unwrap) as Promise<any[]>,
+        branchId ? (listBranchProductIds(ctx, branchId).then(unwrap) as Promise<string[]>) : Promise.resolve(null),
       ]);
       const stockByProduct = new Map<string, number>();
       for (const row of Array.isArray(stockRows) ? stockRows : []) {
         const key = row.product_id as string;
         stockByProduct.set(key, (stockByProduct.get(key) ?? 0) + Number(row.quantity_on_hand ?? 0));
       }
-      return products.map((p) => mapProduct({ ...p, currentStock: stockByProduct.get(p.id) ?? 0 }));
+      const visibleProducts = allowedProductIds
+        ? products.filter((p) => allowedProductIds.includes(p.id))
+        : products;
+      return visibleProducts.map((p) => mapProduct({ ...p, currentStock: stockByProduct.get(p.id) ?? 0 }));
+    },
+  });
+}
+
+// Which branches carry this product - powers the "Branches" tab on the
+// product detail page (see setProductBranches's own comment for the
+// permission/behavior notes).
+export function useProductBranches(productId: string | undefined) {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'product-branches', productId],
+    queryFn: () => listProductBranchIds(ctx, productId as UUID).then(unwrap) as Promise<UUID[]>,
+    enabled: Boolean(productId),
+  });
+}
+
+export function useSetProductBranches(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ productId, branchIds }: { productId: UUID; branchIds: UUID[] }) =>
+      setProductBranches(ctx, productId, branchIds).then(unwrap),
+    onSuccess: (_data, { productId }) => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'product-branches', productId] });
+      // Branch assignment changes what a branch-scoped product list (POS)
+      // shows, so every cached useProducts(branchId) result needs to refetch.
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
     },
   });
 }
@@ -186,6 +229,28 @@ export function useCreateProduct(_userId?: string) {
           // Product already saved; stock can still be fixed via Stock
           // Adjustments. Swallowed deliberately - see comment above.
           console.error('Opening stock was not recorded for new product', product.id, err);
+        }
+      }
+
+      // Bug fix (2026-09-06), "branch product visibility": a new product
+      // used to carry no branch assignment at all, which - once
+      // useProducts(branchId) started filtering on it - would have made
+      // every newly created product invisible on every branch's till
+      // until someone manually assigned it. Auto-assigning to the same
+      // branch the product was actually created in (same `branchId` opening
+      // stock above resolves to - the active branch when a product isn't
+      // explicitly tied to one) matches how products actually get added in
+      // practice: a business adds a product while working in the branch
+      // that will carry it. Best-effort, same reasoning as opening stock
+      // above - the product itself must not disappear if this fails.
+      if (branchId) {
+        try {
+          const assignResult = await setProductBranches(ctx, product.id as UUID, [branchId]);
+          if (assignResult.error) {
+            console.error('Branch assignment was not recorded for new product', product.id, assignResult.error);
+          }
+        } catch (err) {
+          console.error('Branch assignment was not recorded for new product', product.id, err);
         }
       }
 
@@ -695,6 +760,26 @@ export function useDuplicateProduct(_userId?: string) {
         metadata: { brand_id: source.metadata?.brand_id ?? null, supplier_id: source.metadata?.supplier_id ?? null },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).then(unwrap);
+
+      // Bug fix (2026-09-06), "branch product visibility": carry the
+      // source product's branch assignments over to the copy, same as
+      // every other field here - without this a duplicate would start
+      // assigned to no branch at all and be invisible on every till until
+      // manually reassigned, the same regression useCreateProduct's own
+      // fix above guards against. Best-effort: the copy itself must not
+      // disappear if this part fails.
+      try {
+        const sourceBranchIds = await listProductBranchIds(ctx, id as UUID).then(unwrap) as UUID[];
+        if (sourceBranchIds.length > 0) {
+          const assignResult = await setProductBranches(ctx, product.id as UUID, sourceBranchIds);
+          if (assignResult.error) {
+            console.error('Branch assignment was not copied to duplicated product', product.id, assignResult.error);
+          }
+        }
+      } catch (err) {
+        console.error('Branch assignment was not copied to duplicated product', product.id, err);
+      }
+
       return product;
     },
     onSuccess: () => {

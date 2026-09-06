@@ -168,6 +168,98 @@ export async function softDeleteProduct(
   }
 }
 
+// ---- Product-branch assignment (2026-09-06) -----------------
+// Backs the "branch product visibility" fix: products stay one shared,
+// business-wide catalog (unchanged, never duplicated per branch) - this is
+// a many-to-many join (imagecare.product_branches) recording which
+// branches actually carry which product, so an operational product list
+// (the POS/Record Sale product picker) can show only what the active
+// branch carries instead of every business product as a disabled tile.
+// Product-management screens (Inventory's product list, Purchasing, Stock
+// Adjustments) deliberately keep listing every product regardless of this -
+// only listBranchProductIds()'s caller (useProducts(branchId) in
+// useInventoryData.ts) applies it.
+
+export async function listProductBranchIds(
+  ctx: UserContext,
+  productId: UUID
+): Promise<ApiResult<UUID[]>> {
+  try {
+    const { data, error } = await supabase
+      .schema('imagecare')
+      .from('product_branches')
+      .select('branch_id')
+      .eq('product_id', productId)
+      .eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok((data ?? []).map((r) => r.branch_id as UUID));
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+export async function listBranchProductIds(
+  ctx: UserContext,
+  branchId: UUID
+): Promise<ApiResult<UUID[]>> {
+  try {
+    const { data, error } = await supabase
+      .schema('imagecare')
+      .from('product_branches')
+      .select('product_id')
+      .eq('branch_id', branchId)
+      .eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok((data ?? []).map((r) => r.product_id as UUID));
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+// Replace-all: deletes this product's existing branch assignments and
+// writes the new set. Same permission as editing any other product field
+// (canDo 'inventory' 'edit') - branch assignment is a product attribute,
+// not a separate permission. An empty branchIds array is accepted (the
+// product simply becomes unassigned everywhere, same as never having been
+// assigned) rather than blocked, per the standing rule that this kind of
+// field must never block a save.
+export async function setProductBranches(
+  ctx: UserContext,
+  productId: UUID,
+  branchIds: UUID[]
+): Promise<ApiResult<void>> {
+  if (!canDo(ctx, 'inventory', 'edit')) {
+    return fail({ code: 'PERMISSION_DENIED', message: 'You do not have permission to edit products.' });
+  }
+
+  try {
+    const { error: delError } = await supabase
+      .schema('imagecare')
+      .from('product_branches')
+      .delete()
+      .eq('product_id', productId)
+      .eq('business_id', ctx.business_id);
+    if (delError) return fail(parseError(delError));
+
+    if (branchIds.length > 0) {
+      const { error: insError } = await supabase
+        .schema('imagecare')
+        .from('product_branches')
+        .insert(branchIds.map((branch_id) => ({
+          business_id: ctx.business_id,
+          product_id: productId,
+          branch_id,
+          created_by: ctx.user_id,
+        })));
+      if (insError) return fail(parseError(insError));
+    }
+
+    return ok(undefined);
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
 // ---- Product Categories ------------------------------------
 
 export async function listCategories(

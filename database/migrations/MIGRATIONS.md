@@ -284,3 +284,24 @@ SELECT * FROM imagecare.fn_business_engine_health_check('<business_uuid>');
 ```
 
 *ImageCare ERP - Stage 3 Database Migrations*
+
+---
+
+## 0034_stage10_product_branch_assignment.sql
+
+**Applied live to Supabase on 2026-09-06.**
+
+**Tables created:**
+
+- `imagecare.product_branches` - many-to-many join recording which branches carry which product. `products` itself is unchanged and stays one shared, business-wide catalog - no product row is duplicated or moved.
+
+**RLS policies:**
+
+- `product_branches`: select/all gated on `business_id = fn_current_business_id()`, same shape as the existing `products` table policies. Feature-level permission (who may edit a product's branch assignment) is enforced in the application layer via `canDo(ctx, 'inventory', 'edit')`, matching how product edits are already gated.
+
+**Backfill:**
+
+- Every existing product assigned to the branch(es) where it already has real `inventory_movements` history.
+- A product with no movement history anywhere yet is assigned to every active branch of its business, so it doesn't silently disappear from every branch's till the moment this ships.
+
+**Why:** the POS/Record Sale product picker used to show every business-wide product at every branch, rendering unstocked ones as permanently-disabled tiles. This lets that list show only products actually assigned to the active branch instead. See `src/services/masterData/masterDataService.ts` (`listProductBranchIds`/`listBranchProductIds`/`setProductBranches`), `src/features/inventory/hooks/useInventoryData.ts` (`useProducts`, `useProductBranches`, `useSetProductBranches`), and `src/pages/inventory/ProductDetailPage.tsx` (new "Branches" tab).
