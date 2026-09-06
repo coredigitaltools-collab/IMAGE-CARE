@@ -6,17 +6,26 @@
 //          Pages must never calculate KPIs independently.
 //          Uses the shared DB-003/DB-006 reporting engine.
 //
-// KNOWN GAP (Phase 12 E2E finding, not yet fixed - lower priority than the
-// KPI/cash-position/P&L fixes below because no core-9 workflow depends on
-// them): getSalesByPeriod, getTopProducts, getOutstandingCredit, and
+// Update (2026-09-06): getTopProducts is now fixed - see its own comment
+// below. It was the live cause of "Monthly/Annual Summary shows no sales
+// even though real sales exist": Promise.all in those pages' hooks fetched
+// it alongside the (already-working) revenue/transaction totals, so one
+// broken call hid genuinely correct data behind a misleading empty state.
+// getOutstandingCredit's RPC (fn_get_outstanding_credit_summary) was found
+// to already exist live when this was re-checked - it was never actually
+// broken, despite the note below having listed it as a gap.
+//
+// REMAINING KNOWN GAP (Phase 12 E2E finding): getSalesByPeriod and
 // getExpenseBreakdown still call RPCs (fn_get_sales_by_period,
-// fn_get_top_products, fn_get_outstanding_credit_summary,
-// fn_get_expense_breakdown) that do not exist live. They fail safely
-// (return a real error, not fake data) rather than being deleted, so the
-// calling pages (Top Products, Sales-by-Period charts, Credit Aging,
-// Expense Breakdown) surface a clear error instead of silently showing
-// nothing. Fixing these the same way getDashboardKPIs/getCashPosition/
-// getPLSummary were fixed is straightforward follow-up work.
+// fn_get_expense_breakdown) that do not exist live. Neither is called by
+// Daily/Monthly/Annual Summary any more (Monthly Summary's totals now come
+// from getDashboardKPIs, same as Daily and Annual already did) - the
+// day-by-day breakdown and expense-category breakdown they'd back aren't
+// rendered by any page currently in use, only by the older, superseded
+// src/hooks/modules/useModuleHooks.ts / src/hooks/shared/useServerState.ts
+// hooks. They fail safely (return a real error, not fake data) rather than
+// being deleted, so the day this is genuinely needed, whichever page calls
+// it will surface a clear error instead of silently showing nothing.
 // ============================================================
 
 import { supabase, rpc } from '../../lib/supabase';
@@ -191,6 +200,21 @@ export interface TopProductRow {
   transaction_count: number;
 }
 
+// Bug fix (2026-09-06): fn_get_top_products does not exist live (see the
+// KNOWN GAP note at the top of this file) - every call here threw, and
+// because Monthly/Annual Summary's Sales tab fetches this via Promise.all
+// alongside the (working) revenue/transaction-count totals, one broken
+// call poisoned the whole page: "No sales this month/year" showed even
+// though real, confirmed sales existed for the period (reported live:
+// September 2026, Nkoowe branch - 14 confirmed sales, UGX 2,620,000,
+// completely hidden behind this). Rewritten the same way
+// getDashboardKPIs/getCashPosition above were fixed - real tables, no RPC,
+// two steps mirroring getDashboardKPIs' own pattern: find the confirmed,
+// in-range sale ids first, then aggregate their line items in TS (a
+// GROUP BY isn't expressible through PostgREST's table API without a
+// database function, and this business's real sale volume is small enough
+// that summing in memory is genuinely fine - see APP_CONSTANTS-style caps
+// used elsewhere in this file, e.g. listCashTransactions page_size 200).
 export async function getTopProducts(
   ctx: UserContext,
   input: {
@@ -206,17 +230,70 @@ export async function getTopProducts(
   }
 
   try {
-    const { data, error } = await rpc('fn_get_top_products', {
-      p_business_id: ctx.business_id,
-      p_from_date:   input.from_date,
-      p_to_date:     input.to_date,
-      p_limit:       input.limit ?? 10,
-      p_order_by:    input.order_by ?? 'revenue',
-      p_branch_id:   input.branch_id ?? null,
+    let saleQuery = supabase.schema('imagecare').from('sales')
+      .select('id')
+      .eq('business_id', ctx.business_id)
+      .eq('status', 'confirmed')
+      .is('deleted_at', null)
+      .gte('sale_date', input.from_date)
+      .lte('sale_date', input.to_date);
+    if (input.branch_id) saleQuery = saleQuery.eq('branch_id', input.branch_id);
+    const { data: saleRows, error: saleErr } = await saleQuery;
+    if (saleErr) return fail(parseError(saleErr));
+
+    const saleIds = (saleRows ?? []).map((s) => s.id as string);
+    if (saleIds.length === 0) return ok([]);
+
+    const { data: itemRows, error: itemErr } = await supabase.schema('imagecare').from('sale_items')
+      .select('sale_id, product_id, quantity, unit_cost, line_total, products!sale_items_product_id_fkey(name, sku)')
+      .in('sale_id', saleIds);
+    if (itemErr) return fail(parseError(itemErr));
+
+    interface Agg { productId: string; productName: string; sku: string | null; qty: number; revenue: number; cogs: number; saleIds: Set<string> }
+    const byProduct = new Map<string, Agg>();
+    for (const row of (itemRows ?? []) as Array<{
+      sale_id: string; product_id: string; quantity: number; unit_cost: number; line_total: number;
+      products: { name: string; sku: string | null } | { name: string; sku: string | null }[] | null;
+    }>) {
+      const productMeta = Array.isArray(row.products) ? row.products[0] : row.products;
+      const qty = Number(row.quantity ?? 0);
+      const revenue = Number(row.line_total ?? 0);
+      const cogs = qty * Number(row.unit_cost ?? 0);
+      const existing = byProduct.get(row.product_id);
+      if (existing) {
+        existing.qty += qty;
+        existing.revenue += revenue;
+        existing.cogs += cogs;
+        existing.saleIds.add(row.sale_id);
+      } else {
+        byProduct.set(row.product_id, {
+          productId: row.product_id,
+          productName: productMeta?.name ?? 'Item',
+          sku: productMeta?.sku ?? null,
+          qty, revenue, cogs,
+          saleIds: new Set([row.sale_id]),
+        });
+      }
+    }
+
+    const orderBy = input.order_by ?? 'revenue';
+    const rows: TopProductRow[] = Array.from(byProduct.values()).map((p) => ({
+      product_id: p.productId as UUID,
+      product_name: p.productName,
+      sku: p.sku,
+      total_qty: p.qty,
+      total_revenue: p.revenue,
+      total_cogs: p.cogs,
+      gross_profit: p.revenue - p.cogs,
+      transaction_count: p.saleIds.size,
+    }));
+    rows.sort((a, b) => {
+      if (orderBy === 'quantity') return b.total_qty - a.total_qty;
+      if (orderBy === 'profit') return b.gross_profit - a.gross_profit;
+      return b.total_revenue - a.total_revenue;
     });
 
-    if (error) return fail(parseError(error));
-    return ok((data ?? []) as TopProductRow[]);
+    return ok(rows.slice(0, input.limit ?? 10));
   } catch (err) {
     return fail(parseError(err));
   }
