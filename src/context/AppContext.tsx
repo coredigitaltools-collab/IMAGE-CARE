@@ -64,6 +64,8 @@ import {
   getMyBusinessId, hasPin as hasPinRpc, setPin as setPinRpc, verifyPin,
 } from '../services/auth/authService';
 import { verifyStaffPin } from '../services/settings/settingsService';
+import { getStaffEffectivePermissions } from '../services/settings/rolePermissionsService';
+import type { StaffEffectiveContext } from '../services/settings/rolePermissionsService';
 import type { RegisterInput } from '../services/auth/authService';
 import type { UserContext } from '../types/app';
 import type { UUID } from '../types/database';
@@ -75,9 +77,29 @@ import type { UUID } from '../types/database';
 // activeStaff is a lightweight, PIN-verified overlay identifying which
 // staff member is currently operating that already-authenticated
 // session - see 0030_stage9_pin_staff.sql for the full design rationale.
-// It is NOT a second real login and never changes auth.uid()/RLS - it
-// only drives which name/role shows in the header and which sidebar
-// modules are visible (see AppShell's Sidebar).
+// It is NOT a second real login and never changes auth.uid()/RLS - the
+// database still sees every query as the owner.
+//
+// Bug fix (2026-09-05): it USED to be true that this was purely cosmetic
+// (name/role in the header, which sidebar items show) and every app-level
+// permission check (canDo(), including the ones already in
+// services/sales/salesService.ts) still ran against the OWNER's own full
+// permissions regardless of who was PIN-switched in - so a staff member
+// could always do everything the owner could, however restrictive the
+// owner's Settings looked. See
+// claude/pos-staff-permission-enforcement-2026-09-05.md.
+//
+// That gap is now closed: switchToStaff() below also resolves the target
+// staff member's OWN real permissions/branches (getStaffEffectivePermissions,
+// reading the real permission_group_members/group_permissions/
+// user_permissions tables) into activeStaffContext, and useUserContext()
+// overlays those onto the permissions/branches/is_owner fields of the
+// context every canDo() check reads - while user_id/business_id/branch_id/
+// email stay the real authenticated owner's, since those still have to
+// match auth.uid() for RLS and audit fields to keep working. The database
+// itself is still only ever protected by RLS (keyed to the owner on a
+// shared device) - this closes the app-level gap on top of that, it does
+// not change what RLS allows.
 export interface ActiveStaff {
   id: string;
   fullName: string;
@@ -186,6 +208,39 @@ function clearCachedActiveStaff(): void {
   }
 }
 
+// ---- Active staff EFFECTIVE PERMISSIONS session storage ------
+// Cached alongside activeStaff (same lifecycle - written together in
+// switchToStaff, cleared together everywhere activeStaff is cleared) so
+// a page refresh mid-shift keeps enforcing the right permissions instead
+// of silently falling back to either "locked out of everything" or,
+// worse, the owner's full access.
+const ACTIVE_STAFF_CONTEXT_KEY = 'imc_active_staff_context';
+
+function getCachedActiveStaffContext(): StaffEffectiveContext | null {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_STAFF_CONTEXT_KEY);
+    return raw ? (JSON.parse(raw) as StaffEffectiveContext) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedActiveStaffContext(context: StaffEffectiveContext): void {
+  try {
+    sessionStorage.setItem(ACTIVE_STAFF_CONTEXT_KEY, JSON.stringify(context));
+  } catch {
+    // non-fatal
+  }
+}
+
+function clearCachedActiveStaffContext(): void {
+  try {
+    sessionStorage.removeItem(ACTIVE_STAFF_CONTEXT_KEY);
+  } catch {
+    // non-fatal
+  }
+}
+
 // ---- Provider ----------------------------------------------
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -196,6 +251,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isLocked, setIsLocked]             = useState(false);
   const [hasPinState, setHasPinState]       = useState(false);
   const [activeStaff, setActiveStaff]       = useState<ActiveStaff | null>(() => getCachedActiveStaff());
+  const [activeStaffContext, setActiveStaffContext] = useState<StaffEffectiveContext | null>(() => getCachedActiveStaffContext());
   const mountedRef = useRef(true);
 
   const isAuthenticated = userContext !== null;
@@ -326,8 +382,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsLocked(false);
         setHasPinState(false);
         setActiveStaff(null);
+        setActiveStaffContext(null);
         clearCachedContext();
         clearCachedActiveStaff();
+        clearCachedActiveStaffContext();
         return;
       }
 
@@ -432,8 +490,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsLocked(false);
       setHasPinState(false);
       setActiveStaff(null);
+      setActiveStaffContext(null);
       clearCachedContext();
       clearCachedActiveStaff();
+      clearCachedActiveStaffContext();
     } finally {
       setIsLoading(false);
     }
@@ -459,7 +519,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(() => {
     setIsLocked(true);
     setActiveStaff(null);
+    setActiveStaffContext(null);
     clearCachedActiveStaff();
+    clearCachedActiveStaffContext();
   }, []);
 
   // ---- Unlock with PIN -----------------------------------------
@@ -553,10 +615,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const next: ActiveStaff = { id: result.staffId ?? staffId, fullName: result.fullName ?? '', role: result.role ?? '' };
+
+    // Bug fix (2026-09-05): resolve this staff member's OWN real
+    // permissions/branches (see the ActiveStaff interface comment above)
+    // so useUserContext() can enforce them instead of the owner's full
+    // access for the rest of this shift. Best-effort and fails safe: if
+    // this lookup errors for any reason, activeStaffContext stays an
+    // empty ("no access") map rather than silently falling back to the
+    // owner's full access, which is the exact bug being fixed here.
+    let effective: StaffEffectiveContext = { permissions: {}, branches: [], branch_id: null };
+    if (userContext) {
+      try {
+        effective = await getStaffEffectivePermissions(userContext, next.id);
+      } catch {
+        // fail safe to no-access (the default above).
+      }
+    }
+
     setActiveStaff(next);
     setCachedActiveStaff(next);
+    setActiveStaffContext(effective);
+    setCachedActiveStaffContext(effective);
     return { success: true };
-  }, []);
+  }, [userContext]);
 
   // ---- Switch back to owner ---------------------------------------
   // Deliberately reuses the OWNER's own daily unlock PIN (fn_verify_pin -
@@ -584,7 +665,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     setActiveStaff(null);
+    setActiveStaffContext(null);
     clearCachedActiveStaff();
+    clearCachedActiveStaffContext();
     return { success: true };
   }, []);
 
@@ -592,12 +675,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveBranchId(branchId);
   }, []);
 
+  // ---- Effective user context (2026-09-05 permission enforcement fix) --
+  // Every permission check in the app - useUserContext(), PermissionGuard/
+  // PermissionButton/BranchGuard, AppShell's Sidebar, and every canDo()
+  // call inside a service function that receives `ctx` from one of these
+  // - reads whichever object is exposed here as `userContext`. Overlaying
+  // the active staff member's own real permissions/branches/is_owner at
+  // this single point, rather than in each consumer, is what makes every
+  // one of those checks respect the PIN-switched staff member instead of
+  // the owner automatically, with no other file needing to know this
+  // overlay exists. business_id/user_id/branch_id/email are deliberately
+  // NOT overridden - those still have to match the real authenticated
+  // owner for RLS and created_by/audit fields to keep working, since the
+  // database itself is still only ever protected by RLS keyed to auth.uid()
+  // (the owner, on a shared device) - see the ActiveStaff interface
+  // comment above for the full rationale.
+  const effectiveUserContext: UserContext | null = React.useMemo(() => {
+    if (!userContext) return null;
+    // activeStaff cached from a session that started before this fix
+    // shipped (or an in-flight switchToStaff() call) has no matching
+    // activeStaffContext yet - falls back to the owner's context, i.e.
+    // exactly the pre-fix behavior, rather than an abrupt full lockout
+    // mid-shift the moment this deploys. Resolves itself on the next
+    // staff switch, lock/unlock, or PIN re-entry.
+    if (!activeStaff || !activeStaffContext) return userContext;
+    return {
+      ...userContext,
+      permissions: activeStaffContext.permissions,
+      branches: activeStaffContext.branches,
+      is_owner: false,
+    };
+  }, [userContext, activeStaff, activeStaffContext]);
+
   return (
     <AppContext.Provider value={{
       isLoading,
       isContextStale,
       isAuthenticated,
-      userContext,
+      userContext: effectiveUserContext,
       activeBranchId,
       setActiveBranchId: handleSetActiveBranch,
       signIn,

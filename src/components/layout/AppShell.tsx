@@ -181,17 +181,18 @@ function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }
         {NAV_ITEMS.map(item => {
           const hasAccess = can(item.module, 'view');
           if (!hasAccess && item.module !== 'reports') return null;
-          // PIN staff mode (2026-09-05, see 0030_stage9_pin_staff.sql):
-          // the owner's real permissions (ctx.permissions, via
-          // fn_get_user_context) are still what's checked above - this is
-          // an additional, coarse restriction layered on top while a
-          // staff member is identified on a shared device. Settings
-          // (business config, staff PINs, roles/permissions) always stays
-          // hidden while acting as staff, regardless of the owner's own
-          // access - real per-role restrictions for everything else are a
-          // separate, larger follow-up (the Roles/Permission Matrix
-          // screens don't persist to the database yet - see
-          // claude/add-staff-not-persisting-fix-2026-09-04.md).
+          // PIN staff mode: `can()` above now checks the ACTIVE STAFF
+          // MEMBER's own real permissions while one is identified on this
+          // shared device, not the owner's - see AppContext.tsx's
+          // effectiveUserContext and claude/pos-staff-permission-enforcement-2026-09-05.md
+          // (this used to only check the owner's permissions regardless of
+          // who was switched in, which is the "staff see more than their
+          // permission" bug that fix addresses). Settings (business
+          // config, staff PINs, roles/permissions) additionally always
+          // stays hidden while acting as staff regardless of what their
+          // own permissions say - managing other staff's access is
+          // owner-only, full stop, not something to delegate via the
+          // permission matrix.
           if (activeStaff && item.module === 'settings') return null;
           return (
             <SidebarNavItem

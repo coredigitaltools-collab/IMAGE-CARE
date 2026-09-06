@@ -3,8 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext } from '../../../context/AppContext';
 import { getBusinessProfile, saveBusinessProfile, listStaff, createStaffWithPin, resetStaffPin, updateStaffMember, setStaffActive, getSetting, updateSetting } from '../../../services/settings/settingsService';
 import { listBranches, createBranch, updateBranch } from '../../../services/masterData/masterDataService';
-import { listRoles, createRole as createRoleReal, renameRole as renameRoleReal, archiveRole as archiveRoleReal } from '../../../services/roleService';
-import { getPermissionMatrix, setPermission as setPermissionReal } from '../../../services/permissionsService';
+import { renameRole as renameRoleReal } from '../../../services/roleService';
+import {
+  listRoles as listRolesReal,
+  createRole as createRoleReal,
+  archiveRole as archiveRoleReal,
+  getPermissionMatrix as getPermissionMatrixReal,
+  setPermission as setPermissionReal,
+  assignRoleToUser,
+} from '../../../services/settings/rolePermissionsService';
 import type { UUID } from '../../../types/database';
 import type { Permission, StaffRole, StaffInput } from '../../../types/settings';
 
@@ -67,27 +74,34 @@ export function useStaff(_userId?: string) {
   return useQuery({ queryKey: ['settings', 'staff', ctx.business_id], queryFn: () => listStaff(ctx).then(unwrapArr) });
 }
 
-// Roles and the Permission Matrix are now genuinely persisted (IndexedDB,
-// via the real, previously-orphaned src/services/roleService.ts and
-// permissionsService.ts - see the module comments there for the Owner-role
-// protection and role-in-use rules). This makes Save actually stick and
-// survive a refresh, which the prior identity-function stubs never did.
-// Note: this does NOT change how ctx.permissions/canDo() enforce access at
-// runtime - that continues to come from the session's role-based grant as
-// it always has, since rewiring live permission ENFORCEMENT is an
-// Auth-adjacent change deliberately out of scope for this save-button pass.
+// Bug fix (2026-09-05): Roles and the Permission Matrix used to be
+// "genuinely persisted" only to browser localStorage (src/services/
+// roleService.ts / permissionsService.ts) - Save stuck across a refresh,
+// which looked like real persistence, but it was never connected to the
+// real imagecare.permission_groups/group_permissions tables that actual
+// permission checks (canDo(), fn_get_user_context()) read. So nothing
+// set here ever restricted or granted anything for real - see
+// claude/pos-staff-permission-enforcement-2026-09-05.md. Now backed by
+// src/services/settings/rolePermissionsService.ts, which writes the real
+// tables directly (RLS already allows the owner to manage them).
 export function useRoles(_userId?: string) {
-  return useQuery({ queryKey: ['settings', 'roles'], queryFn: () => listRoles() });
+  const ctx = useUserContext();
+  return useQuery({ queryKey: ['settings', 'roles', ctx.business_id], queryFn: () => listRolesReal(ctx) });
 }
 
-export function useCreateRole(userId?: string) {
+export function useCreateRole(_userId?: string) {
+  const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string }) => createRoleReal(input, userId ?? ''),
+    mutationFn: (input: { name: string }) => createRoleReal(ctx, input.name),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'roles'] }),
   });
 }
 
+// Not reconnected to the real permission_groups table - never reachable
+// from the UI (PeopleAccessPage has no rename action), left pointing at
+// the old local-only implementation exactly as before rather than
+// building a real version of a feature nothing calls.
 export function useRenameRole(userId?: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -96,7 +110,7 @@ export function useRenameRole(userId?: string) {
   });
 }
 
-export function useArchiveRole(userId?: string) {
+export function useArchiveRole(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
@@ -105,14 +119,15 @@ export function useArchiveRole(userId?: string) {
       if (staffResult.error) throw new Error((staffResult.error as { message?: string })?.message ?? 'Failed to check staff assignments.');
       const activeAssignees = ((staffResult.data ?? []) as Array<{ role?: string; is_active?: boolean }>)
         .filter((s) => s.role === id && s.is_active !== false).length;
-      return archiveRoleReal(id, userId ?? '', activeAssignees);
+      return archiveRoleReal(ctx, id, activeAssignees);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'roles'] }),
   });
 }
 
 export function usePermissionMatrix(_userId?: string) {
-  return useQuery({ queryKey: ['settings', 'permissions'], queryFn: () => getPermissionMatrix() });
+  const ctx = useUserContext();
+  return useQuery({ queryKey: ['settings', 'permissions', ctx.business_id], queryFn: () => getPermissionMatrixReal(ctx) });
 }
 
 export function useTaxRates(_userId?: string) {
@@ -344,7 +359,16 @@ export function useCreateStaff(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: StaffInput) => createStaffWithPin(ctx, input),
+    mutationFn: async (input: StaffInput) => {
+      const staff = await createStaffWithPin(ctx, input);
+      // Bug fix (2026-09-05): a role picked here used to only ever be
+      // written to users.role (a display label) - it never created the
+      // real permission_group_members row that actual permission checks
+      // read, so a newly added staff member's role never granted them
+      // anything for real. See claude/pos-staff-permission-enforcement-2026-09-05.md.
+      if (input.role) await assignRoleToUser(ctx, staff.id, input.role);
+      return staff;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
   });
 }
@@ -367,7 +391,13 @@ export function useUpdateStaff(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: StaffInput }) => updateStaffMember(ctx, id, input),
+    mutationFn: async ({ id, input }: { id: string; input: StaffInput }) => {
+      const staff = await updateStaffMember(ctx, id, input);
+      // See useCreateStaff above - keeps the real permission_group_members
+      // row in sync whenever the role is changed from Edit staff too.
+      if (input.role) await assignRoleToUser(ctx, id, input.role);
+      return staff;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'staff'] }),
   });
 }
@@ -409,11 +439,12 @@ export function useSaveSalesSettings(_userId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'sales'] }),
   });
 }
-export function useSetPermission(userId?: string) {
+export function useSetPermission(_userId?: string) {
+  const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { role: StaffRole; permission: Permission; granted: boolean }) =>
-      setPermissionReal(input.role, input.permission, input.granted, userId ?? ''),
+      setPermissionReal(ctx, input.role, input.permission, input.granted),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'permissions'] }),
   });
 }

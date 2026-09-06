@@ -17,6 +17,7 @@ import type { ProductPickerHandle } from '../../components/sales/ProductPicker'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useUserContext } from '../../context/AppContext'
+import { canDo } from '../../types/app'
 import { useProducts } from '../../features/inventory/hooks/useInventoryData'
 import { useTaxRates, useStaff, useBranches } from '../../features/settings/hooks/useSettingsData'
 import { useReceiptSettings, useSalesSettings } from '../../features/settings/hooks/useSettingsData'
@@ -506,9 +507,17 @@ export function PointOfSalePage() {
             onResume={handleResumeParked}
             onDelete={handleDeleteHeldSale}
           />
-          <Button onClick={openRecordSale}>
-            <Plus size={15} /> Record sale
-          </Button>
+          {/* Bug fix (2026-09-05): "create sale" is already enforced
+              server-side (canDo(ctx,'sales','create') in
+              services/sales/salesService.ts) - hiding the button too
+              when it's denied avoids a staff member filling out a whole
+              cart just to hit a permission error at the end. See
+              claude/pos-staff-permission-enforcement-2026-09-05.md. */}
+          {canDo(ctx, 'sales', 'create') && (
+            <Button onClick={openRecordSale}>
+              <Plus size={15} /> Record sale
+            </Button>
+          )}
         </div>
       </div>
 
@@ -614,13 +623,19 @@ export function PointOfSalePage() {
                                 used on this page (this button, plus both KPI/
                                 empty-state icons above, for consistency). */}
                             <RowActionButton icon={ReceiptText} label="View receipt" onClick={() => openReceipt(sale)} />
-                            <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => setDeleteSaleTarget(sale)} />
+                            {canDo(ctx, 'sales', 'delete') && (
+                              <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => setDeleteSaleTarget(sale)} />
+                            )}
                           </>
                         )}
                         {sale.status === 'parked' && (
                           <>
-                            <RowActionButton icon={Pencil} label="Edit" onClick={() => handleResumeParked(sale)} />
-                            <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => handleDeleteHeldSale(sale.id)} />
+                            {canDo(ctx, 'sales', 'create') && (
+                              <RowActionButton icon={Pencil} label="Edit" onClick={() => handleResumeParked(sale)} />
+                            )}
+                            {canDo(ctx, 'sales', 'delete') && (
+                              <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => handleDeleteHeldSale(sale.id)} />
+                            )}
                           </>
                         )}
                         {sale.status === 'cancelled' && <span className="text-xs text-ink-400">—</span>}
