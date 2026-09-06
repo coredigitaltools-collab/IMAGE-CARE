@@ -31,7 +31,18 @@ export async function listProducts(
   ctx: UserContext,
   options: ProductListOptions = {}
 ): Promise<ApiResult<Product[]>> {
-  if (!canDo(ctx, 'inventory', 'view')) {
+  // Bug fix (2026-09-06): this used to gate on 'inventory' view alone, so a
+  // staff member granted ONLY Sales access (the new default baseline - see
+  // claude/pos-staff-permission-enforcement-2026-09-05.md) got a hard
+  // PERMISSION_DENIED here the moment the till tried to load the product
+  // catalog to sell from - the Record Sale modal then silently showed "No
+  // products yet, add one from Inventory first" even though the business
+  // has real stock, because nothing surfaced the actual error. Selling
+  // necessarily requires being able to SEE the catalog, even for staff who
+  // have no rights to create/edit/delete products, so 'sales' view/create
+  // is now an accepted alternative to 'inventory' view for this read-only
+  // list. This does not grant any inventory management rights.
+  if (!canDo(ctx, 'inventory', 'view') && !canDo(ctx, 'sales', 'view') && !canDo(ctx, 'sales', 'create')) {
     return fail({ code: 'PERMISSION_DENIED', message: 'You do not have permission to view products.' });
   }
 

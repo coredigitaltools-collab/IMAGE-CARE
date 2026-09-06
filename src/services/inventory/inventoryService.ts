@@ -103,7 +103,14 @@ export async function listInventory(
 ): Promise<ServiceResponse<PagedResponse<StockSummaryRow>>> {
   const requestId = makeRequestId();
 
-  if (!canDo(ctx, 'inventory', 'view')) {
+  // Bug fix (2026-09-06): same gap as listProducts() in masterDataService -
+  // the till (useProducts() in useInventoryData.ts) calls this to get each
+  // product's current stock quantity for the Record Sale product picker.
+  // Requiring full 'inventory' view here meant a staff member with only
+  // Sales access could never see how much stock existed, so this accepts
+  // 'sales' view/create as an alternative for this read-only stock lookup -
+  // see claude/pos-staff-permission-enforcement-2026-09-05.md.
+  if (!canDo(ctx, 'inventory', 'view') && !canDo(ctx, 'sales', 'view') && !canDo(ctx, 'sales', 'create')) {
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view inventory.', { requestId });
   }
 

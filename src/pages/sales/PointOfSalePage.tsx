@@ -195,12 +195,32 @@ export function PointOfSalePage() {
   const branchesQuery = useBranches()
   const [branchId, setBranchId] = useState<string | null>(null)
 
+  // Bug fix (2026-09-06): branchesQuery lists every branch in the business
+  // (listBranches() has no branch filter - the owner needs to see them
+  // all), ordered alphabetically. This used to auto-select and offer
+  // whichever branch sorted first regardless of who was actually at the
+  // till, so a staff member who only works at "Nkoowe" got defaulted (and
+  // could switch) into "Machakos" - a branch with no stock for them,
+  // hence "No products yet" even though the business has real inventory.
+  // ctx.branches (from useUserContext()) is already the right source of
+  // truth for "which branches can the CURRENT till user actually
+  // transact at" - for the owner this is every business branch (unchanged
+  // behavior), for a PIN-switched staff member it's just their own
+  // assigned branch(es). See claude/pos-staff-permission-enforcement-2026-09-05.md.
+  const accessibleBranches = useMemo(() => {
+    const all = branchesQuery.data ?? []
+    const allowedIds = new Set((ctx.branches ?? []).map((b) => b.branch_id))
+    if (allowedIds.size === 0) return all // fail-open: never seen an empty ctx.branches for a resolved user, but don't hide every branch if it happens
+    const filtered = all.filter((b) => allowedIds.has(b.id))
+    return filtered.length > 0 ? filtered : all
+  }, [branchesQuery.data, ctx.branches])
+
   useEffect(() => {
     if (branchId === null) {
-      const firstActive = (branchesQuery.data ?? []).find((b) => b.is_active)
+      const firstActive = accessibleBranches.find((b) => b.is_active)
       if (firstActive) setBranchId(firstActive.id)
     }
-  }, [branchesQuery.data, branchId])
+  }, [accessibleBranches, branchId])
   const [discountPercent, setDiscountPercent] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
@@ -660,7 +680,7 @@ export function PointOfSalePage() {
           lastPurchaseAt={lastPurchaseAt}
           onSelectCustomer={setSelectedCustomer}
           onAddNewCustomer={() => setIsCustomerModalOpen(true)}
-          branches={(branchesQuery.data ?? []).filter((b) => b.is_active)}
+          branches={accessibleBranches.filter((b) => b.is_active)}
           branchId={branchId}
           onBranchChange={setBranchId}
           staff={(staffQuery.data ?? []).filter((s) => s.is_active)}
