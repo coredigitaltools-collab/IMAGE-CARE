@@ -42,17 +42,16 @@ interface RecordSaleModalProps {
   onDecrement: (productId: string) => void
   onRemove: (productId: string) => void
 
-  discountPercent: number
   onDiscountChange: (value: number) => void
   discountsAllowed: boolean
-  maxDiscountPercent: number
+  maxDiscountAmount: number
   taxRates: TaxRate[]
   taxRateId: string | null
   onTaxRateChange: (id: string | null) => void
   paymentMethod: PaymentMethod
   onPaymentMethodChange: (method: PaymentMethod) => void
-  amountTendered: string
-  onAmountTenderedChange: (value: string) => void
+  amountTendered: number
+  onAmountTenderedChange: (value: number) => void
   paymentReference: string
   onPaymentReferenceChange: (value: string) => void
   subtotal: number
@@ -91,10 +90,9 @@ export function RecordSaleModal({
   onIncrement,
   onDecrement,
   onRemove,
-  discountPercent,
   onDiscountChange,
   discountsAllowed,
-  maxDiscountPercent,
+  maxDiscountAmount,
   taxRates,
   taxRateId,
   onTaxRateChange,
@@ -148,10 +146,9 @@ export function RecordSaleModal({
             onIncrement={onIncrement}
             onDecrement={onDecrement}
             onRemove={onRemove}
-            discountPercent={discountPercent}
             onDiscountChange={onDiscountChange}
             discountsAllowed={discountsAllowed}
-            maxDiscountPercent={maxDiscountPercent}
+            maxDiscountAmount={maxDiscountAmount}
             taxRates={taxRates}
             taxRateId={taxRateId}
             onTaxRateChange={onTaxRateChange}

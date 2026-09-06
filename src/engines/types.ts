@@ -104,6 +104,19 @@ export interface CreateSaleCommand {
   // no data connecting any sale to who made it). See
   // claude/sales-targets-dashboard-fix-2026-09-05.md.
   served_by?:        UUID;
+  // Bug fix (2026-09-06): "i do not want the discount in a percentage
+  // form" + the deeper issue found while fixing it - the Record Sale
+  // cart's whole-sale discount (however it was entered) never reached
+  // this far either. The UI computed and displayed a discounted total,
+  // but createSale() below only ever priced each line at full unit_price
+  // (no discount_pct was ever set on any line from the checkout flow),
+  // so the sale actually saved - and the revenue posted to the books -
+  // was always the FULL undiscounted amount, regardless of what the
+  // cashier applied. This is a flat currency amount (e.g. 10000, meaning
+  // "USh 10,000 off"), applied once against the whole cart's subtotal,
+  // matching the till's one discount field for the whole sale rather
+  // than per line.
+  discount_amount?: number;
 }
 
 export interface PostSaleCommand {

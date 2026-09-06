@@ -112,8 +112,16 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
               <span>{formatCurrency(sale.subtotal, 'UGX')}</span>
             </div>
             {sale.discountAmount > 0 && (
+              // Bug fix (2026-09-06): "i do not want the discount in a
+              // percentage form" - sale.discountPercent was always a
+              // hardcoded 0 (this app never stored a real header-level
+              // discount percentage - see mapRawSaleRow in
+              // PointOfSalePage.tsx), so this line always printed
+              // "Discount (0%)" on every receipt that had a real
+              // discount amount applied. Discount is a flat amount now,
+              // shown the same way the till's own cart summary shows it.
               <div className="flex justify-between text-brand-red-700">
-                <span>Discount ({sale.discountPercent}%)</span>
+                <span>Discount</span>
                 <span>-{formatCurrency(sale.discountAmount, 'UGX')}</span>
               </div>
             )}

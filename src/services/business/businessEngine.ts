@@ -112,6 +112,11 @@ export interface CreateSaleInput {
   // Bug fix (2026-09-05): see the comment on CreateSaleCommand.served_by
   // in engines/types.ts - plumbed through from here to the real insert.
   served_by?: UUID;
+  // Bug fix (2026-09-06): see the comment on CreateSaleCommand.discount_amount
+  // in engines/types.ts - the till's whole-cart discount, plumbed through
+  // from here to the real insert (it wasn't reaching the engine at all
+  // before this fix).
+  discount_amount?: number;
 }
 
 export interface SaleResult {
@@ -146,6 +151,7 @@ export async function createAndPostSale(
     payment_method: input.payment_method,
     notes:          input.notes,
     served_by:      input.served_by,
+    discount_amount:input.discount_amount,
     lines: input.items.map(item => ({
       product_id:   item.product_id,
       quantity:     item.quantity,

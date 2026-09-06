@@ -262,7 +262,16 @@ export function useParkedSales(options?: { branchId?: UUID | null }) {
 export interface CheckoutInput {
   customerId: string | null; salesPersonId: string | null; branchId: string | null;
   items: Array<{ productId: string; productName: string; quantity: number; unitPrice: number; costPrice?: number }>;
-  discountPercent: number; taxRateId: string | null; paymentMethod: string;
+  // Bug fix (2026-09-06): "i do not want the discount in a percentage
+  // form" - renamed from discountPercent. This is now a flat currency
+  // amount off the whole cart (e.g. 10000 = "USh 10,000 off"), not a
+  // percentage - matches how PointOfSalePage.tsx now collects it. Also
+  // fixes a deeper issue found alongside this: this value previously
+  // never reached createSale() at all (see discount_amount below), so
+  // whatever discount the cashier applied never actually reduced the
+  // saved sale, the posted revenue, or the receipt total - only the
+  // on-screen preview reflected it.
+  discountAmount: number; taxRateId: string | null; paymentMethod: string;
   amountTendered: number | null; paymentReference: string | null; status: 'completed' | 'parked';
 }
 
@@ -273,7 +282,11 @@ export function useCheckout(_userId?: string) {
   return useMutation({
     mutationFn: async (input: CheckoutInput) => {
       const subtotal = input.items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-      const discountAmt = Math.round((subtotal * input.discountPercent) / 100);
+      // Never trust the client past the wall: clamp here too, same rule
+      // the engine itself enforces (see the discount validation in
+      // createSale(), engines/business/businessEngine.ts) - a discount
+      // can't be negative or bigger than the sale it's discounting.
+      const discountAmt = Math.min(Math.max(0, Math.round(input.discountAmount)), subtotal);
       const total = subtotal - discountAmt;
       const isCredit = input.paymentMethod === 'credit';
       const saleCtx: UserContext = ctx;
@@ -284,6 +297,10 @@ export function useCheckout(_userId?: string) {
         amount_paid:    isCredit ? 0 : (input.amountTendered ?? total),
         change_given:   isCredit ? 0 : Math.max(0, (input.amountTendered ?? total) - total),
         credit_amount:  isCredit ? total : 0,
+        // Bug fix (2026-09-06): see CreateSaleCommand.discount_amount in
+        // engines/types.ts - this is the piece that was missing; without
+        // it the engine always priced the sale at full subtotal.
+        discount_amount: discountAmt,
         notes:          input.paymentReference ?? undefined,
         // Bug fix (2026-09-05): checkout captured "Sold by" but never
         // saved it - see claude/sales-targets-dashboard-fix-2026-09-05.md.
@@ -355,7 +372,13 @@ export function useResumeParkedSale() {
       const sale = await getSale(ctx, id).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = sale as any;
-      return { id, items: s?.items ?? s?.sale_items ?? [], discountPercent: 0, taxRateId: null, paymentMethod: s?.payment_method ?? 'cash', customerId: s?.customer_id ?? null, status: 'draft' };
+      // Bug fix (2026-09-06): renamed from discountPercent (see
+      // CheckoutInput above) and now actually restores the parked sale's
+      // real discount_amount instead of hardcoding 0 - now that a
+      // discount genuinely reaches the saved sale, resuming a parked
+      // sale that had one applied must bring it back too, or it would
+      // silently disappear the moment the sale is resumed and completed.
+      return { id, items: s?.items ?? s?.sale_items ?? [], discountAmount: Number(s?.discount_amount ?? 0), taxRateId: null, paymentMethod: s?.payment_method ?? 'cash', customerId: s?.customer_id ?? null, status: 'draft' };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', 'parked'] }),
   });

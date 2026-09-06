@@ -11,10 +11,17 @@ interface CartPanelProps {
   onIncrement: (productId: string) => void
   onDecrement: (productId: string) => void
   onRemove: (productId: string) => void
-  discountPercent: number
   onDiscountChange: (value: number) => void
   discountsAllowed: boolean
-  maxDiscountPercent: number
+  // Bug fix (2026-09-06): "i do not want the discount in a percentage
+  // form" - renamed from maxDiscountPercent. The owner's "max discount"
+  // setting (Settings > Sales) is still stored as a percentage, but is
+  // now converted to a currency ceiling for THIS sale (subtotal x that
+  // percent) before it reaches this component, since the field itself
+  // is a shilling amount now, not a percent - the cashier still can't
+  // discount past whatever percentage the owner configured, they just
+  // never have to do the percent math themselves.
+  maxDiscountAmount: number
   taxRates: TaxRate[]
   taxRateId: string | null
   onTaxRateChange: (id: string | null) => void
@@ -38,10 +45,9 @@ export function CartPanel({
   onIncrement,
   onDecrement,
   onRemove,
-  discountPercent,
   onDiscountChange,
   discountsAllowed,
-  maxDiscountPercent,
+  maxDiscountAmount,
   taxRates,
   taxRateId,
   onTaxRateChange,
@@ -130,12 +136,11 @@ export function CartPanel({
             <div className="grid grid-cols-2 gap-3 px-4 pb-4">
               <NumberField
                 id="pos-discount"
-                label={`Discount %${!discountsAllowed ? ' (off)' : ''}`}
+                label={`Discount (UGX)${!discountsAllowed ? ' (off)' : ''}`}
                 min={0}
-                max={maxDiscountPercent}
-                allowDecimal
+                max={maxDiscountAmount}
                 disabled={!discountsAllowed}
-                value={discountPercent}
+                value={discountAmount}
                 onChange={onDiscountChange}
               />
               <div>

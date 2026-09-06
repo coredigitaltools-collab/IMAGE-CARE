@@ -209,10 +209,28 @@ export class BusinessEngine {
       return { ...line, discount_amount: discAmt, tax_amount: taxAmt, line_total: lineTotal };
     });
 
+    // Bug fix (2026-09-06): "i do not want the discount in a percentage
+    // form" - see the comment on CreateSaleCommand.discount_amount in
+    // engines/types.ts. This is the whole-cart discount from the till
+    // (a flat currency amount, e.g. 10000 off a 450000 sale), separate
+    // from any per-line discount_pct above. It must be a real amount
+    // that doesn't turn the sale negative - a validation error here
+    // (never a silent clamp) matches how every other invalid-amount
+    // case in this engine is handled, e.g. "Expense amount must be
+    // positive" in recordExpense() below.
+    const headerDiscount = cmd.discount_amount ?? 0;
+    if (headerDiscount < 0) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Discount cannot be negative.', undefined, 'discount_amount'));
+    }
+    if (headerDiscount > subtotal) {
+      return engineFail(makeError('VALIDATION_ERROR', `Discount (${headerDiscount}) cannot exceed the sale's subtotal (${subtotal}).`, undefined, 'discount_amount'));
+    }
+    const totalAmount = subtotal - headerDiscount;
+
     const isCreditSale = cmd.payment_method === 'credit';
 
     const { data: sale, error: sErr } = await db.sales()
-      
+
       .insert({
         business_id:    ctx.business_id,
         branch_id:      cmd.branch_id,
@@ -222,12 +240,12 @@ export class BusinessEngine {
         status:         'draft',
         payment_method: cmd.payment_method,
         subtotal,
-        discount_amount:0,
+        discount_amount:headerDiscount,
         tax_amount:     0,
-        total_amount:   subtotal,
-        amount_paid:    isCreditSale ? 0 : subtotal,
+        total_amount:   totalAmount,
+        amount_paid:    isCreditSale ? 0 : totalAmount,
         change_given:   0,
-        credit_amount:  isCreditSale ? subtotal : 0,
+        credit_amount:  isCreditSale ? totalAmount : 0,
         notes:          cmd.notes ?? null,
         created_by:     ctx.user_id,
         // Bug fix (2026-09-05): never set before - see the comment on

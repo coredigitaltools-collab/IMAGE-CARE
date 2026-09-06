@@ -255,7 +255,13 @@ export function PointOfSalePage() {
   const deleteParked = useDeleteParkedSale()
   const deleteSale = useDeleteSale(user.id)
 
-  const [discountPercent, setDiscountPercent] = useState(0)
+  // Bug fix (2026-09-06): "i do not want the discount in a percentage
+  // form" - this is now a flat currency amount off the whole cart
+  // (e.g. 10000 = "USh 10,000 off"), not a percentage. See
+  // CheckoutInput.discountAmount in useSalesData.ts for the deeper fix
+  // alongside this rename - the value now actually reaches the saved
+  // sale, where before it never did regardless of how it was entered.
+  const [discountAmount, setDiscountAmount] = useState(0)
   const [taxRateId, setTaxRateId] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
   const [amountTendered, setAmountTendered] = useState(0)
@@ -364,7 +370,7 @@ export function PointOfSalePage() {
     setCart([])
     setSelectedCustomer(null)
     setSalesPersonId(null)
-    setDiscountPercent(0)
+    setDiscountAmount(0)
     setTaxRateId(defaultTaxRate?.id ?? null)
     setPaymentMethod('cash')
     setAmountTendered(0)
@@ -372,11 +378,33 @@ export function PointOfSalePage() {
   }
 
   const subtotal = cart.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
-  const discountAmount = Math.round((subtotal * discountPercent) / 100)
-  const taxableAmount = subtotal - discountAmount
+  // Bug fix (2026-09-06): "i do not want the discount in a percentage
+  // form" - Discount is now a flat currency amount (see discountAmount
+  // state above), not subtotal x percent. The owner's "max discount %"
+  // setting (Settings > Sales) is converted to a shilling ceiling for
+  // THIS sale so it still means the same limit it always did - a
+  // cashier just enters the amount directly instead of doing the
+  // percent math themselves. `effectiveDiscountAmount` clamps to that
+  // ceiling and to the subtotal itself (a discount can never exceed
+  // what's being discounted) at every render, not only once the field
+  // is edited - e.g. immediately after a cart item is removed and the
+  // subtotal drops below whatever discount was already typed in.
+  const maxDiscountAmount = Math.max(0, Math.round((subtotal * (salesSettings?.maxDiscountPercent ?? 100)) / 100))
+  const effectiveDiscountAmount = Math.min(discountAmount, maxDiscountAmount, subtotal)
+  const taxableAmount = subtotal - effectiveDiscountAmount
   const rate = taxRatesQuery.data?.find((r) => r.id === taxRateId)
   const taxAmount = rate ? (rate.isInclusive ? Math.round(taxableAmount - taxableAmount / (1 + rate.ratePercent / 100)) : Math.round((taxableAmount * rate.ratePercent) / 100)) : 0
   const totalAmount = rate?.isInclusive ? taxableAmount : taxableAmount + taxAmount
+
+  // Keeps the field's own displayed value from ever sitting above what's
+  // currently allowed (the cart shrinking is the common case - editing
+  // the field itself is already kept in range live by NumberField's own
+  // min/max clamp, see components/ui/NumberField.tsx).
+  useEffect(() => {
+    const cap = Math.min(maxDiscountAmount, subtotal)
+    if (discountAmount > cap) setDiscountAmount(cap)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal, maxDiscountAmount])
 
   const handleError = (err: unknown) => {
     if (
@@ -406,7 +434,7 @@ export function PointOfSalePage() {
         salesPersonId,
         branchId,
         items: cart,
-        discountPercent,
+        discountAmount: effectiveDiscountAmount,
         taxRateId,
         paymentMethod,
         amountTendered: paymentMethod === 'cash' ? amountTendered : null,
@@ -437,7 +465,7 @@ export function PointOfSalePage() {
         salesPersonId,
         branchId,
         items: cart,
-        discountPercent,
+        discountAmount: effectiveDiscountAmount,
         taxRateId,
         paymentMethod,
         amountTendered: null,
@@ -470,7 +498,7 @@ export function PointOfSalePage() {
         availableStock: productsQuery.data?.find((p) => p.id === i.productId)?.currentStock ?? i.quantity,
       })),
     )
-    setDiscountPercent(resumed.discountPercent)
+    setDiscountAmount(resumed.discountAmount)
     setTaxRateId(resumed.taxRateId)
     setPaymentMethod((resumed.paymentMethod ?? 'cash') as PaymentMethod)
     if (resumed.customerId) {
@@ -544,7 +572,7 @@ export function PointOfSalePage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRecordSaleOpen, cart, isCustomerModalOpen, receiptSale, checkout.isPending, discountPercent, taxRateId, paymentMethod, amountTendered, paymentReference, selectedCustomer])
+  }, [isRecordSaleOpen, cart, isCustomerModalOpen, receiptSale, checkout.isPending, discountAmount, taxRateId, paymentMethod, amountTendered, paymentReference, selectedCustomer])
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -724,10 +752,9 @@ export function PointOfSalePage() {
           onIncrement={increment}
           onDecrement={decrement}
           onRemove={remove}
-          discountPercent={discountPercent}
-          onDiscountChange={setDiscountPercent}
+          onDiscountChange={setDiscountAmount}
           discountsAllowed={salesSettings?.allowDiscounts ?? true}
-          maxDiscountPercent={salesSettings?.maxDiscountPercent ?? 100}
+          maxDiscountAmount={maxDiscountAmount}
           taxRates={taxRatesQuery.data ?? []}
           taxRateId={taxRateId}
           onTaxRateChange={setTaxRateId}
@@ -738,7 +765,7 @@ export function PointOfSalePage() {
           paymentReference={paymentReference}
           onPaymentReferenceChange={setPaymentReference}
           subtotal={subtotal}
-          discountAmount={discountAmount}
+          discountAmount={effectiveDiscountAmount}
           taxAmount={taxAmount}
           totalAmount={totalAmount}
           onPark={handlePark}
