@@ -197,6 +197,16 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
             <label htmlFor="rs-qty" className="mb-2 block text-sm font-medium text-ink-700">
               Qty
             </label>
+            {/* Bug fix (2026-09-07): "it combines with the 1" - the
+                onFocus={(e) => e.target.select()} that used to live here
+                (2026-09-01) genuinely ran, but a mouse click's own default
+                mouseup behavior immediately collapsed that selection back
+                to a caret before the user could type over it - so
+                clicking in and typing "5" produced "15", not "5". Select-
+                on-focus that actually survives a mouse click is now
+                built into NumberField itself (see the focusedViaClickRef
+                comment there), so every numeric field gets it by
+                default - this no longer needs its own onFocus at all. */}
             <NumberField
               id="rs-qty"
               ref={qtyInputRef}
@@ -205,7 +215,6 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
               min={1}
               value={qty}
               onChange={setQty}
-              onFocus={(e) => e.target.select()}
             />
           </div>
           <div>

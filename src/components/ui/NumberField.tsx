@@ -94,6 +94,47 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
   const inputRef = useRef<HTMLInputElement | null>(null)
   const fieldId = id ?? name ?? `numfield-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
 
+  // Bug fix (2026-09-07): "it combines with the 1" - typing "5" into the
+  // Qty field (which shows "1") produced "15" instead of replacing it.
+  // ProductPicker.tsx already asked for this via `onFocus={(e) =>
+  // e.target.select()}` (added 2026-09-01), and that call genuinely does
+  // select the "1" - but only for a split second. Focusing a text input
+  // by CLICKING it is a two-part gesture: the `focus` event (and this
+  // select()) fires on mousedown, but the browser's own default behavior
+  // for the mouseup that completes the click then collapses the
+  // selection down to a caret at wherever was clicked - undoing the
+  // select() before the user ever gets to type. This is a well-known
+  // DOM quirk (search "select on focus mouseup" - the same fix shows up
+  // in most production form libraries): the mouseup that finishes the
+  // very click which focused the field has to be prevented, but only
+  // that one - a later click on an already-focused field must still be
+  // able to place the caret normally, e.g. to edit one digit inside a
+  // longer number. focusedViaClickRef records, on mousedown, whether
+  // this click is about to focus a field that wasn't already focused;
+  // handleMouseUp only intercepts that specific mouseup. Built into
+  // NumberField itself (not left as a per-field `onFocus` prop like
+  // 2026-09-01 did) so every numeric field with a real starting value
+  // gets fully-selectable-on-focus by default, including Quantity
+  // fields elsewhere (StockAdjustmentModal.tsx, ProductLineItemsEditor.tsx)
+  // that never had ProductPicker's manual onFocus workaround at all.
+  const focusedViaClickRef = useRef(false)
+
+  const handleMouseDown = () => {
+    focusedViaClickRef.current = document.activeElement !== inputRef.current
+  }
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.target.select()
+    onFocus?.(e)
+  }
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLInputElement>) => {
+    if (focusedViaClickRef.current) {
+      e.preventDefault()
+      focusedViaClickRef.current = false
+    }
+  }
+
   const [display, setDisplay] = useState(() => toDisplay(value))
 
   // Keep the display in sync when `value` changes from outside this input
@@ -198,7 +239,9 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
           value={display}
           onChange={handleChange}
           onBlur={handleBlur}
-          onFocus={onFocus}
+          onFocus={handleFocus}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
           placeholder={placeholder}
           disabled={disabled}
           autoFocus={autoFocus}
