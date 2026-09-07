@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as accountingService from '../../../services/accountingService'
 import { useUserContext, useActiveBranch } from '../../../context/AppContext'
-import { listCashTransactions } from '../../../services/financial/financialServices'
+import { listCashTransactions, recordCashMovement as recordCashMovementReal } from '../../../services/financial/financialServices'
 import { getCashPosition } from '../../../services/reporting/reportingService'
-import type { AccountingSettings, CashMovementType, CashFlowDashboardKpis, CashLedgerEntry, CashLedgerEntryType, CashInHandBreakdown } from '../../../types/accounting'
+import type { AccountingSettings, CashMovement, CashMovementType, CashFlowDashboardKpis, CashLedgerEntry, CashLedgerEntryType, CashInHandBreakdown } from '../../../types/accounting'
 import type { CashTransaction } from '../../../types/database'
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
@@ -29,6 +29,15 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 /** Maps a real cash_transactions row (transaction_type + reference_type,
  *  per cashEngine.ts) onto the closest CashLedgerEntryType label. */
 function ledgerTypeFor(row: CashTransaction): CashLedgerEntryType {
+  // Bug fix (2026-09-07): manual cash movements (Record cash movement) now
+  // write real cash_transactions rows with reference_type set to the
+  // movement kind itself ('bank_deposit' | 'owner_withdrawal' |
+  // 'adjustment' - see recordCashMovement() in financialServices.ts).
+  // Check these first so they don't fall through to the generic
+  // cash_sale/expense_paid buckets below.
+  if (row.reference_type === 'bank_deposit') return 'bank_deposit'
+  if (row.reference_type === 'owner_withdrawal') return 'owner_withdrawal'
+  if (row.reference_type === 'adjustment') return 'adjustment'
   switch (row.transaction_type) {
     case 'cash_in':
       return row.reference_type === 'customer' || row.reference_type === 'credit' ? 'credit_payment_received' : 'cash_sale'
@@ -117,44 +126,101 @@ export function useCashInHandBreakdown() {
   return useQuery({
     queryKey: ['accounting', 'cash-in-hand', ctx.business_id, branch],
     queryFn: async (): Promise<CashInHandBreakdown> => {
-      const position = await getCashPosition(ctx, branch ?? undefined).then(unwrap)
+      const [position, txns] = await Promise.all([
+        getCashPosition(ctx, branch ?? undefined).then(unwrap),
+        listCashTransactions(ctx, { branch_id: branch ?? undefined }).then(unwrap),
+      ])
       const cashIn = typeof position?.cash_in === 'number' ? position.cash_in : 0
       const cashOut = typeof position?.cash_out === 'number' ? position.cash_out : 0
       const cashInHandUgx = typeof position?.net_position === 'number' ? position.net_position : cashIn - cashOut
-      // The real cash-position function only exposes total cash_in /
-      // cash_out for the branch, not the legacy per-source breakdown
-      // (cash sales vs credit payments vs supplier payments, etc). Rather
-      // than fabricate a split the real data can't support, the total
-      // in/out are surfaced under the closest matching buckets and every
-      // other bucket stays honestly at 0. cashInHandUgx itself is real.
+      // Bug fix (2026-09-07): now that "Record cash movement" writes real
+      // cash_transactions rows (see recordCashMovement() in
+      // financialServices.ts), bank deposits/owner withdrawals/adjustments
+      // are real cash_out (or, for a positive adjustment, cash_in) rows
+      // too - lumping the whole cashOut total into "businessExpensesPaidUgx"
+      // would now silently overstate actual expenses by whatever was also
+      // deposited/withdrawn. Bucket by the same reference_type the ledger
+      // (ledgerTypeFor above) already uses, so every figure on this page
+      // stays accurate rather than merely non-zero.
+      const rows: CashTransaction[] = Array.isArray(txns) ? txns : []
+      let cashSalesUgx = 0
+      let creditPaymentsReceivedUgx = 0
+      let businessExpensesPaidUgx = 0
+      let supplierPaymentsUgx = 0
+      let bankDepositsUgx = 0
+      let ownerWithdrawalsUgx = 0
+      let cashAdjustmentsUgx = 0
+      for (const row of rows) {
+        const amount = Math.abs(Number(row.amount))
+        switch (ledgerTypeFor(row)) {
+          case 'cash_sale': cashSalesUgx += amount; break
+          case 'credit_payment_received': creditPaymentsReceivedUgx += amount; break
+          case 'expense_paid': businessExpensesPaidUgx += amount; break
+          case 'supplier_payment': supplierPaymentsUgx += amount; break
+          case 'bank_deposit': bankDepositsUgx += amount; break
+          case 'owner_withdrawal': ownerWithdrawalsUgx += amount; break
+          case 'adjustment': cashAdjustmentsUgx += row.transaction_type === 'cash_out' ? -amount : amount; break
+        }
+      }
       return {
         openingCashUgx: 0,
-        cashSalesUgx: cashIn,
-        creditPaymentsReceivedUgx: 0,
-        businessExpensesPaidUgx: cashOut,
-        supplierPaymentsUgx: 0,
-        bankDepositsUgx: 0,
-        ownerWithdrawalsUgx: 0,
-        cashAdjustmentsUgx: 0,
+        cashSalesUgx,
+        creditPaymentsReceivedUgx,
+        businessExpensesPaidUgx,
+        supplierPaymentsUgx,
+        bankDepositsUgx,
+        ownerWithdrawalsUgx,
+        cashAdjustmentsUgx,
         cashInHandUgx,
       }
     },
   })
 }
 
-// ---- Everything below has no real backend service yet; unchanged. ----
+// Bug fix (2026-09-07): both of these used to be LOCAL-ONLY (browser
+// localStorage, via accountingService.ts) - see recordCashMovement() in
+// financialServices.ts for the full explanation. Now real and Supabase-backed,
+// like every other cash/ledger read+write in this file.
 
 export function useCashMovements() {
-  // LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
-  return useQuery({ queryKey: ['accounting', 'cash-movements'], queryFn: accountingService.listCashMovements })
+  const ctx = useUserContext()
+  const branch = useActiveBranch()
+  return useQuery({
+    queryKey: ['accounting', 'cash-movements', ctx.business_id, branch],
+    queryFn: async (): Promise<CashMovement[]> => {
+      const items = await listCashTransactions(ctx, { branch_id: branch ?? undefined }).then(unwrap)
+      const rows: CashTransaction[] = Array.isArray(items) ? items : []
+      return rows
+        .filter((r) => r.reference_type === 'bank_deposit' || r.reference_type === 'owner_withdrawal' || r.reference_type === 'adjustment')
+        .map((r): CashMovement => ({
+          id: r.id,
+          type: r.reference_type as CashMovementType,
+          amount: r.reference_type === 'adjustment' && r.transaction_type === 'cash_out' ? -Math.abs(Number(r.amount)) : Math.abs(Number(r.amount)),
+          reason: r.description,
+          bankAccountId: r.bank_account_id ?? null,
+          createdAt: r.transaction_date,
+          // created_by is a real column on cash_transactions but isn't on
+          // the (incomplete) CashTransaction TS type - read it defensively.
+          createdBy: (r as unknown as { created_by?: string }).created_by ?? '',
+        }))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    },
+  })
 }
 
-export function useRecordCashMovement(userId: string) {
+export function useRecordCashMovement(_userId: string) {
+  const ctx = useUserContext()
+  const branch = useActiveBranch()
   const qc = useQueryClient()
-  // LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
   return useMutation({
     mutationFn: ({ type, amount, reason, bankAccountId }: { type: CashMovementType; amount: number; reason: string; bankAccountId?: string | null }) =>
-      accountingService.recordCashMovement(type, amount, reason, userId, bankAccountId ?? null),
+      recordCashMovementReal(ctx, {
+        branch_id: (branch ?? ctx.branch_id) as string,
+        type,
+        amount,
+        reason,
+        bank_account_id: bankAccountId ?? null,
+      }).then(unwrap),
     onSuccess: () => invalidateAll(qc),
   })
 }

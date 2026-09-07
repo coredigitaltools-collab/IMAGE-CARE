@@ -53,6 +53,17 @@ export function ProductsListPage() {
 
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [showArchived, setShowArchived] = useState(false)
+  // Bug fix (2026-09-07): "Category: Blazers, Supplier: Blazers United"
+  // didn't narrow the list at all - this is the real product list users
+  // browse day to day, and it had no category/supplier filter controls or
+  // logic whatsoever (the only existing category/supplier filter UI lives
+  // on the separate Inventory Dashboard tab, and even there it only ever
+  // narrowed two small side widgets, never this list). Both constraints
+  // apply together (AND), matching how the test - and the labels
+  // "Category: X, Supplier: Y" - describe narrowing to products that
+  // match both at once.
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [supplierFilter, setSupplierFilter] = useState('all')
   const [isAddOpen, setIsAddOpen] = useState(searchParams.get('new') === '1')
   const [formError, setFormError] = useState<string | undefined>()
 
@@ -63,10 +74,12 @@ export function ProductsListPage() {
     const q = query.trim().toLowerCase()
     return products.filter((p) => {
       if (!showArchived && p.status === 'archived') return false
+      if (categoryFilter !== 'all' && p.categoryId !== categoryFilter) return false
+      if (supplierFilter !== 'all' && p.supplierId !== supplierFilter) return false
       if (!q) return true
       return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q)
     })
-  }, [productsQuery.data, query, showArchived])
+  }, [productsQuery.data, query, showArchived, categoryFilter, supplierFilter])
 
   const closeAddModal = () => {
     setIsAddOpen(false)
@@ -131,6 +144,32 @@ export function ProductsListPage() {
             className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          aria-label="Filter by category"
+          className="rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        >
+          <option value="all">All categories</option>
+          {(categoriesQuery.data ?? []).filter((c) => c.is_active).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={supplierFilter}
+          onChange={(e) => setSupplierFilter(e.target.value)}
+          aria-label="Filter by supplier"
+          className="rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        >
+          <option value="all">All suppliers</option>
+          {(suppliersQuery.data ?? []).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
         <label className="flex items-center gap-2 text-sm text-ink-700">
           <input
             type="checkbox"

@@ -63,6 +63,14 @@ export function DashboardPage() {
       navigate('/expenses')
       return
     }
+    // Bug fix (2026-09-07): "View reports" never navigated - this handler
+    // had no branch for 'reports' at all, so it always fell through to the
+    // "isn't built yet" toast even though a real, working /reports route
+    // exists (reachable only via the sidebar until now).
+    if (target === 'reports') {
+      navigate('/reports')
+      return
+    }
     showToast(`${MODULE_LABELS[target]} isn't built yet, coming in a future implementation pack.`)
   }
 

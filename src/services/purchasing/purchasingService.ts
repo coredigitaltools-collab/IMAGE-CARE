@@ -476,6 +476,55 @@ export async function getPurchaseDashboardKpis(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed.', { requestId }); }
 }
 
+export interface SupplierSpendRow {
+  supplierId: string;
+  supplierName: string;
+  totalSpendUgx: number;
+  orderCount: number;
+}
+
+// Bug fix (2026-09-07, "Purchasing Reports" showing "No spend recorded
+// yet" while the Purchasing dashboard's "Spend this month" KPI - built
+// from this same real purchases table, see getPurchaseDashboardKpis
+// above - correctly shows real spend): useSpendBySupplier() in
+// usePurchasingData.ts never called any real service function at all -
+// its queryFn was a stub that always resolved to an empty array,
+// regardless of what data existed. This is the real implementation it
+// should have been calling: same 'confirmed' (received/posted) orders
+// getPurchaseDashboardKpis already counts as real spend, grouped by
+// supplier from the real purchases + suppliers tables.
+export async function getSpendBySupplier(
+  ctx: UserContext, branchId?: UUID, from?: string, to?: string,
+): Promise<ServiceResponse<SupplierSpendRow[]>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'purchases', 'view'))
+    return serviceFail('PERMISSION_DENIED', 'Permission denied.', { requestId });
+  try {
+    let q = supabase.schema('imagecare').from('purchases')
+      .select('supplier_id, total_amount, purchase_date, suppliers(name)')
+      .eq('business_id', ctx.business_id).is('deleted_at', null).eq('status', 'confirmed');
+    if (branchId) q = q.eq('branch_id', branchId);
+    if (from) q = q.gte('purchase_date', from);
+    if (to) q = q.lte('purchase_date', to);
+    const { data, error } = await q;
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load purchasing spend.', { requestId });
+    const rows = (data ?? []) as unknown as Array<{ supplier_id: string | null; total_amount: number; suppliers: { name: string }[] | { name: string } | null }>;
+    const bySupplier = new Map<string, SupplierSpendRow>();
+    for (const r of rows) {
+      const supplierId = r.supplier_id ?? 'unknown';
+      const supplierName = (Array.isArray(r.suppliers) ? r.suppliers[0]?.name : r.suppliers?.name) ?? 'Unknown supplier';
+      const existing = bySupplier.get(supplierId);
+      if (existing) {
+        existing.totalSpendUgx += r.total_amount;
+        existing.orderCount += 1;
+      } else {
+        bySupplier.set(supplierId, { supplierId, supplierName, totalSpendUgx: r.total_amount, orderCount: 1 });
+      }
+    }
+    return serviceOk([...bySupplier.values()].sort((a, b) => b.totalSpendUgx - a.totalSpendUgx), requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load purchasing spend.', { requestId }); }
+}
+
 
 // Workflow change (2026-09-03): rejectPurchase() (used by the old "Reject"
 // action on a still-draft requisition/order) and markRequisitionConverted()

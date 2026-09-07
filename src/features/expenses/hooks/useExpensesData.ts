@@ -144,18 +144,34 @@ export function useSaveExpenseSettings() {
   });
 }
 
-export function useSpendByCategory(_branchId?: string, _from?: string, _to?: string) {
+// Bug fix (2026-09-07): "Expense Report" had no period/date controls at
+// all, even though the underlying real query already supported date
+// filtering end to end (listExpenses(ctx, {date}) -> .gte/.lte on
+// expense_date, same as every other real report in this app) - from/to
+// were declared on this hook's signature but never actually passed
+// through to the query (the leading underscore was the tell). Now they are.
+export function useSpendByCategory(branchId?: string, from?: string, to?: string) {
   const ctx = useUserContext();
-  const branch = useActiveBranch();
+  const activeBranch = useActiveBranch();
+  const branch = branchId ?? activeBranch;
   return useQuery({
-    queryKey: ['expenses', 'by-category', ctx.business_id],
+    queryKey: ['expenses', 'by-category', ctx.business_id, branch, from, to],
     queryFn: async () => {
-      const all = await listExpenses(ctx, { branch_id: branch as string | undefined }).then(unwrap);
+      const all = await listExpenses(ctx, {
+        branch_id: branch as string | undefined,
+        date: from && to ? { from, to } : undefined,
+      }).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(all) ? all as any[] : [];
-      const map = new Map<string, number>();
-      for (const e of items) map.set(e.category ?? 'Other', (map.get(e.category ?? 'Other') ?? 0) + (e.total_amount ?? 0));
-      return Array.from(map.entries()).map(([category, totalUgx], idx) => ({ category, categoryId: String(idx), categoryName: category, totalUgx, count: 0 }));
+      const map = new Map<string, { totalUgx: number; count: number }>();
+      for (const e of items) {
+        const key = e.category ?? 'Other';
+        const existing = map.get(key) ?? { totalUgx: 0, count: 0 };
+        existing.totalUgx += e.total_amount ?? 0;
+        existing.count += 1;
+        map.set(key, existing);
+      }
+      return Array.from(map.entries()).map(([category, { totalUgx, count }], idx) => ({ category, categoryId: String(idx), categoryName: category, totalUgx, count }));
     },
   });
 }

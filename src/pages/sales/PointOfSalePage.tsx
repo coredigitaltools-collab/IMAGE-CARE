@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Pencil, Plus, ReceiptText, Search, Trash2, TrendingUp } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { FileText, Pencil, Plus, ReceiptText, Search, Trash2, TrendingUp } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
@@ -32,6 +33,7 @@ import {
   useResumeParkedSale,
   useSales,
 } from '../../features/sales/hooks/useSalesData'
+import { useGenerateInvoice } from '../../features/invoices/hooks/useInvoicesData'
 import { getSale } from '../../services/sales/salesService'
 import {
   CreditLimitExceededError,
@@ -325,6 +327,8 @@ export function PointOfSalePage() {
   const resumeParked = useResumeParkedSale()
   const deleteParked = useDeleteParkedSale()
   const deleteSale = useDeleteSale(user.id)
+  const generateInvoice = useGenerateInvoice(user.id)
+  const navigate = useNavigate()
 
   // Bug fix (2026-09-06): "i do not want the discount in a percentage
   // form" - this is now a flat currency amount off the whole cart
@@ -610,6 +614,26 @@ export function PointOfSalePage() {
     }
   }
 
+  // Feature request (2026-09-07): "Start invoice creation from a completed
+  // sale" - a completed sale had no action to become an invoice anywhere
+  // in Sales; the only path was Invoices -> "+ Invoice a sale" -> find the
+  // same sale again in a dropdown of every uninvoiced sale. This reuses
+  // that exact same real flow (useGenerateInvoice -> generateInvoice() in
+  // creditService.ts, which re-derives the invoice from the sale's own
+  // recorded items/customer/totals server-side - nothing is re-entered),
+  // then goes straight to the new invoice instead of leaving the user to
+  // go find it.
+  const handleCreateInvoice = async (sale: Sale) => {
+    try {
+      const invoice = await generateInvoice.mutateAsync({ saleId: sale.id, dueDate: null })
+      showToast('Invoice created.', 'success')
+      setReceiptSale(null)
+      navigate(`/invoices/${invoice.id}`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not create an invoice for this sale.')
+    }
+  }
+
   const [isReceiptLoading, setIsReceiptLoading] = useState(false)
   const openReceipt = async (sale: Sale) => {
     setIsReceiptLoading(true)
@@ -781,6 +805,9 @@ export function PointOfSalePage() {
                                 used on this page (this button, plus both KPI/
                                 empty-state icons above, for consistency). */}
                             <RowActionButton icon={ReceiptText} label="View receipt" onClick={() => openReceipt(sale)} />
+                            {canDo(ctx, 'invoices', 'create') && (
+                              <RowActionButton icon={FileText} label="Create invoice" onClick={() => handleCreateInvoice(sale)} />
+                            )}
                             {canDo(ctx, 'sales', 'delete') && (
                               <RowActionButton icon={Trash2} label="Delete" tone="danger" onClick={() => setDeleteSaleTarget(sale)} />
                             )}
@@ -913,6 +940,7 @@ export function PointOfSalePage() {
             resetPOS()
             setIsRecordSaleOpen(true)
           }}
+          onCreateInvoice={canDo(ctx, 'invoices', 'create') ? () => handleCreateInvoice(receiptSale) : undefined}
         />
       )}
     </div>

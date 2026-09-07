@@ -150,27 +150,55 @@ export class AccountingEngine {
     const entryMonth = new Date(entryDate).getMonth() + 1;
     const entryYear  = new Date(entryDate).getFullYear();
 
-    // Insert journal entry header
-    const { data: jeData, error: jeErr } = await db.journal_entries()
-      
-      .insert({
-        business_id:    ctx.business_id,
-        branch_id:      cmd.branch_id,
-        entry_number:   entryNum,
-        entry_date:     entryDate,
-        entry_type:     cmd.entry_type,
-        description:    cmd.description,
-        reference_type: cmd.reference_type,
-        reference_id:   cmd.reference_id,
-        total_debit:    totalDebit,
-        total_credit:   totalCredit,
-        status:         'posted',
-        period_month:   entryMonth,
-        period_year:    entryYear,
-        created_by:     ctx.user_id,
-      })
-      .select('id, entry_number, total_debit, total_credit, status')
-      .single();
+    // Insert journal entry header.
+    //
+    // Bug fix (2026-09-07, "Add a business expense" -> "Failed to create
+    // journal entry"): nextJournalNumber() picks the next number by
+    // counting existing rows (`count + 1`), then this insert uses that
+    // number - two of these running close together (any two modules
+    // posting a journal entry around the same time: a sale, an expense,
+    // a purchase, payroll all go through this same postJournal()) can
+    // both read the same count before either has inserted, then both try
+    // to insert the same entry_number. imagecare.journal_entries has a
+    // real UNIQUE(business_id, entry_number) constraint
+    // (uq_s2_journal_entry_number), so the loser gets a plain Postgres
+    // unique-violation (23505) back as jeErr, which used to surface as
+    // the opaque "Failed to create journal entry." with no way to
+    // recover except retyping the whole expense. Since the number itself
+    // has no meaning beyond being unique, the fix is to just regenerate
+    // it and retry - a handful of attempts, only on that specific error,
+    // so a genuine failure (RLS, immutability, a real DB problem) still
+    // fails immediately as before instead of retrying pointlessly.
+    let jeData: { id: string; entry_number: string; total_debit: number; total_credit: number; status: string } | null = null;
+    let jeErr: { message?: string; code?: string } | null | undefined = null;
+    let attemptEntryNum = entryNum;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error } = await db.journal_entries()
+        .insert({
+          business_id:    ctx.business_id,
+          branch_id:      cmd.branch_id,
+          entry_number:   attemptEntryNum,
+          entry_date:     entryDate,
+          entry_type:     cmd.entry_type,
+          description:    cmd.description,
+          reference_type: cmd.reference_type,
+          reference_id:   cmd.reference_id,
+          total_debit:    totalDebit,
+          total_credit:   totalCredit,
+          status:         'posted',
+          period_month:   entryMonth,
+          period_year:    entryYear,
+          created_by:     ctx.user_id,
+        })
+        .select('id, entry_number, total_debit, total_credit, status')
+        .single();
+      jeData = data;
+      jeErr = error;
+      if (!jeErr) break;
+      const isEntryNumberCollision = jeErr.code === '23505' && (jeErr.message?.includes('entry_number') ?? false);
+      if (!isEntryNumberCollision) break;
+      attemptEntryNum = await nextJournalNumber(ctx.business_id);
+    }
 
     if (jeErr || !jeData) {
       // DB immutability trigger raises IMC-IMMUTABLE; surface that specifically

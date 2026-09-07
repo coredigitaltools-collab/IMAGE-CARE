@@ -264,6 +264,67 @@ export async function getCashBalance(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId }); }
 }
 
+// Bug fix (2026-09-07, "Record a cash movement from Cash Flow" - recorded
+// movements never appeared in the ledger and did not survive a refresh):
+// the UI's "Record cash movement" action (RecordCashMovementModal, opened
+// from both CashFlowDashboardPage and the legacy CashMovementsPage) called
+// useRecordCashMovement -> accountingService.recordCashMovement, which is
+// LOCAL-ONLY (browser localStorage, see services/accountingService.ts) -
+// it never touched the real imagecare.cash_transactions table that Cash
+// Flow's own ledger (useCashLedger below) and KPIs (useCashFlowDashboardKpis)
+// actually read from. So the movement "succeeded" (localStorage always
+// works) but could never show up anywhere Cash Flow itself looks, and
+// wouldn't survive a refresh in a different browser/session. This is the
+// real, Supabase-backed implementation - it posts through cashEngine (the
+// same engine every other real cash movement in this app already goes
+// through: sales, credit repayments, expenses, payroll) so the new row is
+// real, RLS-checked, and immediately visible in the ledger.
+//
+// Bank deposits and owner withdrawals both remove cash from the till
+// (transaction_type 'cash_out'; see RecordCashMovementModal's own labels:
+// "cash leaving the till" / "cash taken out"). Adjustments are the one
+// signed case - a positive adjustment (found extra cash) posts as
+// 'cash_in', a negative one (a shortfall) posts as 'cash_out'; amount is
+// always stored positive per cash_transactions' own CHECK constraint
+// (chk_s2_cash_txn_amount_pos), with direction carrying the sign.
+// reference_type carries which of the three this is, so the ledger
+// (ledgerTypeFor in useAccountingData.ts) can label it correctly instead
+// of falling into the generic cash-sale/expense-paid buckets.
+export async function recordCashMovement(
+  ctx: UserContext,
+  input: { branch_id: UUID; type: 'bank_deposit' | 'owner_withdrawal' | 'adjustment'; amount: number; reason: string; bank_account_id?: UUID | null },
+): Promise<ServiceResponse<{ transaction_id: UUID; transaction_number: string; amount: number; transaction_type: string }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'cash', 'create')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to record cash movements.', { requestId });
+  }
+  if (!input.reason.trim()) {
+    return serviceFail('INVALID_INPUT', 'A reason is required for every cash movement.', { requestId, field: 'reason' });
+  }
+  if (input.type === 'adjustment') {
+    if (input.amount === 0) return serviceFail('INVALID_INPUT', 'Enter a non-zero adjustment amount.', { requestId, field: 'amount' });
+  } else if (input.amount <= 0) {
+    return serviceFail('INVALID_INPUT', 'Enter an amount greater than 0.', { requestId, field: 'amount' });
+  }
+  const transactionType = input.type === 'adjustment' ? (input.amount < 0 ? 'cash_out' : 'cash_in') : 'cash_out';
+  const result = await cashEngine.recordMovement(toEngineContext(ctx, input.branch_id), {
+    branch_id:        input.branch_id,
+    transaction_type: transactionType,
+    amount:           Math.abs(input.amount),
+    payment_method:   input.type === 'bank_deposit' ? 'bank_transfer' : 'cash',
+    reference_type:   input.type,
+    description:      input.reason.trim(),
+    bank_account_id:  input.type === 'bank_deposit' ? (input.bank_account_id ?? undefined) : undefined,
+  });
+  if (!result.ok || !result.data) return serviceFail('INTERNAL_ERROR', result.error?.message ?? 'Failed to record cash movement.', { requestId });
+  return serviceOk({
+    transaction_id:     result.data.transaction_id,
+    transaction_number: result.data.transaction_number,
+    amount:              result.data.amount,
+    transaction_type:    result.data.transaction_type,
+  }, requestId);
+}
+
 export async function listCashTransactions(
   ctx: UserContext,
   // Bug fix (2026-09-06): payment_method added. Bank Reconciliation's

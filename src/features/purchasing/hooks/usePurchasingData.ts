@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, getPurchaseDashboardKpis,
-  createPurchaseReturn, listPurchaseReturns,
+  createPurchaseReturn, listPurchaseReturns, getSpendBySupplier,
   updatePurchaseOrder, editConfirmedPurchaseOrder, cancelPurchaseOrder,
 } from '../../../services/purchasing/purchasingService';
 import {
@@ -332,9 +332,18 @@ export function usePurchaseDashboardKpis(branchId?: UUID) {
   return useQuery({ queryKey: ['purchasing', 'kpis', ctx.business_id, branchId], queryFn: () => getPurchaseDashboardKpis(ctx, branchId).then(unwrap) });
 }
 
-export function useSpendBySupplier(_from?: string, _to?: string) {
+// Bug fix (2026-09-07): this used to be a stub that always resolved to an
+// empty array (never called the real backend at all) - see getSpendBySupplier
+// in purchasingService.ts for the real implementation and why the report
+// showed "No spend recorded yet" while the dashboard's own "Spend this
+// month" KPI, built from the same real purchases table, showed real spend.
+export function useSpendBySupplier(from?: string, to?: string) {
   const ctx = useUserContext();
-  return useQuery({ queryKey: ['purchasing', 'spend-by-supplier', ctx.business_id], queryFn: async () => [] as Array<{ supplierId: string; supplierName: string; totalUgx: number; totalSpendUgx: number; orderCount: number }> });
+  const branch = useActiveBranch();
+  return useQuery({
+    queryKey: ['purchasing', 'spend-by-supplier', ctx.business_id, branch, from, to],
+    queryFn: () => getSpendBySupplier(ctx, branch ?? undefined, from, to).then(unwrap),
+  });
 }
 
 // -----------------------------------------------------------------------

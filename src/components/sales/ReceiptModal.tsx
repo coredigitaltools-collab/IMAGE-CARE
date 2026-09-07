@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, Printer, X } from 'lucide-react'
+import { CheckCircle2, FileText, Printer, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
 import { PAYMENT_METHOD_LABELS } from '../../types/sales'
@@ -16,6 +16,13 @@ interface ReceiptModalProps {
   cashierName: string
   onClose: () => void
   onNewSale: () => void
+  // Feature request (2026-09-07): "Start invoice creation from a completed
+  // sale" - a completed sale had no way to become an invoice except going
+  // to Invoices -> "+ Invoice a sale" and finding it again in a dropdown of
+  // every uninvoiced sale. Optional (and omitted entirely once a sale is
+  // already invoiced - not every completed sale has to have one) so this
+  // stays exactly what it was for every existing caller.
+  onCreateInvoice?: () => void
 }
 
 // Bug fix (2026-09-03): Print produced a blank page. Root cause: this
@@ -37,7 +44,7 @@ interface ReceiptModalProps {
 // all. Scoped to just this component/class so it can't affect the
 // several other pages that also call window.print() for their own
 // in-page printable content.
-export function ReceiptModal({ sale, customer, businessName, receiptSettings, cashierName, onClose, onNewSale }: ReceiptModalProps) {
+export function ReceiptModal({ sale, customer, businessName, receiptSettings, cashierName, onClose, onNewSale, onCreateInvoice }: ReceiptModalProps) {
   const portalRef = useRef<HTMLDivElement | null>(null)
   if (!portalRef.current) {
     portalRef.current = document.createElement('div')
@@ -171,6 +178,11 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
           <Button variant="secondary" onClick={() => window.print()}>
             <Printer size={14} /> Print
           </Button>
+          {onCreateInvoice && (
+            <Button variant="secondary" onClick={onCreateInvoice}>
+              <FileText size={14} /> Create invoice
+            </Button>
+          )}
           <Button onClick={onNewSale}>New sale</Button>
         </div>
       </div>
