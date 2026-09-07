@@ -105,7 +105,7 @@ export function RegisterPage() {
             Create your business account
           </h1>
           <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
-            Set up ImageCare ERP for your business
+            Set up ImageCare for your business
           </p>
         </div>
 

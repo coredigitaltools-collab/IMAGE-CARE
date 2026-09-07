@@ -25,7 +25,7 @@ export function BankDashboardPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Bank Reconciliation</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Matching ERP cash records against real bank statements.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Matching your cash records against real bank statements.</p>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">

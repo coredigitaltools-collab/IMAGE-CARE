@@ -104,7 +104,7 @@ export function LoginPage() {
             IC
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>
-            ImageCare ERP
+            ImageCare
           </h1>
           <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
             Sign in to your business account
@@ -186,7 +186,7 @@ export function LoginPage() {
         </p>
 
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--color-text-muted)', marginTop: 16 }}>
-          ImageCare ERP v1.0
+          ImageCare v1.0
         </p>
       </div>
     </div>

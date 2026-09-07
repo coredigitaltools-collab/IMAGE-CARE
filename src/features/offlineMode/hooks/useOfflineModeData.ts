@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useUserContext, useActiveBranch } from '../../../context/AppContext'
 import { runSyncSession } from '../../../services/sync/syncService'
 import type { PullResult, SyncBatchResult } from '../../../services/sync/syncService'
+import { getDashboardKPIs, getLowStockAlerts } from '../../../services/reporting/reportingService'
 import * as offlineModeService from '../../../services/offlineModeService'
 import type { OfflineSettings } from '../../../services/offlineModeService'
 import type { SupportedCurrency } from '../../../lib/currency'
+import type { DashboardKPIs } from '../../../types/database'
 
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['offline-mode'] })
@@ -58,20 +60,63 @@ function setSyncCursor(cursor: number): void {
 // Real, Supabase-backed hooks
 // ---------------------------------------------------------------------------
 
-// Left calling the local aggregator deliberately, not moved below the
-// LOCAL-ONLY line: 8 of these 10 fields already come from other modules'
-// real Supabase-backed services (accountingService/creditService/
-// stockSummaryService - see offlineModeService.ts's own imports), and the
-// remaining 2 this module owns (pendingSyncCount, lastSuccessfulSyncAt)
-// correctly read the local sync queue/history, for the same reason
-// usePendingSyncItems and useSyncHistory below stay LOCAL-ONLY: no real
-// backend endpoint exposes a pending-operations count or a readable sync
-// history to source them from instead (see docs/MODULE_INTEGRATION_MAP.md
-// gap). lastSuccessfulSyncAt does still move when a real sync happens,
-// because usePerformManualSync below still logs to that same local
-// history on every call, real or not.
-export function useOfflineDashboardKpis(currency: SupportedCurrency) {
-  return useQuery({ queryKey: ['offline-mode', 'kpis', currency], queryFn: () => offlineModeService.getOfflineDashboardKpis(currency) })
+// Bug fix (2026-09-07): this widget showed every KPI as 0 regardless of
+// real business activity, because it read through offlineModeService's old
+// local aggregator, which pulled from accountingService/creditService/
+// stockSummaryService - the pre-Stage-4 local-only stack that persists to
+// this browser's localStorage only and is never written to by the real
+// sales/expenses/credit/inventory flows the rest of the app now uses (see
+// offlineModeService.ts). Per this page's own original intent - "the 8
+// shared accounting/inventory KPIs, reused exactly as the main Dashboard
+// already computes them" - it now calls the exact same real,
+// business/branch scoped source src/features/dashboard/hooks/
+// useDashboardData.ts's useDashboardSummary uses (getDashboardKPIs +
+// getLowStockAlerts from reporting/reportingService.ts), scoped to an
+// all-time range rather than "today" so this keeps matching what it always
+// intended to show. Only pendingSyncCount and lastSuccessfulSyncAt (this
+// module's own two genuinely local fields) still come from the local sync
+// queue/history below - see usePendingSyncItems/useSyncHistory for why.
+export interface OfflineDashboardKpis {
+  salesUgx: number
+  cogsUgx: number
+  grossProfitUgx: number
+  expensesUgx: number
+  netProfitUgx: number
+  cashInHandUgx: number
+  outstandingCreditUgx: number
+  lowStockCount: number
+  pendingSyncCount: number
+  lastSuccessfulSyncAt: string | null
+}
+
+const ALL_TIME_FROM = '2000-01-01T00:00:00.000Z'
+
+export function useOfflineDashboardKpis(_currency: SupportedCurrency) {
+  const ctx = useUserContext()
+  const branch = useActiveBranch()
+  return useQuery({
+    queryKey: ['offline-mode', 'kpis', ctx.business_id, branch],
+    queryFn: async (): Promise<OfflineDashboardKpis> => {
+      const [kpis, lowStock, pending, history] = await Promise.all([
+        getDashboardKPIs(ctx, branch ?? undefined, { from: ALL_TIME_FROM, to: new Date().toISOString() }).then(unwrap) as Promise<DashboardKPIs>,
+        getLowStockAlerts(ctx, branch ?? undefined).then(unwrap) as Promise<Array<{ product_id: string }>>,
+        offlineModeService.listPendingSyncItems(),
+        offlineModeService.listSyncHistory(),
+      ])
+      return {
+        salesUgx: kpis.revenue,
+        cogsUgx: kpis.cogs,
+        grossProfitUgx: kpis.gross_profit,
+        expensesUgx: kpis.expenses,
+        netProfitUgx: kpis.net_profit,
+        cashInHandUgx: kpis.cash_in_hand,
+        outstandingCreditUgx: kpis.credit_outstanding,
+        lowStockCount: lowStock.length,
+        pendingSyncCount: pending.length,
+        lastSuccessfulSyncAt: history[0]?.syncedAt ?? null,
+      }
+    },
+  })
 }
 
 // "Sync now" genuinely talks to the real sync engine now (runSyncSession -

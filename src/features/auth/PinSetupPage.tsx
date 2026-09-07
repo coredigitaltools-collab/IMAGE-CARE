@@ -102,7 +102,7 @@ export function PinSetupPage() {
             {isReset ? 'Create a new PIN' : 'Create your 4 digit PIN'}
           </h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-            This PIN will be used to quickly unlock your ERP on this device.
+            This PIN will be used to quickly unlock ImageCare on this device.
           </p>
           {userContext && (
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 6 }}>

@@ -1,11 +1,7 @@
 import { getCollection, setCollection, getSingleton, setSingleton, getSyncQueue, clearSyncQueue } from '../lib/localStore'
 import { encryptAllLegacyRecords, countLegacyPlaintextRecords } from '../lib/offlineDb'
 import { hasEncryptionKey } from '../lib/encryption'
-import { getCashInHandBreakdown, getFinancialSummaryForRange } from './accountingService'
-import { getCreditDashboardKpis } from './creditService'
-import { getStockSummaryDashboardKpis } from './stockSummaryService'
 import type { SyncQueueItem } from '../types/settings'
-import type { SupportedCurrency } from '../lib/currency'
 
 // ---------- Offline Mode (IMC-SRS-021) ----------
 // "Queued create, update and delete operations" already exists, every
@@ -118,43 +114,15 @@ export async function encryptRemainingData(): Promise<number> {
 }
 
 // ---------- Offline Status Dashboard KPIs ----------
-// The 8 shared accounting/inventory KPIs, reused exactly as the main
-// Dashboard already computes them, plus the 2 genuinely new ones this
-// module owns: Pending Sync Items and Last Successful Sync.
-
-export interface OfflineDashboardKpis {
-  salesUgx: number
-  cogsUgx: number
-  grossProfitUgx: number
-  expensesUgx: number
-  netProfitUgx: number
-  cashInHandUgx: number
-  outstandingCreditUgx: number
-  lowStockCount: number
-  pendingSyncCount: number
-  lastSuccessfulSyncAt: string | null
-}
-
-export async function getOfflineDashboardKpis(currency: SupportedCurrency): Promise<OfflineDashboardKpis> {
-  const [financials, cashBreakdown, creditKpis, stockKpis, pending, history] = await Promise.all([
-    getFinancialSummaryForRange(),
-    getCashInHandBreakdown(),
-    getCreditDashboardKpis(),
-    getStockSummaryDashboardKpis(currency),
-    listPendingSyncItems(),
-    listSyncHistory(),
-  ])
-
-  return {
-    salesUgx: financials.salesUgx,
-    cogsUgx: financials.cogsUgx,
-    grossProfitUgx: financials.grossProfitUgx,
-    expensesUgx: financials.expensesUgx,
-    netProfitUgx: financials.netProfitUgx,
-    cashInHandUgx: cashBreakdown.cashInHandUgx,
-    outstandingCreditUgx: creditKpis.totalOutstandingUgx,
-    lowStockCount: stockKpis.lowStockCount,
-    pendingSyncCount: pending.length,
-    lastSuccessfulSyncAt: history[0]?.syncedAt ?? null,
-  }
-}
+// Bug fix (2026-09-07): the Financial Summary widget on this page used to
+// be computed here from accountingService/creditService/stockSummaryService
+// - the pre-Stage-4 local-only stack that persists to this browser's
+// localStorage only and is never written to by the real, Supabase-backed
+// flows the rest of the app uses (sales, expenses, credit, inventory).
+// That made every figure on this page read 0 regardless of real business
+// activity. The real KPI numbers (matching the main Dashboard exactly) are
+// now fetched directly in useOfflineDashboardKpis
+// (src/features/offlineMode/hooks/useOfflineModeData.ts) via the same
+// reporting/reportingService.ts calls the main Dashboard already uses -
+// this file keeps only the two fields it genuinely owns: the local pending
+// sync queue and sync history, below.

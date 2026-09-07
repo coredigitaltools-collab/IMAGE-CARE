@@ -12,7 +12,7 @@ export const env = {
     anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
   },
   app: {
-    name:        'ImageCare ERP',
+    name:        'ImageCare',
     version:     import.meta.env.VITE_APP_VERSION as string ?? '1.0.0',
     environment: import.meta.env.MODE as 'development' | 'production' | 'test',
     isDev:       import.meta.env.DEV as boolean,
