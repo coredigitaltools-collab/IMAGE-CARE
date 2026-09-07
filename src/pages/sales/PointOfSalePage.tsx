@@ -16,7 +16,7 @@ import { ReceiptModal } from '../../components/sales/ReceiptModal'
 import type { ProductPickerHandle } from '../../components/sales/ProductPicker'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
-import { useUserContext, useActiveBranch } from '../../context/AppContext'
+import { useUserContext, useActiveBranch, useActiveStaff } from '../../context/AppContext'
 import { canDo } from '../../types/app'
 import { useProducts } from '../../features/inventory/hooks/useInventoryData'
 import { useTaxRates, useStaff, useBranches } from '../../features/settings/hooks/useSettingsData'
@@ -174,6 +174,14 @@ export function PointOfSalePage() {
   // Purchasing and nearly every other module already scope their data to
   // this same value via useActiveBranch(). Record Sale is read below.
   const globalActiveBranch = useActiveBranch()
+  // Bug fix (2026-09-07): "abdul a staff member is working but the receipt
+  // shows owner." activeStaff is the PIN-switch overlay (see the big
+  // comment above ActiveStaff in AppContext.tsx) - it's who is really
+  // standing at the till, distinct from `user` (useAuth() below), which on
+  // this shared-device architecture is always the owner's own login no
+  // matter who's PIN-switched in. Used below to default "Sold by" to
+  // whoever is actually acting, and to resolve the receipt's "Served by".
+  const activeStaff = useActiveStaff()
   const { showToast } = useToast()
   const productPickerRef = useRef<ProductPickerHandle>(null)
 
@@ -259,6 +267,35 @@ export function PointOfSalePage() {
       if (stillValid) setBranchId(globalActiveBranch)
     }
   }, [accessibleBranches, branchId, globalActiveBranch, cart.length])
+
+  // Bug fix (2026-09-07): "abdul a staff member is working but the receipt
+  // shows owner." salesPersonId ("Sold by", stored as served_by) used to
+  // start at null and stay there unless someone manually opened the
+  // collapsed "Sale details" disclosure and picked a name - it was never
+  // connected to activeStaff (the PIN-switch overlay), so a staff member
+  // could ring up an entire sale with "Sold by: Unassigned" still in
+  // effect, and the receipt (see cashierName below) had nothing real to
+  // fall back to. This follows the exact same pattern as the branch-follow
+  // fix above: it defaults/re-syncs salesPersonId to whoever is actually
+  // PIN-switched in whenever that changes, but - like the branch dropdown -
+  // never overrides a deliberate manual choice mid-sale, and never touches
+  // an in-progress sale (cart.length === 0 gate), since silently
+  // reassigning who a half-rung-up sale is attributed to would be worse
+  // than leaving it stale.
+  const prevActiveStaffIdRef = useRef(activeStaff?.id ?? null)
+  useEffect(() => {
+    const activeStaffId = activeStaff?.id ?? null
+    if (salesPersonId === null && activeStaffId) {
+      setSalesPersonId(activeStaffId)
+      prevActiveStaffIdRef.current = activeStaffId
+      return
+    }
+    const staffSwitched = activeStaffId !== prevActiveStaffIdRef.current
+    prevActiveStaffIdRef.current = activeStaffId
+    if (staffSwitched && cart.length === 0) {
+      setSalesPersonId(activeStaffId)
+    }
+  }, [activeStaff, salesPersonId, cart.length])
 
   // Bug fix (2026-09-06), part 3: "when I click Machakos, sales of Nkoowe
   // show up there." useProducts() computes each product's `currentStock`
@@ -403,7 +440,12 @@ export function PointOfSalePage() {
   const resetPOS = () => {
     setCart([])
     setSelectedCustomer(null)
-    setSalesPersonId(null)
+    // Bug fix (2026-09-07): was a hardcoded null - see the salesPersonId/
+    // activeStaff sync effect above. Resetting straight to null here meant
+    // every sale after the first one in a session went back to
+    // "Unassigned" even while the same staff member stayed PIN-switched in
+    // for the whole shift.
+    setSalesPersonId(activeStaff?.id ?? null)
     setDiscountAmount(0)
     setTaxRateId(defaultTaxRate?.id ?? null)
     setPaymentMethod('cash')
@@ -848,7 +890,23 @@ export function PointOfSalePage() {
           customer={selectedCustomer}
           businessName={businessProfileQuery.data?.name ?? 'ImageCare'}
           receiptSettings={receiptSettingsQuery.data}
-          cashierName={user.name}
+          // Bug fix (2026-09-07): "abdul a staff member is working but the
+          // receipt shows owner." This was hardcoded to `user.name` - the
+          // real authenticated login, which is always the owner on this
+          // shared-device architecture (see the ActiveStaff comment in
+          // AppContext.tsx) - so no receipt could ever show anything but
+          // the owner's own name, regardless of who was PIN-switched in or
+          // who was picked in "Sold by". Now it resolves the sale's own
+          // recorded salesPersonId (served_by) against the staff list, so
+          // a receipt always reflects who the sale says it was sold by -
+          // falling back to the owner's name only for a genuinely
+          // unassigned sale, which is what "no one selected" has always
+          // meant here.
+          cashierName={
+            receiptSale.salesPersonId
+              ? staffQuery.data?.find((s) => s.id === receiptSale.salesPersonId)?.fullName ?? user.name
+              : user.name
+          }
           onClose={() => setReceiptSale(null)}
           onNewSale={() => {
             setReceiptSale(null)

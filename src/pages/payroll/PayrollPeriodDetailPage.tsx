@@ -9,6 +9,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
+import { useActiveStaff } from '../../context/AppContext'
 import { formatCurrency } from '../../lib/format'
 import {
   useApprovePeriod,
@@ -26,12 +27,20 @@ const STATUS_TONE = { draft: 'neutral', calculated: 'warning', approved: 'info',
 export function PayrollPeriodDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
+  // Bug fix (2026-09-07): "all issues related to staff and owner in
+  // different branches." This was always useApprovePeriod(user.name) - the
+  // real authenticated login, which on this shared-device architecture is
+  // always the owner's own name (see the ActiveStaff comment in
+  // AppContext.tsx), never whichever staff member is actually PIN-switched
+  // in and clicking Approve. Falls back to user.name when no one is
+  // PIN-switched, same as before.
+  const activeStaff = useActiveStaff()
   const { showToast } = useToast()
 
   const periodQuery = usePayrollPeriod(id)
   const payslipsQuery = usePayslips(id)
   const calculate = useCalculatePayroll()
-  const approve = useApprovePeriod(user.name)
+  const approve = useApprovePeriod(activeStaff?.fullName ?? user.name)
   const markGenerated = useMarkPayslipsGenerated()
   const recordPayment = useRecordPayrollPayment()
   const archive = useArchivePeriod()

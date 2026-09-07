@@ -751,3 +751,16 @@ export function useUserContext(): UserContext {
 export function useActiveBranch(): UUID | null {
   return useApp().activeBranchId;
 }
+
+// Bug fix (2026-09-07): "abdul a staff member is working but the receipt
+// shows owner" - activeStaff has always been readable via useApp(), but no
+// screen outside the header (AppShell/UserMenu's "Acting as X") ever read
+// it, so every place that attributes a transaction to "whoever is at the
+// till right now" (Sales receipts, Payroll approvals, etc.) fell back to
+// the real authenticated user - which on this shared-device/single-login
+// architecture is always the owner, never the PIN-switched staff member.
+// A small dedicated hook (mirroring useActiveBranch above) so those
+// screens don't each need the full useApp() surface just for this.
+export function useActiveStaff(): ActiveStaff | null {
+  return useApp().activeStaff;
+}
