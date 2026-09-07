@@ -5,7 +5,7 @@ import { NumberField } from '../ui/NumberField'
 import { BranchFormModal } from '../settings/BranchFormModal'
 import { useCreateBranch } from '../../features/settings/hooks/useSettingsData'
 import { TARGET_SCOPE_LABELS } from '../../types/salesTargets'
-import type { SalesTargetInput, TargetScope } from '../../types/salesTargets'
+import type { SalesTarget, SalesTargetInput, TargetScope } from '../../types/salesTargets'
 import type { BranchRecord, StaffMember } from '../../types/settings'
 
 interface CreateTargetModalProps {
@@ -15,22 +15,31 @@ interface CreateTargetModalProps {
   onClose: () => void
   onSubmit: (input: SalesTargetInput) => Promise<void>
   submitError?: string
+  // Feature request (2026-09-07): "i want to be able to edit a target."
+  // When set, this modal opens pre-filled for that target and submits an
+  // update instead of a create (TargetsListPage.tsx decides which, based
+  // on whether this is passed) - who a target is FOR is shown read-only
+  // rather than as editable selects, since changing scope/branch/staff
+  // after creation isn't supported (see updateTarget() in
+  // services/salesTargets/salesTargetsService.ts for why).
+  editingTarget?: SalesTarget
 }
 
 const SCOPES: TargetScope[] = ['business', 'branch', 'staff']
 
-export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, submitError }: CreateTargetModalProps) {
+export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, submitError, editingTarget }: CreateTargetModalProps) {
+  const isEditing = Boolean(editingTarget)
   const createBranch = useCreateBranch(userId)
   const today = new Date()
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
   const lastOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10)
 
-  const [scope, setScope] = useState<TargetScope>('business')
-  const [branchId, setBranchId] = useState(branches[0]?.id ?? '')
-  const [staffId, setStaffId] = useState(staff[0]?.id ?? '')
-  const [periodStart, setPeriodStart] = useState(firstOfMonth)
-  const [periodEnd, setPeriodEnd] = useState(lastOfMonth)
-  const [targetAmount, setTargetAmount] = useState(0)
+  const [scope, setScope] = useState<TargetScope>(editingTarget?.scope ?? 'business')
+  const [branchId, setBranchId] = useState(editingTarget?.branchId ?? branches[0]?.id ?? '')
+  const [staffId, setStaffId] = useState(editingTarget?.staffId ?? staff[0]?.id ?? '')
+  const [periodStart, setPeriodStart] = useState(editingTarget?.periodStart ?? firstOfMonth)
+  const [periodEnd, setPeriodEnd] = useState(editingTarget?.periodEnd ?? lastOfMonth)
+  const [targetAmount, setTargetAmount] = useState(editingTarget?.targetAmountUgx ?? 0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   // 2026-08-31: "No branches yet" used to be a dead end here - picking a
   // branch scope with zero branches meant leaving this modal to go create
@@ -68,27 +77,43 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
   }
 
   return (
-    <Modal title="New sales target" onClose={onClose}>
+    <Modal title={isEditing ? 'Edit target' : 'New sales target'} onClose={onClose}>
       <div className="space-y-4">
-        <div>
-          <label htmlFor="tg-scope" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Who is this target for?
-          </label>
-          <select
-            id="tg-scope"
-            value={scope}
-            onChange={(e) => setScope(e.target.value as TargetScope)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-          >
-            {SCOPES.map((s) => (
-              <option key={s} value={s}>
-                {TARGET_SCOPE_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </div>
+        {isEditing ? (
+          <div>
+            <p className="mb-1.5 block text-sm font-medium text-ink-700">Who this target is for</p>
+            <p className="rounded-md border border-ink-100 bg-ink-50 px-3 py-2 text-sm text-ink-700">
+              {scope === 'business'
+                ? 'Business-wide'
+                : scope === 'branch'
+                  ? (branches.find((b) => b.id === branchId)?.name ?? 'Unknown branch')
+                  : (staff.find((s) => s.id === staffId)?.fullName ?? 'Unknown staff')}
+            </p>
+            <p className="mt-1 text-xs text-ink-500">
+              Who a target is for can&apos;t be changed after it&apos;s created - delete this one and create a new target instead if that needs to change.
+            </p>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="tg-scope" className="mb-1.5 block text-sm font-medium text-ink-700">
+              Who is this target for?
+            </label>
+            <select
+              id="tg-scope"
+              value={scope}
+              onChange={(e) => setScope(e.target.value as TargetScope)}
+              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            >
+              {SCOPES.map((s) => (
+                <option key={s} value={s}>
+                  {TARGET_SCOPE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        {scope === 'branch' && (
+        {!isEditing && scope === 'branch' && (
           <div>
             <label htmlFor="tg-branch" className="mb-1.5 block text-sm font-medium text-ink-700">
               Branch
@@ -118,7 +143,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
           </div>
         )}
 
-        {scope === 'staff' && (
+        {!isEditing && scope === 'staff' && (
           <div>
             <label htmlFor="tg-staff" className="mb-1.5 block text-sm font-medium text-ink-700">
               Staff member
@@ -178,7 +203,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
             Cancel
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={isSubmitting || targetAmount <= 0}>
-            {isSubmitting ? 'Creating...' : 'Create target'}
+            {isEditing ? (isSubmitting ? 'Saving…' : 'Save changes') : isSubmitting ? 'Creating...' : 'Create target'}
           </Button>
         </div>
       </div>

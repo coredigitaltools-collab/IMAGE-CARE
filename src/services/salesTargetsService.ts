@@ -77,6 +77,40 @@ export async function createTarget(input: SalesTargetInput, userId: string): Pro
   return target
 }
 
+// Feature request (2026-09-07): "i want to be able to delete and edit a
+// target" - mirrors updateTarget() in services/salesTargets/
+// salesTargetsService.ts, for the rare legacy target that only ever
+// existed in this local store (a business-wide one created before the
+// 2026-09-05 schema fix moved that scope to a real row too). Same rule:
+// scope/branch/staff can't change, only dates and amount.
+export async function updateTarget(id: string, input: Pick<SalesTargetInput, 'periodStart' | 'periodEnd' | 'targetAmountUgx'>): Promise<SalesTarget> {
+  if (new Date(input.periodEnd).getTime() < new Date(input.periodStart).getTime()) {
+    throw new Error('End date must be on or after the start date.')
+  }
+  if (input.targetAmountUgx <= 0) throw new Error('Enter a target amount greater than 0.')
+
+  const existing = await listTargets()
+  const target = existing.find((t) => t.id === id)
+  if (!target) throw new Error('This target no longer exists.')
+
+  const overlaps = existing.some((t) => {
+    if (t.id === id) return false
+    if (t.scope !== target.scope) return false
+    if (target.scope === 'branch' && t.branchId !== target.branchId) return false
+    if (target.scope === 'staff' && t.staffId !== target.staffId) return false
+    return periodsOverlap(t.periodStart, t.periodEnd, input.periodStart, input.periodEnd)
+  })
+  if (overlaps) throw new OverlappingTargetError()
+
+  const updated: SalesTarget = { ...target, ...input }
+  await setCollection(
+    KEY,
+    existing.map((t) => (t.id === id ? updated : t)),
+  )
+  await enqueueSync({ entityType: 'sales_target', entityId: id, operation: 'update' })
+  return updated
+}
+
 export async function deleteTarget(id: string): Promise<void> {
   const targets = await listTargets()
   await setCollection(

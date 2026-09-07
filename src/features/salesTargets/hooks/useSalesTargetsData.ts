@@ -97,6 +97,28 @@ export function useCreateTarget(_userId: string) {
   })
 }
 
+// Feature request (2026-09-07): "i want to be able to delete and edit a
+// target" - same real-then-legacy-local fallback pattern as
+// useDeleteTarget below, so an edit works regardless of which store the
+// target actually lives in.
+export function useUpdateTarget() {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: Pick<SalesTargetInput, 'periodStart' | 'periodEnd' | 'targetAmountUgx'> }) => {
+      const result = await salesTargetsRealService.updateTarget(ctx, id, input)
+      if (result.success) return result.data
+      if (result.error?.code === 'RESOURCE_NOT_FOUND') {
+        // Not a real row - this target only ever existed locally (a
+        // legacy business-wide one from before 2026-09-05). Update it there.
+        return salesTargetsService.updateTarget(id, input)
+      }
+      throw new Error(result.error?.message ?? 'Could not update this target.')
+    },
+    onSuccess: () => invalidateAll(qc),
+  })
+}
+
 export function useDeleteTarget() {
   const ctx = useUserContext()
   const qc = useQueryClient()

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Target, Plus, Trash2 } from 'lucide-react'
+import { Target, Plus, Trash2, Pencil } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { SalesTargetsTabs } from '../../components/salesTargets/SalesTargetsTabs'
 import { CreateTargetModal } from '../../components/salesTargets/CreateTargetModal'
@@ -15,10 +15,10 @@ import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useBranches, useStaff } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'
-import { useAllTargetProgress, useCreateTarget, useDeleteTarget } from '../../features/salesTargets/hooks/useSalesTargetsData'
+import { useAllTargetProgress, useCreateTarget, useDeleteTarget, useUpdateTarget } from '../../features/salesTargets/hooks/useSalesTargetsData'
 import { OverlappingTargetError, InvalidTargetScopeError } from '../../services/salesTargetsService'
 import { TARGET_SCOPE_LABELS } from '../../types/salesTargets'
-import type { TargetScope } from '../../types/salesTargets'
+import type { SalesTarget, TargetScope } from '../../types/salesTargets'
 
 export function TargetsListPage() {
   const { user } = useAuth()
@@ -27,10 +27,16 @@ export function TargetsListPage() {
   const branchesQuery = useBranches()
   const staffQuery = useStaff()
   const createTarget = useCreateTarget(user.id)
+  const updateTarget = useUpdateTarget()
   const deleteTarget = useDeleteTarget()
 
   const [scopeFilter, setScopeFilter] = useState<TargetScope | 'all'>('all')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  // Feature request (2026-09-07): "i want to be able to ... edit a
+  // target." Reuses CreateTargetModal (see its editingTarget prop) rather
+  // than a second modal - same fields, same validation, just pre-filled
+  // and submitting an update instead of a create.
+  const [editingTarget, setEditingTarget] = useState<SalesTarget | null>(null)
   const [createError, setCreateError] = useState<string | undefined>()
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
@@ -133,6 +139,14 @@ export function TargetsListPage() {
                       {formatCurrency(p.achievedUgx, 'UGX')} / {formatCurrency(p.target.targetAmountUgx, 'UGX')}
                     </span>
                     <RowActionButton
+                      icon={Pencil}
+                      label="Edit target"
+                      onClick={() => {
+                        setCreateError(undefined)
+                        setEditingTarget(p.target)
+                      }}
+                    />
+                    <RowActionButton
                       icon={Trash2}
                       label="Delete target"
                       tone="danger"
@@ -148,21 +162,36 @@ export function TargetsListPage() {
         )}
       </Card>
 
-      {isCreateOpen && (
+      {(isCreateOpen || editingTarget) && (
         <CreateTargetModal
           branches={branches.filter((b) => b.is_active)}
           staff={staff.filter((s) => s.is_active)}
           userId={user.id}
+          editingTarget={editingTarget ?? undefined}
           submitError={createError}
-          onClose={() => setIsCreateOpen(false)}
+          onClose={() => {
+            setIsCreateOpen(false)
+            setEditingTarget(null)
+          }}
           onSubmit={async (input) => {
             try {
-              await createTarget.mutateAsync(input)
-              showToast('Target created.', 'success')
+              if (editingTarget) {
+                await updateTarget.mutateAsync({
+                  id: editingTarget.id,
+                  input: { periodStart: input.periodStart, periodEnd: input.periodEnd, targetAmountUgx: input.targetAmountUgx },
+                })
+                showToast('Target updated.', 'success')
+              } else {
+                await createTarget.mutateAsync(input)
+                showToast('Target created.', 'success')
+              }
               setIsCreateOpen(false)
+              setEditingTarget(null)
             } catch (err) {
               setCreateError(
-                err instanceof OverlappingTargetError || err instanceof InvalidTargetScopeError ? err.message : 'Could not create this target.',
+                err instanceof OverlappingTargetError || err instanceof InvalidTargetScopeError
+                  ? err.message
+                  : `Could not ${editingTarget ? 'update' : 'create'} this target.`,
               )
             }
           }}
@@ -176,9 +205,19 @@ export function TargetsListPage() {
           confirmLabel="Delete"
           tone="danger"
           onConfirm={async () => {
-            await deleteTarget.mutateAsync(deleteTargetId)
-            showToast('Target deleted.', 'success')
-            setDeleteTargetId(null)
+            // Bug fix (2026-09-07): "that button is not working" - this
+            // had no try/catch at all, so any failure (most commonly
+            // PERMISSION_DENIED - see useDeleteTarget/deleteTarget()'s
+            // canDo check) became a silent unhandled rejection: the
+            // dialog just sat there with no error and no explanation,
+            // which reads exactly like "the button doesn't do anything."
+            try {
+              await deleteTarget.mutateAsync(deleteTargetId)
+              showToast('Target deleted.', 'success')
+              setDeleteTargetId(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not delete this target.')
+            }
           }}
           onCancel={() => setDeleteTargetId(null)}
         />

@@ -147,6 +147,77 @@ export async function createTarget(ctx: UserContext, input: SalesTargetInput): P
   }
 }
 
+// Feature request (2026-09-07): "i want to be able to delete and edit a
+// target." Only create/delete ever existed for the real store - there was
+// no way to change a target's dates or amount at all short of deleting it
+// and starting over. Deliberately does NOT let scope/branch/staff change
+// (who a target is for) - CreateTargetModal.tsx shows that as read-only
+// in edit mode and tells the user to delete + recreate instead if it
+// needs to change. That keeps the overlap check below simple and correct
+// (same scope as the existing row, always) and avoids silently turning a
+// staff target into a branch target's history mid-period.
+export async function updateTarget(
+  ctx: UserContext,
+  id: string,
+  input: Pick<SalesTargetInput, 'periodStart' | 'periodEnd' | 'targetAmountUgx'>,
+): Promise<ServiceResponse<SalesTarget>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'salesTargets', 'edit')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to edit sales targets.', { requestId });
+  }
+  if (new Date(input.periodEnd).getTime() < new Date(input.periodStart).getTime()) {
+    return serviceFail('INVALID_INPUT', 'End date must be on or after the start date.', { requestId });
+  }
+  if (input.targetAmountUgx <= 0) {
+    return serviceFail('INVALID_INPUT', 'Enter a target amount greater than 0.', { requestId });
+  }
+
+  try {
+    const { data: current, error: currentErr } = await supabase
+      .schema('imagecare')
+      .from('sales_targets')
+      .select('id, branch_id, user_id')
+      .eq('id', id)
+      .eq('business_id', ctx.business_id)
+      .maybeSingle();
+    if (currentErr) return serviceFail('INTERNAL_ERROR', 'Failed to load this target.', { requestId });
+    // Not a real row - the caller (useUpdateTarget) falls back to the
+    // legacy local store for a target that only ever existed there.
+    if (!current) return serviceFail('RESOURCE_NOT_FOUND', 'This target no longer exists.', { requestId });
+
+    let existingQuery = supabase
+      .schema('imagecare')
+      .from('sales_targets')
+      .select('id, period_start, period_end')
+      .eq('business_id', ctx.business_id)
+      .neq('id', id);
+    existingQuery = current.branch_id
+      ? existingQuery.eq('branch_id', current.branch_id)
+      : current.user_id
+        ? existingQuery.eq('user_id', current.user_id)
+        : existingQuery.is('branch_id', null).is('user_id', null);
+    const { data: existing, error: existingErr } = await existingQuery;
+    if (existingErr) return serviceFail('INTERNAL_ERROR', 'Failed to check existing targets.', { requestId });
+    if ((existing ?? []).some((t) => periodsOverlap(t.period_start, t.period_end, input.periodStart, input.periodEnd))) {
+      throw new OverlappingTargetError();
+    }
+
+    const { data, error } = await supabase
+      .schema('imagecare')
+      .from('sales_targets')
+      .update({ period_start: input.periodStart, period_end: input.periodEnd, target_amount: input.targetAmountUgx })
+      .eq('id', id)
+      .eq('business_id', ctx.business_id)
+      .select('id, branch_id, user_id, period_start, period_end, target_amount, created_at, created_by')
+      .single();
+    if (error || !data) return serviceFail('INTERNAL_ERROR', 'Failed to update sales target.', { requestId });
+    return serviceOk(mapRow(data), requestId);
+  } catch (err) {
+    if (err instanceof OverlappingTargetError) throw err;
+    return serviceFail('INTERNAL_ERROR', 'Failed to update sales target.', { requestId });
+  }
+}
+
 // Deletes the real row if one exists with this id; reports whether it
 // did, so the caller can fall back to the local store for a target that
 // was never real (e.g. a business-wide one) without masking a genuine
