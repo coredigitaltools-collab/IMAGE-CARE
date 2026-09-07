@@ -44,6 +44,17 @@ export function PurchaseOrdersPage() {
   const editConfirmedOrder = useEditConfirmedPurchaseOrder(user.id)
   const cancelOrder = useCancelPurchaseOrder(user.id)
 
+  // Bug fix (2026-09-09), "Review Purchasing Orders list": this page had no
+  // status summary or filter at all - just a plain list with a per-row
+  // badge. Added a real counters row plus a working filter, using only the
+  // statuses that can actually occur today (draft, received, cancelled,
+  // voided - see STATUS_TO_PO_STATUS in usePurchasingData.ts: a confirmed
+  // purchase maps to 'received' since confirmation and stock receipt are
+  // one action under the current workflow, so 'pending_approval'/
+  // 'approved'/'sent'/'partially_received' never occur and are correctly
+  // left out here rather than added as unused/misleading options). This
+  // does not touch the PO workflow itself - no approval stage is added.
+  const [statusFilter, setStatusFilter] = useState<'all' | PurchaseOrder['status']>('all')
   const [isAddOpen, setIsAddOpen] = useState(false)
   // Edit/Delete support (2026-09-03, "edit/delete a purchase order"
   // correction flow - see PurchaseOrderFormModal's initialValues prop and
@@ -59,6 +70,15 @@ export function PurchaseOrdersPage() {
   const supplierName = (id: string) => suppliersQuery.data?.find((s) => s.id === id)?.name ?? 'Unknown supplier'
 
   const canActOn = (order: PurchaseOrder) => order.status === 'draft' || order.status === 'received'
+
+  const allOrders = ordersQuery.data ?? []
+  const statusCounts = {
+    draft: allOrders.filter((o) => o.status === 'draft').length,
+    received: allOrders.filter((o) => o.status === 'received').length,
+    cancelled: allOrders.filter((o) => o.status === 'cancelled').length,
+    voided: allOrders.filter((o) => o.status === 'voided').length,
+  }
+  const visibleOrders = statusFilter === 'all' ? allOrders : allOrders.filter((o) => o.status === statusFilter)
 
   const handleDelete = async (reason?: string) => {
     if (!deletingOrder) return
@@ -86,6 +106,37 @@ export function PurchaseOrdersPage() {
         </Button>
       </div>
 
+      {!ordersQuery.isLoading && allOrders.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-ink-500">
+            <span>
+              <span className="font-semibold text-ink-900">{statusCounts.received}</span> received
+            </span>
+            <span>
+              <span className="font-semibold text-ink-900">{statusCounts.draft}</span> draft
+            </span>
+            <span>
+              <span className="font-semibold text-ink-900">{statusCounts.cancelled}</span> cancelled
+            </span>
+            <span>
+              <span className="font-semibold text-ink-900">{statusCounts.voided}</span> voided
+            </span>
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | PurchaseOrder['status'])}
+            aria-label="Filter by status"
+            className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          >
+            <option value="all">All statuses</option>
+            <option value="received">Received</option>
+            <option value="draft">Draft</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="voided">Voided</option>
+          </select>
+        </div>
+      )}
+
       <Card className="p-5">
         {ordersQuery.isLoading ? (
           <div className="space-y-3">
@@ -93,16 +144,22 @@ export function PurchaseOrdersPage() {
               <Skeleton key={i} className="h-16 w-full" />
             ))}
           </div>
-        ) : (ordersQuery.data ?? []).length === 0 ? (
+        ) : allOrders.length === 0 ? (
           <EmptyState
             icon={ShoppingCart}
             title="No purchase orders yet"
             description="Record one - it's confirmed right away and ready to invoice."
             action={{ label: '+ New order', onClick: () => setIsAddOpen(true) }}
           />
+        ) : visibleOrders.length === 0 ? (
+          <EmptyState
+            icon={ShoppingCart}
+            title="No orders match this filter"
+            description="Try a different status, or clear the filter to see every order."
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
-            {(ordersQuery.data ?? []).map((order) => {
+            {visibleOrders.map((order) => {
               const total = order.items.reduce((sum, i) => sum + i.quantityOrdered * i.unitCost, 0)
               return (
                 <li key={order.id} className="flex items-center justify-between gap-3 py-3">

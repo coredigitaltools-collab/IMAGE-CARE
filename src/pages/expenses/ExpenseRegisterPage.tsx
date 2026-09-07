@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Download, FileMinus, Pencil, Search, Trash2, Upload, Plus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { ExpenseTabs } from '../../components/expenses/ExpenseTabs'
@@ -36,7 +37,17 @@ export function ExpenseRegisterPage() {
   const updateExpense = useUpdateExpense(user.id)
   const deleteExpense = useDeleteExpense(user.id)
 
-  const [search, setSearch] = useState('')
+  // Bug fix (2026-09-09), "Review expense categories": Expense Categories
+  // rows had no way to see the expenses in that category - clicking one did
+  // nothing. Rather than build a second, separate category-filtered view,
+  // this reuses the search box already on this page (it already matches
+  // against `e.category`, see `filtered` below) by reading an initial value
+  // from ?q= - ExpenseCategoriesPage links each row to
+  // `/expenses/register?q=<name>`, landing here pre-filtered to exactly
+  // that category's real expenses. Same pattern ProductsListPage already
+  // uses for its own `?q=` deep link.
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [month, setMonth] = useState('all')
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)

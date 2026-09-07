@@ -34,8 +34,14 @@ export function CreditDashboardPage() {
     a.download = `credit-accounts-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a)
     a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Bug fix (2026-09-09), same fix as lib/csv.ts's shared downloadCsv():
+    // revoking the object URL in the same tick as click() can race the
+    // browser actually starting the download, especially under an
+    // automated browser driving the click.
+    setTimeout(() => {
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }, 0)
     showToast('Credit accounts exported.', 'success')
   }
 

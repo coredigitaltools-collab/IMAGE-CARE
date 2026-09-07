@@ -52,8 +52,15 @@ export function CrmDashboardPage() {
     a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a)
     a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Bug fix (2026-09-09), "Export customer data" timing out: revoking
+    // the object URL in the same tick as click() can race the browser
+    // actually starting the download, especially under an automated
+    // browser driving the click - deferred to the next tick instead (same
+    // fix applied to lib/csv.ts's shared downloadCsv()).
+    setTimeout(() => {
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }, 0)
     showToast('Customers exported.', 'success')
   }
 

@@ -52,7 +52,16 @@ export function ProductsListPage() {
   const reactivateProduct = useReactivateProduct(user.id)
 
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
-  const [showArchived, setShowArchived] = useState(false)
+  // Bug fix (2026-09-09), "Filter products in the inventory list": this was
+  // a plain "Show archived" checkbox - a real filter (active products are
+  // hidden by default unless checked), just not shaped or labeled like one,
+  // so a "Status" control alongside Category/Supplier here (the Inventory
+  // Dashboard's separate InventoryFilterBar already has exactly this
+  // 3-option shape - see aria-label="Filter by status" there) wasn't found.
+  // Same default behavior as before (archived hidden unless explicitly
+  // selected), now as an actual Status dropdown that matches the existing
+  // Category/Supplier controls.
+  const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'all'>('active')
   // Bug fix (2026-09-07): "Category: Blazers, Supplier: Blazers United"
   // didn't narrow the list at all - this is the real product list users
   // browse day to day, and it had no category/supplier filter controls or
@@ -73,13 +82,13 @@ export function ProductsListPage() {
     const products = productsQuery.data ?? []
     const q = query.trim().toLowerCase()
     return products.filter((p) => {
-      if (!showArchived && p.status === 'archived') return false
+      if (statusFilter !== 'all' && p.status !== statusFilter) return false
       if (categoryFilter !== 'all' && p.categoryId !== categoryFilter) return false
       if (supplierFilter !== 'all' && p.supplierId !== supplierFilter) return false
       if (!q) return true
       return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q)
     })
-  }, [productsQuery.data, query, showArchived, categoryFilter, supplierFilter])
+  }, [productsQuery.data, query, statusFilter, categoryFilter, supplierFilter])
 
   const closeAddModal = () => {
     setIsAddOpen(false)
@@ -170,15 +179,16 @@ export function ProductsListPage() {
             </option>
           ))}
         </select>
-        <label className="flex items-center gap-2 text-sm text-ink-700">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
-          />
-          Show archived
-        </label>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'active' | 'archived' | 'all')}
+          aria-label="Filter by status"
+          className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        >
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+          <option value="all">All statuses</option>
+        </select>
       </div>
 
       <Card className="overflow-hidden">

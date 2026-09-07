@@ -26,8 +26,19 @@ export function downloadCsv(filename: string, content: string): void {
   a.download = filename
   document.body.appendChild(a)
   a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  // Bug fix (2026-09-09), export buttons reported as hanging/timing out
+  // (Inventory, Customers, Credit): revoking the object URL in the same
+  // synchronous tick as click() is a known race - on a slower device, or
+  // under an automated browser driving the page (exactly what an E2E test
+  // does), the browser can still be starting the download read when the
+  // URL is invalidated out from under it, so nothing downloads and the
+  // click appears to do nothing. Removing the anchor and revoking the URL
+  // on the next tick instead gives the browser time to actually begin the
+  // download first, which is the standard fix for this pattern.
+  setTimeout(() => {
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, 0)
 }
 
 /** Parses a CSV string into rows of string cells. Handles quoted fields

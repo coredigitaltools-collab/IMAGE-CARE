@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Archive, ArchiveRestore, Award, CreditCard, FileText, Quote, Receipt as ReceiptIcon, Sliders, Wallet, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
@@ -47,7 +47,17 @@ export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const { showToast } = useToast()
-  const [tab, setTab] = useState<Tab>('Overview')
+  // Bug fix (2026-09-09), "Review customer credit from invoices": there was
+  // no way to land directly on a customer's Credit tab from anywhere else
+  // in the app - not even a link from an invoice to its own customer, so
+  // "reviewing customer credit from invoices" had no path at all regardless
+  // of what that customer's balance actually was. Reading an initial tab
+  // from ?tab= (matched case-insensitively against the real tab names)
+  // lets InvoiceDetailPage.tsx's new customer link below land here already
+  // on Credit, same pattern as CreditAccountsPage's own ?overdue=1.
+  const [searchParams] = useSearchParams()
+  const initialTab = TABS.find((t) => t.toLowerCase() === searchParams.get('tab')?.toLowerCase()) ?? 'Overview'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [noteText, setNoteText] = useState('')
 
   const customerQuery = useCustomer(id)

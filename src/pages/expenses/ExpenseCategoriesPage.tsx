@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Archive, Plus, Tag } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { ExpenseTabs } from '../../components/expenses/ExpenseTabs'
@@ -51,7 +52,18 @@ export function ExpenseCategoriesPage() {
           <ul className="divide-y divide-ink-100">
             {activeCategories.map((c) => (
               <li key={c.id} className="flex items-center justify-between py-2.5 text-sm">
-                <span className="font-medium text-ink-900">{c.name}</span>
+                {/* Bug fix (2026-09-09): "Review expense categories" -
+                    clicking a category used to do nothing. Links to the
+                    Expenses register pre-filtered to this category's real
+                    expenses via its existing search box (see
+                    ExpenseRegisterPage's ?q= handling) rather than building
+                    a second, separate detail view. */}
+                <Link
+                  to={`/expenses/register?q=${encodeURIComponent(c.name)}`}
+                  className="font-medium text-ink-900 hover:text-accent hover:underline"
+                >
+                  {c.name}
+                </Link>
                 <RowActionButton
                   icon={Archive}
                   label="Archive"

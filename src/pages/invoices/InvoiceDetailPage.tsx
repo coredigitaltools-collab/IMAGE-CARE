@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { CheckCircle2, FileText, Printer, Send, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
@@ -57,7 +57,24 @@ export function InvoiceDetailPage() {
     <div className="mx-auto max-w-2xl">
       <SettingsPageHeader
         title={invoice.invoiceNumber}
-        description={`${invoice.customerName} · from sale ${invoice.saleReference}`}
+        description={
+          // Bug fix (2026-09-09), "Review customer credit from invoices":
+          // the customer's name here was plain text with no way to reach
+          // their credit info at all from an invoice. Links straight to
+          // that customer's Credit tab when the invoice has one on file
+          // (some invoices are recorded with no customer attached - those
+          // stay plain text, same as before).
+          invoice.customerId ? (
+            <>
+              <Link to={`/customers/${invoice.customerId}?tab=Credit`} className="text-accent hover:underline">
+                {invoice.customerName}
+              </Link>
+              {` · from sale ${invoice.saleReference}`}
+            </>
+          ) : (
+            `${invoice.customerName} · from sale ${invoice.saleReference}`
+          )
+        }
         action={
           <div className="flex flex-wrap gap-2 print:hidden">
             <Button variant="secondary" onClick={() => window.print()}>

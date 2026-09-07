@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 interface SettingsPageHeaderProps {
   title: string
-  description?: string
+  description?: ReactNode
   action?: ReactNode
 }
 
