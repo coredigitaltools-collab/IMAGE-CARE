@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Modal } from '../ui/Modal'
-import { useApp } from '../../context/AppContext'
-import { useStaff } from '../../features/settings/hooks/useSettingsData'
+import { useApp, useActiveBranch } from '../../context/AppContext'
+import { useStaff, useBranches, useRoles } from '../../features/settings/hooks/useSettingsData'
 
 // ============================================================
 // ImageCare ERP - Staff Switcher ("Who is using this device?")
@@ -21,21 +21,69 @@ interface StaffSwitcherModalProps {
   onClose: () => void
 }
 
+interface SelectedStaff {
+  id: string
+  fullName: string
+  branchId: string | null
+}
+
 export function StaffSwitcherModal({ onClose }: StaffSwitcherModalProps) {
-  const { switchToStaff } = useApp()
+  const { switchToStaff, setActiveBranchId } = useApp()
+  const activeBranchId = useActiveBranch()
   const staffQuery = useStaff()
-  const [selected, setSelected] = useState<{ id: string; fullName: string } | null>(null)
+  const branchesQuery = useBranches()
+  const rolesQuery = useRoles()
+  const [selected, setSelected] = useState<SelectedStaff | null>(null)
   const [pin, setPin] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const staffList = (staffQuery.data ?? []).filter((s) => s.is_active && !s.is_owner)
 
-  const chooseStaff = (member: { id: string; fullName: string }) => {
+  // Bug fix (2026-09-07): "why do the names show long numbers instead of
+  // role." `member.role` is the raw imagecare.users.role column, which -
+  // ever since Roles became real permission_groups rows (2026-09-05) -
+  // stores that group's UUID, not a readable name (a plain job_title, when
+  // set, happened to mask this - see Mariam vs Abdul/Simon in the reported
+  // screenshot). PeopleAccessPage.tsx already resolves this correctly via
+  // useRoles(); this modal just never did the same lookup.
+  const roles = rolesQuery.data ?? []
+  const roleName = (roleId: string) => roles.find((r) => r.id === roleId)?.name ?? 'Staff'
+
+  const branchNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const b of branchesQuery.data ?? []) map.set(b.id, b.name)
+    return map
+  }, [branchesQuery.data])
+  const activeBranchName = activeBranchId ? branchNameById.get(activeBranchId) : undefined
+
+  // Feature request (2026-09-07): "i want the names of staff to show the
+  // branch" - each row now shows which branch a staff member is actually
+  // assigned to, not just their role.
+  const branchLabelFor = (branchId: string | null) => (branchId ? branchNameById.get(branchId) ?? 'Unknown branch' : 'No branch assigned')
+
+  const chooseStaff = (member: { id: string; fullName: string; branchId: string | null }) => {
     setSelected(member)
     setPin('')
     setError(undefined)
   }
+
+  // Bug fix (2026-09-07): "I clicked abdul as the staff in nkoowe and the
+  // system did not flag that." Abdul is only assigned to Machakos - this
+  // modal used to let the owner switch to any active staff member with no
+  // regard for which branch was currently active, and switchToStaff()
+  // itself never touched activeBranchId either. That silently left the
+  // header (and everything driven by it - Sales, Reports, Record Sale's
+  // own product picker once its branch is already set) pointed at a
+  // branch Abdul has no real access to, with nothing on screen saying so.
+  // mismatchedBranch is shown as an inline notice on the PIN step, and a
+  // successful switch now also moves the active branch to the staff
+  // member's own branch - so the till can never end up silently
+  // mismatched between "who's operating it" and "which branch is active".
+  const mismatchedBranch =
+    selected?.branchId && activeBranchId && selected.branchId !== activeBranchId
+      ? branchNameById.get(selected.branchId) ?? 'their assigned branch'
+      : null
 
   const handlePinChange = async (raw: string) => {
     const digits = raw.replace(/\D/g, '').slice(0, 4)
@@ -46,6 +94,9 @@ export function StaffSwitcherModal({ onClose }: StaffSwitcherModalProps) {
       const result = await switchToStaff(selected.id, digits)
       setIsSubmitting(false)
       if (result.success) {
+        if (selected.branchId && selected.branchId !== activeBranchId) {
+          setActiveBranchId(selected.branchId)
+        }
         onClose()
       } else {
         setError(result.error ?? 'Incorrect PIN.')
@@ -65,24 +116,40 @@ export function StaffSwitcherModal({ onClose }: StaffSwitcherModalProps) {
           </p>
         ) : (
           <div className="space-y-2">
-            {staffList.map((member) => (
-              <button
-                key={member.id}
-                type="button"
-                onClick={() => member.hasPin && chooseStaff({ id: member.id, fullName: member.fullName })}
-                disabled={!member.hasPin}
-                className="flex w-full items-center justify-between rounded-lg border border-ink-100 px-4 py-3 text-left text-sm font-medium text-ink-900 transition-colors hover:border-brand-blue-500 hover:bg-brand-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span>{member.fullName}</span>
-                <span className="text-xs font-normal text-ink-500">
-                  {member.hasPin ? (member.jobTitle || member.role) : 'No PIN set'}
-                </span>
-              </button>
-            ))}
+            {staffList.map((member) => {
+              const branchId = member.branchIds[0] ?? null
+              return (
+                <button
+                  key={member.id}
+                  type="button"
+                  onClick={() => member.hasPin && chooseStaff({ id: member.id, fullName: member.fullName, branchId })}
+                  disabled={!member.hasPin}
+                  className="flex w-full items-center justify-between rounded-lg border border-ink-100 px-4 py-3 text-left text-sm font-medium text-ink-900 transition-colors hover:border-brand-blue-500 hover:bg-brand-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span>{member.fullName}</span>
+                  <span className="text-right text-xs font-normal text-ink-500">
+                    {member.hasPin ? (
+                      <>
+                        {member.jobTitle || roleName(member.role)}
+                        <span className="text-ink-400"> · {branchLabelFor(branchId)}</span>
+                      </>
+                    ) : (
+                      'No PIN set'
+                    )}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         )
       ) : (
         <div>
+          {mismatchedBranch && (
+            <p className="mb-3 rounded-lg bg-brand-blue-50 px-3 py-2.5 text-xs text-brand-blue-900">
+              {selected.fullName} is assigned to <strong>{mismatchedBranch}</strong>
+              {activeBranchName ? <>, not the currently active branch (<strong>{activeBranchName}</strong>)</> : null}. Continuing will switch the active branch to {mismatchedBranch}.
+            </p>
+          )}
           <input
             autoFocus
             type="password"
