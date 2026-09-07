@@ -340,4 +340,33 @@ const shellStyles = `
     display: flex;
     min-height: 100vh;
   }
+
+  /* Bug fix (2026-09-07): "the print invoice shows the sidebar modules
+     too" - every page that prints its own in-page content (Invoice
+     Detail, Product Detail, Barcode Management, Daily/Monthly/Annual
+     Summary, Inventory Dashboard) only ever hid its own action buttons
+     (print:hidden on the Print/Print label/etc. buttons) - none of them
+     hid the app shell itself, so window.print() always printed the
+     sidebar and header alongside/behind the actual printable content.
+     ReceiptModal.tsx's own print already works because it portals the
+     receipt onto <body> and hides #root entirely while that portal is
+     mounted (see the body.receipt-printing rule below) - it never had
+     this problem to begin with. This is the same fix applied at the
+     shell level instead, for every other page's in-page print: the
+     sidebar (.app-shell's <nav>) and header (.app-shell__main's
+     <header>) are real DOM elements on every one of those pages, so
+     hiding them in print - and collapsing the sidebar's margin-left
+     reservation on the content column - leaves only the actual page
+     content on the printed page, for any page that calls
+     window.print(), not just the ones already special-cased. */
+  @media print {
+    .app-shell > nav,
+    .app-shell__main > header {
+      display: none !important;
+    }
+    .app-shell__main {
+      margin-left: 0 !important;
+      min-height: 0 !important;
+    }
+  }
 `;
