@@ -216,6 +216,12 @@ export function PointOfSalePage() {
   // and only falls back to "first accessible branch" if there isn't one
   // (e.g. it was never set, or points at a branch this till user can no
   // longer access).
+  // Tracks the header's active branch across renders so the effect below
+  // can tell "the header branch actually just changed" apart from "the
+  // Sale details dropdown was deliberately set to something else" - see
+  // the 2026-09-07 fix in that effect for why this distinction matters.
+  const prevGlobalActiveBranchRef = useRef(globalActiveBranch)
+
   useEffect(() => {
     if (branchId === null) {
       const preferred = globalActiveBranch
@@ -223,8 +229,36 @@ export function PointOfSalePage() {
         : undefined
       const chosen = preferred ?? accessibleBranches.find((b) => b.is_active)
       if (chosen) setBranchId(chosen.id)
+      prevGlobalActiveBranchRef.current = globalActiveBranch
+      return
     }
-  }, [accessibleBranches, branchId, globalActiveBranch])
+
+    // Bug fix (2026-09-07): "I cannot see the products of branch
+    // Machakos... All I can see are products from the other branch." The
+    // fix above only ever ran ONCE, the very first time this page
+    // mounted with no branch chosen yet - it picked up the header's
+    // active branch at that moment and then never looked at it again.
+    // Switching the header's Branch selector afterward (the normal way
+    // to move between branches while using the app) left this page's
+    // OWN branch - and therefore the product picker driven by it, see
+    // useProducts(branchId) below - stuck on whichever branch happened
+    // to be active the first time Record Sale was opened.
+    //
+    // This now follows a REAL header change (tracked via the ref, not
+    // just "branchId differs from globalActiveBranch" - that would also
+    // fire the moment someone deliberately picks a different branch in
+    // the Sale details dropdown below, immediately snapping it back and
+    // making that dropdown impossible to use). It also only acts when
+    // the cart is empty: switching the branch out from under an
+    // in-progress sale would silently change which branch's stock that
+    // sale is about to deduct from, which is worse than a stale picker.
+    const headerBranchChanged = globalActiveBranch !== prevGlobalActiveBranchRef.current
+    prevGlobalActiveBranchRef.current = globalActiveBranch
+    if (headerBranchChanged && cart.length === 0 && globalActiveBranch) {
+      const stillValid = accessibleBranches.find((b) => b.id === globalActiveBranch && b.is_active)
+      if (stillValid) setBranchId(globalActiveBranch)
+    }
+  }, [accessibleBranches, branchId, globalActiveBranch, cart.length])
 
   // Bug fix (2026-09-06), part 3: "when I click Machakos, sales of Nkoowe
   // show up there." useProducts() computes each product's `currentStock`
