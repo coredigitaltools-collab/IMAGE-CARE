@@ -27,6 +27,18 @@ export function BarcodeManagementPage() {
   }
 
   const selectedProducts = (products ?? []).filter((p) => selectedIds.includes(p.id))
+  // Bug fix (2026-09-07): Print used to be enabled the moment anything was
+  // selected, even products with no barcode value - clicking it then
+  // called window.print() on cards that just read "No barcode set," which
+  // opens a real (native, browser-owned) print dialog with nothing useful
+  // in it, and gave no indication of why. Real product data in this
+  // business currently has no barcode set on any product (an inventory
+  // data-entry gap, not an app bug - "Barcode" is an optional field on the
+  // product form). Print now only enables once at least one selected
+  // product actually has a barcode to print, and clearly explains the gap
+  // for any selected product that doesn't.
+  const selectedWithBarcode = selectedProducts.filter((p) => p.barcode)
+  const selectedWithoutBarcode = selectedProducts.filter((p) => !p.barcode)
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -36,10 +48,17 @@ export function BarcodeManagementPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Barcode Management</h1>
           <p className="mt-0.5 text-sm text-ink-500">Search, generate, and print product barcode labels.</p>
         </div>
-        <Button onClick={() => window.print()} disabled={selectedProducts.length === 0}>
-          <Printer size={15} /> Print {selectedProducts.length > 0 ? `(${selectedProducts.length})` : ''}
+        <Button onClick={() => window.print()} disabled={selectedWithBarcode.length === 0}>
+          <Printer size={15} /> Print {selectedWithBarcode.length > 0 ? `(${selectedWithBarcode.length})` : ''}
         </Button>
       </div>
+
+      {selectedWithoutBarcode.length > 0 && (
+        <p className="mb-4 rounded-md border border-warning-100 bg-warning-100/40 px-3 py-2 text-xs text-warning-700">
+          {selectedWithoutBarcode.length} selected product{selectedWithoutBarcode.length === 1 ? '' : 's'} {selectedWithoutBarcode.length === 1 ? 'has' : 'have'} no
+          barcode set, so {selectedWithoutBarcode.length === 1 ? "it won't" : "they won't"} print a usable label. Edit the product in Inventory to add one.
+        </p>
+      )}
 
       <div className="relative mb-4 max-w-sm">
         <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
