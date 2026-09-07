@@ -209,9 +209,20 @@ export function useCreateProduct(_userId?: string) {
       // saved, no matter what was entered. This is the fix: if a non-zero
       // opening count was entered, record it as a real opening_stock
       // movement right after the product exists. Best-effort - the product
-      // itself is already saved and must not disappear if this part fails,
-      // so a failure here is swallowed rather than surfaced as "Save
-      // failed" for what is otherwise a successful product creation.
+      // itself is already saved and must not disappear if this part fails.
+      //
+      // Bug fix (2026-09-07): "why do the new products show grayed out."
+      // A failure here used to be swallowed into console.error only - a
+      // real business user never opens devtools, so a product that failed
+      // to get its opening stock (permission hiccup, network blip, etc.)
+      // looked EXACTLY like one where the owner had simply left the field
+      // at 0: silently "0 in stock", no error, no hint anything went
+      // wrong. `warnings` collects a plain-language message for this and
+      // the branch-assignment case below instead, and the caller
+      // (ProductsListPage.tsx) shows it via a toast alongside the normal
+      // "Product added" success - the create itself still never fails
+      // just because this best-effort follow-up did.
+      const warnings: string[] = [];
       const openingStock = input.openingStock ?? input.opening_stock ?? 0;
       const branchId = (input.branch_id ?? branch ?? ctx.branch_id) as UUID | null;
       if (openingStock > 0 && branchId) {
@@ -224,11 +235,13 @@ export function useCreateProduct(_userId?: string) {
           });
           if (stockResult.error) {
             console.error('Opening stock was not recorded for new product', product.id, stockResult.error);
+            warnings.push(`"${product.name}" was saved, but its opening stock could not be recorded (${stockResult.error.message}). Add it via Stock Adjustments.`);
           }
         } catch (err) {
           // Product already saved; stock can still be fixed via Stock
-          // Adjustments. Swallowed deliberately - see comment above.
+          // Adjustments - this is why the create itself doesn't fail.
           console.error('Opening stock was not recorded for new product', product.id, err);
+          warnings.push(`"${product.name}" was saved, but its opening stock could not be recorded. Add it via Stock Adjustments.`);
         }
       }
 
@@ -243,18 +256,30 @@ export function useCreateProduct(_userId?: string) {
       // practice: a business adds a product while working in the branch
       // that will carry it. Best-effort, same reasoning as opening stock
       // above - the product itself must not disappear if this fails.
+      //
+      // NOTE (2026-09-07, "mix up with the products in branches"): this
+      // only ever assigns the ONE currently-active branch - there is no
+      // way from this wizard to give a new product opening stock at more
+      // than one branch up front. A product later assigned to an
+      // ADDITIONAL branch via the product's own Branches tab starts at 0
+      // stock there (see the note added on that tab) - that is a real
+      // gap in what the wizard can do today, not a bug in this function,
+      // and hasn't been changed here since it would mean redesigning the
+      // Add Product flow rather than fixing something broken.
       if (branchId) {
         try {
           const assignResult = await setProductBranches(ctx, product.id as UUID, [branchId]);
           if (assignResult.error) {
             console.error('Branch assignment was not recorded for new product', product.id, assignResult.error);
+            warnings.push(`"${product.name}" was saved, but could not be assigned to a branch (${assignResult.error.message}). Assign it from the product's Branches tab.`);
           }
         } catch (err) {
           console.error('Branch assignment was not recorded for new product', product.id, err);
+          warnings.push(`"${product.name}" was saved, but could not be assigned to a branch. Assign it from the product's Branches tab.`);
         }
       }
 
-      return product;
+      return { ...product, warnings };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['inventory', 'products'] });

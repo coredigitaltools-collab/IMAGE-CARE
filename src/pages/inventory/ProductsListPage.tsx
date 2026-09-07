@@ -80,8 +80,14 @@ export function ProductsListPage() {
   const handleCreate = async (input: ProductInput) => {
     setFormError(undefined)
     try {
-      await createProduct.mutateAsync(input)
+      const created = await createProduct.mutateAsync(input)
       showToast('Product added.', 'success')
+      // Bug fix (2026-09-07): "why do the new products show grayed out" -
+      // opening stock / branch assignment failures used to be swallowed
+      // silently (console.error only). Now surfaced as a follow-up toast
+      // so a product that quietly ended up at 0 stock or unassigned isn't
+      // mistaken for one where nothing was entered.
+      for (const warning of created?.warnings ?? []) showToast(warning)
       closeAddModal()
     } catch (err) {
       // 2026-09-01: this used to only recognize DuplicateSkuError/

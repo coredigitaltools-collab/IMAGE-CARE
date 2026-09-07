@@ -89,6 +89,21 @@ export function ProductDetailPage() {
     setSelectedBranchIds((prev) => (prev.includes(branchId) ? prev.filter((b) => b !== branchId) : [...prev, branchId]))
   }
 
+  // Bug fix (2026-09-07): "why do the new products show grayed out ...
+  // mix up with the products in branches." Checking a branch here that
+  // the product wasn't already assigned to does NOT create any stock for
+  // it - opening stock is only ever recorded once, for one branch, at
+  // product creation (see useCreateProduct in useInventoryData.ts). A
+  // product added to a second branch this way will correctly show up in
+  // that branch's till, permanently at 0/"Out of stock", with nothing on
+  // this page explaining why - exactly the reported confusion. This just
+  // names which branch(es) are about to be newly added so that's no
+  // longer a silent surprise; it doesn't change what Save does.
+  const newlyAddedBranchNames = selectedBranchIds
+    .filter((bid) => !(productBranchesQuery.data ?? []).includes(bid))
+    .map((bid) => (branchesQuery.data ?? []).find((b) => b.id === bid)?.name)
+    .filter((name): name is string => Boolean(name))
+
   const saveBranches = async () => {
     if (!product) return
     try {
@@ -380,6 +395,11 @@ export function ProductDetailPage() {
           {selectedBranchIds.length === 0 && (
             <p className="mt-2 text-xs text-ink-500">
               No branches assigned - this product won&apos;t appear for sale anywhere until you assign at least one.
+            </p>
+          )}
+          {newlyAddedBranchNames.length > 0 && (
+            <p className="mt-2 text-xs text-brand-blue-900">
+              {newlyAddedBranchNames.join(', ')} will start at 0 stock for this product - add stock there via Purchasing or Stock Adjustments once you save.
             </p>
           )}
           <div className="mt-4 flex justify-end">
