@@ -13,7 +13,7 @@ export function SettingsPageHeader({ title, description, action }: SettingsPageH
     <div className="mb-6">
       <Link
         to="/settings"
-        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-brand-blue-700"
+        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-accent"
       >
         <ArrowLeft size={15} aria-hidden="true" />
         Settings

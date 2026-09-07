@@ -5,6 +5,7 @@ import { LoyaltyTabs } from '../../components/loyalty/LoyaltyTabs'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
@@ -45,30 +46,27 @@ export function LoyaltySettingsPage() {
         <Skeleton className="h-80 w-full" />
       ) : (
         <Card className="space-y-4 p-5">
-          <FormField
+          <NumberField
             id="ls-earn-rate"
             label="UGX spent per point earned"
-            type="number"
             min={1}
             value={ugxPerPoint}
-            onChange={(e) => setUgxPerPoint(Number(e.target.value))}
+            onChange={setUgxPerPoint}
             hint="e.g. 1000 means a customer earns 1 point for every 1,000 UGX spent."
           />
-          <FormField
+          <NumberField
             id="ls-redeem-value"
             label="Cash value per point when redeemed (UGX)"
-            type="number"
             min={0}
             value={redemptionValuePerPointUgx}
-            onChange={(e) => setRedemptionValuePerPointUgx(Number(e.target.value))}
+            onChange={setRedemptionValuePerPointUgx}
           />
-          <FormField
+          <NumberField
             id="ls-min-redeem"
             label="Minimum points required to redeem"
-            type="number"
             min={0}
             value={minPointsToRedeem}
-            onChange={(e) => setMinPointsToRedeem(Number(e.target.value))}
+            onChange={setMinPointsToRedeem}
           />
           <FormField
             id="ls-expiry"

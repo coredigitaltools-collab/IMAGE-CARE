@@ -74,7 +74,7 @@ export function ConfirmDialog({
             placeholder={reasonPlaceholder}
             rows={3}
             autoFocus
-            className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
       )}

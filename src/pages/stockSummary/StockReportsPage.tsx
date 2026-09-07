@@ -30,7 +30,7 @@ export function StockReportsPage() {
         {REPORT_LINKS.map(({ label, description, to, icon: Icon }) => (
           <Link key={label} to={to}>
             <Card className="flex items-start gap-3 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-blue-50 text-accent">
                 <Icon size={16} strokeWidth={1.75} />
               </span>
               <span>

@@ -153,7 +153,7 @@ export function StaffFormModal({ branches, roles, userId, initial, onClose, onSu
                   type="checkbox"
                   checked={selectedBranchIds.includes(branch.id)}
                   onChange={() => toggleBranch(branch.id)}
-                  className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+                  className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
                 />
                 {branch.name}
               </label>

@@ -28,17 +28,17 @@ export function InventoryValueTrendChart({ data, isLoading, range, onRangeChange
     <Card className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <TrendingUp size={16} className="text-brand-blue-700" />
+          <TrendingUp size={16} className="text-accent" />
           <h2 className="text-sm font-semibold text-ink-900">Inventory value trend</h2>
         </div>
-        <div className="flex gap-1 rounded-md bg-ink-50 p-1">
+        <div className="flex gap-1 rounded-md bg-surface-2 p-1">
           {RANGES.map((r) => (
             <button
               key={r.key}
               onClick={() => onRangeChange(r.key)}
               className={
                 range === r.key
-                  ? 'rounded px-2 py-1 text-xs font-medium bg-white text-brand-blue-700 shadow-card'
+                  ? 'rounded px-2 py-1 text-xs font-medium bg-surface text-accent shadow-card'
                   : 'rounded px-2 py-1 text-xs font-medium text-ink-500 hover:text-ink-900'
               }
             >

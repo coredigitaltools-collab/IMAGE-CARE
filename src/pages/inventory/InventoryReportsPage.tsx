@@ -48,7 +48,7 @@ export function InventoryReportsPage() {
             onClick={() => setTab(t)}
             className={
               tab === t
-                ? 'border-b-2 border-brand-blue-700 px-3 py-2 text-sm font-medium text-brand-blue-700'
+                ? 'border-b-2 border-accent px-3 py-2 text-sm font-medium text-accent'
                 : 'border-b-2 border-transparent px-3 py-2 text-sm text-ink-500 hover:text-ink-900'
             }
           >

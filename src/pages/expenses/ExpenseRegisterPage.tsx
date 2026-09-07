@@ -201,13 +201,13 @@ export function ExpenseRegisterPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search category or description…"
-            className="w-full rounded-lg border border-ink-100 bg-white py-2.5 pl-9 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 focus:border-brand-blue-500"
+            className="w-full rounded-lg border border-ink-100 bg-surface py-2.5 pl-9 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 focus:border-brand-blue-500"
           />
         </div>
         <select
           value={month}
           onChange={(e) => setMonth(e.target.value)}
-          className="rounded-lg border border-ink-100 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+          className="rounded-lg border border-ink-100 bg-surface px-3 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
         >
           <option value="all">All months</option>
           {monthOptions.map((m) => (
@@ -244,10 +244,10 @@ export function ExpenseRegisterPage() {
               </thead>
               <tbody className="divide-y divide-ink-100">
                 {filtered.map((e) => (
-                  <tr key={e.id} className="hover:bg-ink-50/60">
+                  <tr key={e.id} className="hover:bg-surface-2/60">
                     <td className="whitespace-nowrap px-5 py-3 text-ink-900">{new Date(e.expense_date).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                     <td className="px-5 py-3">
-                      <span className="inline-flex items-center rounded-full bg-brand-blue-50 px-2.5 py-1 text-xs font-medium text-brand-blue-700">{e.category}</span>
+                      <span className="inline-flex items-center rounded-full bg-brand-blue-50 px-2.5 py-1 text-xs font-medium text-accent">{e.category}</span>
                     </td>
                     <td className="max-w-xs truncate px-5 py-3 text-ink-700">{e.description || '—'}</td>
                     <td className="whitespace-nowrap px-5 py-3 text-right font-semibold text-ink-900">{formatCurrency(e.total_amount, 'UGX')}</td>

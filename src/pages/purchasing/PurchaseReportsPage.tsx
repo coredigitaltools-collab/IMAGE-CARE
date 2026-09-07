@@ -49,7 +49,7 @@ export function PurchaseReportsPage() {
             value={from}
             max={to}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         <div>
@@ -62,7 +62,7 @@ export function PurchaseReportsPage() {
             value={to}
             min={from}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
       </div>

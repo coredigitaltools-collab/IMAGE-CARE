@@ -152,7 +152,7 @@ export function CustomerDetailPage() {
             onClick={() => setTab(t)}
             className={
               tab === t
-                ? 'border-b-2 border-brand-blue-700 px-3 py-2 text-sm font-medium text-brand-blue-700'
+                ? 'border-b-2 border-accent px-3 py-2 text-sm font-medium text-accent'
                 : 'border-b-2 border-transparent px-3 py-2 text-sm text-ink-500 hover:text-ink-900'
             }
           >
@@ -469,7 +469,7 @@ export function CustomerDetailPage() {
             <ul className="divide-y divide-ink-100">
               {customerInvoices.map((inv) => (
                 <li key={inv.id} className="flex items-center justify-between py-2.5 text-sm">
-                  <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-accent">
                     {inv.invoiceNumber}
                   </Link>
                   <div className="flex items-center gap-2">
@@ -490,7 +490,7 @@ export function CustomerDetailPage() {
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               placeholder="Log a note about this customer..."
-              className="flex-1 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="flex-1 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
             <Button
               disabled={!noteText.trim() || addNote.isPending}
@@ -509,7 +509,7 @@ export function CustomerDetailPage() {
           ) : (
             <ul className="space-y-3">
               {(notesQuery.data ?? []).map((note) => (
-                <li key={note.id} className="rounded-md bg-ink-50 p-3">
+                <li key={note.id} className="rounded-md bg-surface-2 p-3">
                   <p className="text-sm text-ink-900">{note.text}</p>
                   <p className="mt-1 text-xs text-ink-500">{formatRelativeTime(note.createdAt)}</p>
                 </li>

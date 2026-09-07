@@ -62,7 +62,7 @@ export function SupplierFormModal({ initial, onClose, onSubmit }: SupplierFormMo
           <select
             id="sf-status"
             {...register('status')}
-            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -74,7 +74,7 @@ export function SupplierFormModal({ initial, onClose, onSubmit }: SupplierFormMo
             id="sf-notes"
             {...register('notes')}
             rows={3}
-            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
         <div className="flex justify-end gap-2 pt-2">

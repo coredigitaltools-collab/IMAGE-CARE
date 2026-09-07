@@ -88,13 +88,13 @@ export function CreditAccountsPage() {
                 if (e.target.checked) setSearchParams({ overdue: '1' })
                 else setSearchParams({})
               }}
-              className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+              className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
             />
             Overdue only
           </label>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 rounded-md border border-ink-100 bg-white px-3.5 py-2 text-sm font-medium text-ink-700 shadow-card transition-colors hover:bg-ink-50"
+            className="flex items-center gap-1.5 rounded-md border border-ink-100 bg-surface px-3.5 py-2 text-sm font-medium text-ink-700 shadow-card transition-colors hover:bg-surface-2"
           >
             <Download size={15} /> Export
           </button>
@@ -131,7 +131,7 @@ export function CreditAccountsPage() {
               <li key={account.customer.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Link to={`/customers/${account.customer.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                    <Link to={`/customers/${account.customer.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                       {account.customer.name}
                     </Link>
                     {account.isOverdue && <Badge tone="danger">{account.daysOutstanding}d overdue</Badge>}

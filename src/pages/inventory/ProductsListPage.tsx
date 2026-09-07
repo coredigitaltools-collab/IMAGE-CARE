@@ -141,14 +141,14 @@ export function ProductsListPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name, SKU, or barcode..."
-            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
           aria-label="Filter by category"
-          className="rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
         >
           <option value="all">All categories</option>
           {(categoriesQuery.data ?? []).filter((c) => c.is_active).map((c) => (
@@ -161,7 +161,7 @@ export function ProductsListPage() {
           value={supplierFilter}
           onChange={(e) => setSupplierFilter(e.target.value)}
           aria-label="Filter by supplier"
-          className="rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
         >
           <option value="all">All suppliers</option>
           {(suppliersQuery.data ?? []).map((s) => (
@@ -175,7 +175,7 @@ export function ProductsListPage() {
             type="checkbox"
             checked={showArchived}
             onChange={(e) => setShowArchived(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
           />
           Show archived
         </label>
@@ -199,7 +199,7 @@ export function ProductsListPage() {
           <ul className="divide-y divide-ink-100">
             {filtered.map((product) => (
               <li key={product.id} className="flex flex-wrap items-center gap-4 p-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-surface-2">
                   {product.imageDataUrl ? (
                     <img src={product.imageDataUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
@@ -207,7 +207,7 @@ export function ProductsListPage() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <Link to={`/inventory/products/${product.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/inventory/products/${product.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                     {product.name}
                   </Link>
                   <p className="text-xs text-ink-500">

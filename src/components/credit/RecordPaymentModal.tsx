@@ -1,8 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
 import type { CreditPayment } from '../../types/sales'
@@ -33,6 +34,7 @@ interface RecordPaymentModalProps {
 export function RecordPaymentModal({ customerName, outstandingBalance, onClose, onSubmit, submitError }: RecordPaymentModalProps) {
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { amount: outstandingBalance, method: 'cash', reference: '' } })
@@ -40,10 +42,16 @@ export function RecordPaymentModal({ customerName, outstandingBalance, onClose, 
   return (
     <Modal title={`Record payment, ${customerName}`} onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <p className="rounded-md bg-ink-50 px-3 py-2 text-xs text-ink-500">
+        <p className="rounded-md bg-surface-2 px-3 py-2 text-xs text-ink-500">
           Outstanding balance: <span className="font-medium text-ink-900">{formatCurrency(outstandingBalance, 'UGX')}</span>
         </p>
-        <FormField label="Amount received (UGX)" type="number" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
+        <Controller
+          name="amount"
+          control={control}
+          render={({ field }) => (
+            <NumberField label="Amount received (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.amount?.message} />
+          )}
+        />
         <div>
           <label htmlFor="pay-method" className="mb-1.5 block text-sm font-medium text-ink-700">
             Payment method
@@ -51,7 +59,7 @@ export function RecordPaymentModal({ customerName, outstandingBalance, onClose, 
           <select
             id="pay-method"
             {...register('method')}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           >
             {METHODS.map((m) => (
               <option key={m} value={m}>

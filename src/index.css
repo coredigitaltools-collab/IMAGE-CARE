@@ -59,6 +59,26 @@
   --color-warning-500: #D97706;
   --color-warning-100: #FEF3C7;
 
+  /* Dark-mode support (2026-09-07, "appearance should be dark/light/
+     standard mode"): these three are NEW tokens, not present before. They
+     exist so the ~180 places across the app that used the literal Tailwind
+     `white` color (card/modal/input/dropdown backgrounds) and the ~115
+     places that used `ink-50` as a muted panel/hover tint have something
+     theme-aware to point at instead - `white` and the workspace-background
+     role of `ink-50` both still need to stay put for other uses (see the
+     dark override block below), so this app's actual card-surface color
+     needed its own name. `accent` exists for the same reason: `text-
+     brand-blue-700` was used ~115 times as a plain accent/link/icon color
+     on ordinary surfaces (not paired with its own colored background), but
+     `brand-blue-700` is ALSO the app's solid button-background color
+     (paired with `text-white`, unrelated to page theme) - one CSS variable
+     can't be "stay near-black for buttons" AND "get lighter for text
+     contrast on a dark surface" at the same time, so the accent-text case
+     got its own token, replacing every `text-brand-blue-700` used that way. */
+  --color-surface:   #FFFFFF;
+  --color-surface-2: #F8FAFC;
+  --color-accent:    #0F172A;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
@@ -70,6 +90,78 @@
      the cheapest way to give the whole app the chunkier, more modern
      corner radius the user's reference screenshot has. */
   --radius-card: 1rem;
+}
+
+/* ---- Dark mode ----------------------------------------------
+   Applied by setting data-theme="dark" on <html> (see
+   src/lib/theme.ts / AppearanceSettingsPage.tsx) - resolved from the
+   user's saved Appearance -> Theme preference (Light / Dark / System).
+   Every Tailwind utility generated from the @theme block above compiles
+   to `color: var(--color-ink-900)` etc rather than a baked-in hex value
+   (confirmed against the production build's output CSS), so redeclaring
+   these same custom properties here is enough to re-theme every card,
+   button, input, and page that already uses them - no per-component
+   changes needed for the ~90% of the app built from these tokens.
+
+   Three token families intentionally do NOT flip here, because they're
+   also used as solid, self-contained fills paired with their own
+   `text-white` (buttons, filled badges/pills) - changing them would
+   break THAT contrast instead of fixing this one:
+     - brand-blue-500/700/900 (primary buttons, sidebar, focus accent)
+     - brand-red-500/700 danger-button fill, success-500/warning-500 (icons/dots)
+   Their light "-50/-100" tint counterparts (used only as tab/badge
+   backgrounds, always paired with -700 text) DO flip below, alongside the
+   -700 text tone they're paired with - see Badge.tsx/*Tabs.tsx for the
+   pattern this follows. */
+:root[data-theme="dark"] {
+  /* Tells the browser to render its own native widgets (select
+     dropdown menus, date/time picker popups, checkboxes, scrollbar
+     fallback where the ::-webkit-scrollbar rules below don't apply)
+     in dark style instead of their default white - those aren't
+     drawn from these CSS variables at all, only this property reaches
+     them. */
+  color-scheme: dark;
+
+  /* Text / border / divider scale - inverted */
+  --color-ink-900: #F1F5F9;
+  --color-ink-700: #CBD5E1;
+  --color-ink-500: #94A3B8;
+  --color-ink-400: #64748B;
+  --color-ink-300: #475569;
+  --color-ink-100: #334155;
+  --color-ink-50:  #0B1120; /* workspace/page background (body{}, below) */
+
+  /* Card/modal/input surface (was literal `white`) and its one-step-up
+     hover/muted-panel tone (was `ink-50` reused for that role in light
+     mode - see the token comment above for why they had to split). */
+  --color-surface:   #111827;
+  --color-surface-2: #1E293B;
+
+  /* Accent text/icon/border (was `brand-blue-700` reused for that role -
+     see token comment above) - lightened for contrast on a dark surface;
+     the brand-blue-500 "Electric Blue" accent stays as-is, it's already
+     bright enough to read on light or dark. */
+  --color-accent: #60A5FA;
+
+  /* Tint backgrounds for badges/tabs/pills, paired with their -700 text
+     (which lightens directly, below - none of these are also a solid
+     button fill, confirmed by search, so no split needed for them). */
+  --color-brand-blue-50:  #16233A;
+  --color-brand-blue-100: #1C3A5E;
+  --color-brand-red-50:   #2E1614;
+  --color-brand-red-100:  #3F211E;
+  --color-brand-red-700:  #F87171;
+  --color-success-100:    #0F3823;
+  --color-success-700:    #4ADE80;
+  --color-warning-100:    #422C06;
+  --color-warning-700:    #FBBF24;
+
+  /* Light-mode shadows read as a faint edge on white; on a dark surface
+     they'd be invisible, so dark mode leans on a visible border plus a
+     true black shadow for elevation instead. */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 0 rgb(0 0 0 / 0.4);
+  --shadow-card-hover: 0 4px 14px 0 rgb(0 0 0 / 0.5), 0 2px 4px 0 rgb(0 0 0 / 0.4);
+  --shadow-sidebar: 1px 0 0 0 rgb(0 0 0 / 0.3);
 }
 
 html {

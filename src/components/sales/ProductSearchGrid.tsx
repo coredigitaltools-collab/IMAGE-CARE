@@ -78,7 +78,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
           onKeyDown={handleKeyDown}
           placeholder="Search product or scan barcode... (F2)"
           autoFocus
-          className="w-full rounded-md border border-ink-200 bg-white py-3 pl-10 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500 focus:ring-2 focus:ring-brand-blue-100"
+          className="w-full rounded-md border border-ink-200 bg-surface py-3 pl-10 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500 focus:ring-2 focus:ring-brand-blue-100"
         />
       </div>
 
@@ -89,7 +89,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
             className={
               categoryId === 'all'
                 ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
             }
           >
             All
@@ -101,7 +101,7 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
               className={
                 categoryId === c.id
                   ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                  : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                  : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
               }
             >
               {c.name}
@@ -134,10 +134,10 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
                 onClick={() => !outOfStock && onAdd(product)}
                 disabled={outOfStock}
                 aria-disabled={outOfStock}
-                className="group relative flex flex-col items-start gap-1 overflow-hidden rounded-card border border-ink-100 bg-white p-3 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-ink-100 disabled:hover:shadow-card"
+                className="group relative flex flex-col items-start gap-1 overflow-hidden rounded-card border border-ink-100 bg-surface p-3 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:border-ink-100 disabled:hover:shadow-card"
               >
                 {outOfStock && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-[1px]">
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface/80 backdrop-blur-[1px]">
                     <span className="flex items-center gap-1 rounded-full bg-brand-red-100 px-2.5 py-1 text-[11px] font-semibold text-brand-red-700">
                       <PackageX size={11} /> Out of stock
                     </span>
@@ -146,12 +146,12 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
                 {!outOfStock && (
                   <span
                     aria-hidden="true"
-                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-colors group-hover:bg-brand-blue-700 group-hover:text-white"
+                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-colors group-hover:bg-brand-blue-700 group-hover:text-white"
                   >
                     <Plus size={13} strokeWidth={2.5} />
                   </span>
                 )}
-                <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-ink-50">
+                <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-surface-2">
                   {product.imageDataUrl ? (
                     <img src={product.imageDataUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
@@ -162,12 +162,12 @@ export const ProductSearchGrid = forwardRef<ProductSearchGridHandle, ProductSear
                 <div className="flex flex-wrap items-center gap-1">
                   <span className="text-[10px] text-ink-500">{product.sku}</span>
                   {categoryName(product.categoryId) && (
-                    <span className="rounded-full bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium text-ink-500">
+                    <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-ink-500">
                       {categoryName(product.categoryId)}
                     </span>
                   )}
                 </div>
-                <p className="text-xs font-semibold text-brand-blue-700">{formatCurrency(product.sellingPrice, 'UGX')}</p>
+                <p className="text-xs font-semibold text-accent">{formatCurrency(product.sellingPrice, 'UGX')}</p>
                 {!outOfStock && (
                   <p className={`text-[10px] ${product.currentStock <= product.reorderLevel ? 'text-warning-700' : 'text-ink-500'}`}>
                     {product.currentStock} in stock

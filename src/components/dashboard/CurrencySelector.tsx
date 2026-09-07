@@ -21,7 +21,7 @@ export function CurrencySelector({ selected, onChange }: CurrencySelectorProps) 
         value={selected}
         onChange={(e) => onChange(e.target.value as SupportedCurrency)}
         aria-label="Select reporting currency"
-        className="appearance-none rounded-md border border-ink-100 bg-white py-2 pl-9 pr-8 text-sm font-medium text-ink-900 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500"
+        className="appearance-none rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-8 text-sm font-medium text-ink-900 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500"
       >
         {SUPPORTED_CURRENCIES.map((currency) => (
           <option key={currency} value={currency}>

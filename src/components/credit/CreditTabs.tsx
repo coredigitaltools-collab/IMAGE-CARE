@@ -25,8 +25,8 @@ export function CreditTabs() {
             aria-current={isActive ? 'page' : undefined}
             className={
               isActive
-                ? 'rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-brand-blue-700'
-                : 'rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-ink-50 hover:text-ink-900'
+                ? 'rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-accent'
+                : 'rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-surface-2 hover:text-ink-900'
             }
           >
             {tab.label}

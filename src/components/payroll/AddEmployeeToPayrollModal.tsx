@@ -48,7 +48,7 @@ export function AddEmployeeToPayrollModal({ eligibleStaff, roles, onClose, onSub
               id="ep-staff"
               value={staffId}
               onChange={(e) => setStaffId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {eligibleStaff.map((s) => (
                 <option key={s.id} value={s.id}>

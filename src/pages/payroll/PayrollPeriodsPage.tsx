@@ -70,7 +70,7 @@ export function PayrollPeriodsPage() {
             {(periodsQuery.data ?? []).map((period) => (
               <li key={period.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <Link to={`/payroll/periods/${period.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/payroll/periods/${period.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                     {period.reference}
                   </Link>
                   <p className="text-xs text-ink-500">

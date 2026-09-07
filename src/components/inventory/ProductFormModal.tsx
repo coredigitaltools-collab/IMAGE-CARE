@@ -96,14 +96,14 @@ export function ProductFormModal({
     <Modal title={isEditing ? 'Edit product' : 'Add product'} onClose={onClose} size="lg">
       <form onSubmit={submit} className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
         <div className="flex items-center gap-3">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-surface-2">
             {imageDataUrl ? (
               <img src={imageDataUrl} alt="" className="h-full w-full object-cover" />
             ) : (
               <Upload size={18} className="text-ink-300" />
             )}
           </div>
-          <label className="cursor-pointer rounded-md border border-ink-100 bg-white px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50">
+          <label className="cursor-pointer rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2">
             Upload image
             <input
               type="file"
@@ -137,7 +137,7 @@ export function ProductFormModal({
             <select
               id="pf-category"
               {...register('categoryId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -152,7 +152,7 @@ export function ProductFormModal({
             <select
               id="pf-brand"
               {...register('brandId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               <option value="">None</option>
               {brands.map((b) => (
@@ -180,7 +180,7 @@ export function ProductFormModal({
             <select
               id="pf-supplier"
               {...register('supplierId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               <option value="">None</option>
               {suppliers.map((s) => (
@@ -198,7 +198,7 @@ export function ProductFormModal({
             id="pf-description"
             {...register('description')}
             rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
 

@@ -24,7 +24,7 @@ export function CurrentStockPage() {
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Current Stock</h1>
         <p className="mt-0.5 text-sm text-ink-500">
           Every active product, lowest stock first. For editing or creating products, use{' '}
-          <Link to="/inventory/products" className="text-brand-blue-700 hover:underline">
+          <Link to="/inventory/products" className="text-accent hover:underline">
             Inventory
           </Link>
           .
@@ -41,7 +41,7 @@ export function CurrentStockPage() {
             {rows.map((row) => (
               <li key={row.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                 <div className="min-w-0">
-                  <Link to={`/inventory/products/${row.id}`} className="font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/inventory/products/${row.id}`} className="font-medium text-ink-900 hover:text-accent">
                     {row.name}
                   </Link>
                   <p className="text-xs text-ink-500">{row.sku}</p>

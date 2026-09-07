@@ -43,7 +43,7 @@ export function PayrollReportsPage() {
               <li key={period.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Link to={`/payroll/periods/${period.id}`} className="font-medium text-ink-900 hover:text-brand-blue-700">
+                    <Link to={`/payroll/periods/${period.id}`} className="font-medium text-ink-900 hover:text-accent">
                       {period.reference}
                     </Link>
                     <Badge tone={STATUS_TONE[period.status]}>{PAYROLL_STATUS_LABELS[period.status]}</Badge>

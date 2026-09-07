@@ -37,7 +37,7 @@ export function CashLedgerPage() {
             className={
               filter === f
                 ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
             }
           >
             {f === 'all' ? 'All' : f === 'in' ? 'Cash Inflows' : 'Cash Outflows'}

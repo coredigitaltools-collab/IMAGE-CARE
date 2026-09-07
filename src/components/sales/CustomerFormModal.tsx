@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { AlertTriangle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
 import { FormRow } from '../settings/FormRow'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import { useFindDuplicateCustomers } from '../../features/sales/hooks/useSalesData'
 import { useBranches } from '../../features/settings/hooks/useSettingsData'
@@ -48,6 +49,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
 
   const {
     register,
+    control,
     handleSubmit,
     getValues,
     formState: { errors, isSubmitting },
@@ -119,7 +121,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
           <button
             type="button"
             onClick={() => setShowMoreDetails(true)}
-            className="text-xs font-medium text-brand-blue-700 hover:underline"
+            className="text-xs font-medium text-accent hover:underline"
           >
             + Add address, status, and preferences
           </button>
@@ -134,7 +136,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 <select
                   id="cf-status"
                   {...register('status')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
                 >
                   {CUSTOMER_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -153,7 +155,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 <select
                   id="cf-branch"
                   {...register('preferredBranchId')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
                 >
                   <option value="">None</option>
                   {(branchesQuery.data ?? []).map((b) => (
@@ -170,7 +172,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 <select
                   id="cf-payment"
                   {...register('preferredPaymentMethod')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
                 >
                   <option value="">None</option>
                   {PAYMENT_METHODS.map((m) => (
@@ -181,14 +183,21 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 </select>
               </div>
             </FormRow>
-            <FormField
-              id="cf-credit-limit"
-              label="Credit limit (UGX)"
-              type="number"
-              min={0}
-              hint="0 = no explicit limit set."
-              {...register('creditLimit', { valueAsNumber: true })}
-              error={errors.creditLimit?.message}
+            <Controller
+              name="creditLimit"
+              control={control}
+              render={({ field }) => (
+                <NumberField
+                  id="cf-credit-limit"
+                  label="Credit limit (UGX)"
+                  min={0}
+                  hint="0 = no explicit limit set."
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  error={errors.creditLimit?.message}
+                />
+              )}
             />
             <div>
               <label htmlFor="cf-notes" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -198,7 +207,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 id="cf-notes"
                 {...register('notes')}
                 rows={3}
-                className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
               />
             </div>
           </>
@@ -227,7 +236,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                     setDuplicates([])
                     onSubmit(buildInput(getValues()))
                   }}
-                  className="mt-2 text-xs font-medium text-brand-blue-700 hover:underline"
+                  className="mt-2 text-xs font-medium text-accent hover:underline"
                 >
                   Create as a new customer anyway
                 </button>

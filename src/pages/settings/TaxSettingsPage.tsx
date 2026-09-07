@@ -61,7 +61,7 @@ export function TaxSettingsPage() {
                 </div>
                 <button
                   onClick={() => setModalState({ mode: 'edit', rate })}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                  className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                 >
                   Edit
                 </button>

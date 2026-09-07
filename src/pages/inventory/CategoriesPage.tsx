@@ -65,13 +65,13 @@ export function CategoriesPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => setMergeSource(category)}
-                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                     >
                       <GitMerge size={12} /> Merge
                     </button>
                     <button
                       onClick={() => setModalState({ mode: 'edit', category })}
-                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                     >
                       Edit
                     </button>

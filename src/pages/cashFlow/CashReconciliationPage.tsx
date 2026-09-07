@@ -4,7 +4,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CashFlowTabs } from '../../components/cashFlow/CashFlowTabs'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
@@ -42,14 +42,7 @@ export function CashReconciliationPage() {
             <p className="text-lg font-semibold text-ink-900">{formatCurrency(systemAmount, 'UGX')}</p>
           </div>
           <div>
-            <FormField
-              id="recon-counted"
-              label="Physically counted amount (UGX)"
-              type="number"
-              min={0}
-              value={countedAmount}
-              onChange={(e) => setCountedAmount(Number(e.target.value))}
-            />
+            <NumberField id="recon-counted" label="Physically counted amount (UGX)" min={0} value={countedAmount} onChange={setCountedAmount} />
           </div>
         </div>
 
@@ -72,7 +65,7 @@ export function CashReconciliationPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
 
@@ -80,7 +73,9 @@ export function CashReconciliationPage() {
           onClick={async () => {
             await recordReconciliation.mutateAsync({ countedAmountUgx: countedAmount, notes })
             showToast(
-              variance === 0 ? 'Reconciliation logged, no variance.' : 'Reconciliation logged, variance recorded as a cash adjustment.',
+              variance === 0
+                ? 'Count logged - it matches the system exactly.'
+                : 'Count logged - the difference has been recorded as a cash adjustment.',
               'success',
             )
             setCountedAmount(0)

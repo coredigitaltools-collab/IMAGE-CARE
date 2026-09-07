@@ -115,7 +115,7 @@ export function ExpenseFormModal({
             value={expenseDate}
             onChange={(e) => setExpenseDate(e.target.value)}
             disabled={lockAmount}
-            className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500 disabled:bg-ink-50 disabled:text-ink-400"
+            className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500 disabled:bg-surface-2 disabled:text-ink-400"
           />
         </div>
 
@@ -130,7 +130,7 @@ export function ExpenseFormModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
 
@@ -153,7 +153,7 @@ export function ExpenseFormModal({
         <div>
           <label className="mb-2 block text-sm font-medium text-ink-700">Receipt (optional)</label>
           {attachment ? (
-            <div className="flex items-center justify-between rounded-lg bg-ink-50 px-4 py-3 text-sm">
+            <div className="flex items-center justify-between rounded-lg bg-surface-2 px-4 py-3 text-sm">
               <span className="flex items-center gap-1.5 text-ink-700">
                 <Paperclip size={14} /> {attachment.fileName}
               </span>
@@ -166,7 +166,7 @@ export function ExpenseFormModal({
               type="file"
               accept="image/*,application/pdf"
               onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              className="w-full text-sm text-ink-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-brand-blue-700 hover:file:bg-brand-blue-100"
+              className="w-full text-sm text-ink-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-accent hover:file:bg-brand-blue-100"
             />
           )}
           {attachmentError && <p className="mt-1.5 text-xs text-brand-red-700">{attachmentError}</p>}

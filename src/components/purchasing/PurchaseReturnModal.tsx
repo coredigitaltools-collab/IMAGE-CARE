@@ -51,7 +51,7 @@ export function PurchaseReturnModal({ suppliers, products, onClose, onSubmit, su
             id="ret-supplier"
             value={supplierId}
             onChange={(e) => setSupplierId(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             {suppliers.length === 0 && <option value="">No suppliers yet</option>}
             {suppliers.map((s) => (
@@ -75,7 +75,7 @@ export function PurchaseReturnModal({ suppliers, products, onClose, onSubmit, su
             onChange={(e) => setReason(e.target.value)}
             rows={3}
             placeholder="e.g. Damaged on arrival, wrong item shipped"
-            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}

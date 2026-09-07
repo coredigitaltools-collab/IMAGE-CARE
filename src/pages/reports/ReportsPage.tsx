@@ -314,8 +314,8 @@ export function ReportsPage() {
                   onClick={() => setActiveTab(tab)}
                   className={
                     activeTab === tab
-                      ? 'flex items-center gap-1.5 whitespace-nowrap rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-brand-blue-700'
-                      : 'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-ink-50 hover:text-ink-900'
+                      ? 'flex items-center gap-1.5 whitespace-nowrap rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-accent'
+                      : 'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-surface-2 hover:text-ink-900'
                   }
                 >
                   <Icon size={14} />

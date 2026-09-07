@@ -127,13 +127,13 @@ export function PayrollEmployeesPage() {
                     })}
                     <button
                       onClick={() => setAssigningFor({ employee: emp, kind: 'allowance' })}
-                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-ink-50"
+                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-surface-2"
                     >
                       + Allowance
                     </button>
                     <button
                       onClick={() => setAssigningFor({ employee: emp, kind: 'deduction' })}
-                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-ink-50"
+                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-surface-2"
                     >
                       + Deduction
                     </button>

@@ -23,7 +23,7 @@ export function BillsSettingsPage() {
       <Card className="mt-4 p-5">
         <p className="text-sm text-ink-700">
           Bills are recorded as Supplier Invoices under{' '}
-          <Link to="/purchasing/invoices" className="text-brand-blue-700 hover:underline">
+          <Link to="/purchasing/invoices" className="text-accent hover:underline">
             Purchasing → Invoices
           </Link>{' '}
          , due dates and payment terms are set there, at the point a bill is created. This module tracks what's owed and manages payment,

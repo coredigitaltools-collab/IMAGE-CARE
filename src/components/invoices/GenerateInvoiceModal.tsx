@@ -43,7 +43,7 @@ export function GenerateInvoiceModal({ uninvoicedSales, defaultDueDays, onClose,
               id="gi-sale"
               value={saleId}
               onChange={(e) => setSaleId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {uninvoicedSales.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -61,7 +61,7 @@ export function GenerateInvoiceModal({ uninvoicedSales, defaultDueDays, onClose,
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
           {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}

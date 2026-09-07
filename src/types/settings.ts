@@ -175,6 +175,11 @@ export interface NotificationSettings extends AuditFields {
 // ---------- Appearance Settings (singleton) ----------
 
 export interface AppearanceSettings extends AuditFields {
+  // Added 2026-09-07 ("appearance should be dark/light/standard mode") -
+  // the underlying settings store already had an inert `theme: 'light'`
+  // default in useSettingsData.ts that nothing read or wrote; this wires
+  // it up for real. 'system' follows the OS/browser's light-dark setting.
+  theme: 'light' | 'dark' | 'system'
   density: 'comfortable' | 'compact'
   dateFormat: 'DD/MM/YYYY' | 'MM/DD/YYYY'
 }

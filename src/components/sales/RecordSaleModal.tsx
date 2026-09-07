@@ -224,7 +224,7 @@ function SaleDetailsToggle({
               id="pos-branch"
               value={branchId ?? ''}
               onChange={(e) => onBranchChange(e.target.value || null)}
-              className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -243,7 +243,7 @@ function SaleDetailsToggle({
               id="pos-sold-by"
               value={salesPersonId ?? ''}
               onChange={(e) => onSalesPersonChange(e.target.value || null)}
-              className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               <option value="">Unassigned</option>
               {staff.map((s) => (

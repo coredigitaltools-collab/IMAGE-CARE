@@ -42,7 +42,7 @@ export function LowStockPreviewPanel({ products, isLoading }: LowStockPreviewPan
               <div className="min-w-0 flex-1">
                 <Link
                   to={`/inventory/products/${product.id}`}
-                  className="truncate text-sm font-medium text-ink-900 hover:text-brand-blue-700"
+                  className="truncate text-sm font-medium text-ink-900 hover:text-accent"
                 >
                   {product.name}
                 </Link>

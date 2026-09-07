@@ -54,7 +54,7 @@ export function BackupRestorePage() {
       <div className="flex flex-col gap-6">
         <Card className="p-5">
           <div className="flex items-start gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-blue-50 text-brand-blue-700">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-blue-50 text-accent">
               <DatabaseBackup size={20} strokeWidth={1.75} />
             </span>
             <div className="flex-1">

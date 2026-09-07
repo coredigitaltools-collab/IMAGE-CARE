@@ -12,7 +12,7 @@ interface InventoryFilterBarProps {
 }
 
 const selectClass =
-  'rounded-md border border-ink-100 bg-white px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500'
+  'rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500'
 
 export function InventoryFilterBar({ categories, suppliers, brands, branches, filters, onChange }: InventoryFilterBarProps) {
   const set = (key: keyof InventoryFilters) => (e: React.ChangeEvent<HTMLSelectElement>) =>
@@ -67,7 +67,7 @@ export function InventoryFilterBar({ categories, suppliers, brands, branches, fi
       {hasActiveFilters && (
         <button
           onClick={() => onChange(EMPTY_FILTERS)}
-          className="text-xs font-medium text-brand-blue-700 hover:underline"
+          className="text-xs font-medium text-accent hover:underline"
         >
           Clear filters
         </button>

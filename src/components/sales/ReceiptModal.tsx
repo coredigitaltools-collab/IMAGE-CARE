@@ -65,12 +65,12 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
     // instead of an arbitrary z-50 so the receipt also paints above the
     // fixed sidebar (var(--z-sticky)) instead of underneath it.
     <div className="fixed inset-0 flex items-center justify-center p-4 print:static print:p-0" style={{ zIndex: 'var(--z-modal)' }}>
-      <div className="absolute inset-0 bg-ink-900/40 print:hidden" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-black/40 print:hidden" onClick={onClose} aria-hidden="true" />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Receipt"
-        className="relative w-full max-w-sm rounded-card border border-ink-100 bg-white shadow-card-hover print:max-w-none print:border-0 print:shadow-none"
+        className="relative w-full max-w-sm rounded-card border border-ink-100 bg-surface shadow-card-hover print:max-w-none print:border-0 print:shadow-none"
       >
         <div className="border-b border-ink-100 p-4 print:hidden">
           <div className="flex items-start justify-between">
@@ -83,7 +83,7 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
                 <p className="text-xs text-ink-500">Receipt {sale.reference}</p>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-md p-1 text-ink-500 hover:bg-ink-50" aria-label="Close">
+            <button onClick={onClose} className="rounded-md p-1 text-ink-500 hover:bg-surface-2" aria-label="Close">
               <X size={18} />
             </button>
           </div>

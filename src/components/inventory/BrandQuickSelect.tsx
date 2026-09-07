@@ -68,7 +68,7 @@ export function BrandQuickSelect({ id, brands, value, onChange, userId, error }:
               }
             }}
             placeholder="Type a brand name..."
-            className="w-full rounded-md border border-brand-blue-500 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-brand-blue-500 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
           <button
             type="button"
@@ -81,7 +81,7 @@ export function BrandQuickSelect({ id, brands, value, onChange, userId, error }:
           <button
             type="button"
             onClick={() => setIsCreating(false)}
-            className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+            className="shrink-0 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-700 hover:bg-surface-2"
           >
             Cancel
           </button>
@@ -99,7 +99,7 @@ export function BrandQuickSelect({ id, brands, value, onChange, userId, error }:
         id={id}
         value={value}
         onChange={handleSelectChange}
-        className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
       >
         <option value="">None</option>
         {brands.map((b) => (

@@ -4,7 +4,7 @@ import type { SyncStatus } from '../../types/domain'
 
 const CONFIG = {
   synced: { icon: CloudCheck, dot: 'bg-success-500', text: 'text-success-700', label: 'Synced' },
-  syncing: { icon: RefreshCw, dot: 'bg-brand-blue-500', text: 'text-brand-blue-700', label: 'Syncing' },
+  syncing: { icon: RefreshCw, dot: 'bg-brand-blue-500', text: 'text-accent', label: 'Syncing' },
   offline: { icon: CloudOff, dot: 'bg-ink-300', text: 'text-ink-500', label: 'Offline' },
   error: { icon: CloudAlert, dot: 'bg-brand-red-500', text: 'text-brand-red-700', label: 'Sync issue' },
 } as const
@@ -15,7 +15,7 @@ export function SyncStatusIndicator({ status }: { status?: SyncStatus }) {
 
   return (
     <div
-      className="flex items-center gap-2 rounded-full border border-ink-100 bg-white py-1.5 pl-2.5 pr-3 text-xs shadow-card"
+      className="flex items-center gap-2 rounded-full border border-ink-100 bg-surface py-1.5 pl-2.5 pr-3 text-xs shadow-card"
       role="status"
       aria-live="polite"
     >

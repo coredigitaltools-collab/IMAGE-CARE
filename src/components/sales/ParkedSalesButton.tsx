@@ -21,7 +21,7 @@ export function ParkedSalesButton({ parkedSales, onResume, onDelete }: ParkedSal
         onBlur={(e) => {
           if (!containerRef.current?.contains(e.relatedTarget as Node)) setIsOpen(false)
         }}
-        className="relative flex items-center gap-1.5 rounded-md border border-ink-100 bg-white px-3 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:bg-ink-50"
+        className="relative flex items-center gap-1.5 rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:bg-surface-2"
       >
         <Clock size={13} />
         On Hold
@@ -33,7 +33,7 @@ export function ParkedSalesButton({ parkedSales, onResume, onDelete }: ParkedSal
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-20 mt-1.5 w-72 overflow-hidden rounded-md border border-ink-100 bg-white shadow-card-hover">
+        <div className="absolute right-0 z-20 mt-1.5 w-72 overflow-hidden rounded-md border border-ink-100 bg-surface shadow-card-hover">
           <div className="border-b border-ink-100 px-3 py-2">
             <p className="text-xs font-semibold text-ink-900">Sales on hold</p>
           </div>

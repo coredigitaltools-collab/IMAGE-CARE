@@ -729,7 +729,7 @@ export function PointOfSalePage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by product, reference or customer..."
-            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-8 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-8 pr-3 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -740,7 +740,7 @@ export function PointOfSalePage() {
               className={
                 statusFilter === s
                   ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                  : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                  : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
               }
             >
               {s === 'all' ? 'All' : STATUS_LABEL[s]}
@@ -779,7 +779,7 @@ export function PointOfSalePage() {
               </thead>
               <tbody className="divide-y divide-ink-100">
                 {filteredSales.map((sale) => (
-                  <tr key={sale.id} className="hover:bg-ink-50/60">
+                  <tr key={sale.id} className="hover:bg-surface-2/60">
                     <td className="whitespace-nowrap px-4 py-3 text-ink-500">{new Date(sale.createdAt).toLocaleDateString('en-UG')}</td>
                     <td className="px-4 py-3 font-medium text-ink-900">{productSummary(sale)}</td>
                     <td className="px-4 py-3 text-ink-700">{customerName(sale.customerId)}</td>

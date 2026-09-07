@@ -33,7 +33,7 @@ export function LoyaltyReportsPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
-            <Award size={16} className="text-brand-blue-700" />
+            <Award size={16} className="text-accent" />
             <h2 className="text-sm font-semibold text-ink-900">Top members by points</h2>
           </div>
           {topMembersQuery.isLoading ? (
@@ -44,7 +44,7 @@ export function LoyaltyReportsPage() {
             <ul className="divide-y divide-ink-100">
               {(topMembersQuery.data ?? []).map((m) => (
                 <li key={m.customerId} className="flex items-center justify-between py-2 text-sm">
-                  <Link to={`/customers/${m.customerId}`} className="text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/customers/${m.customerId}`} className="text-ink-900 hover:text-accent">
                     {m.customerName}
                   </Link>
                   <span className="font-medium text-ink-900">{m.pointsBalance} pts</span>
@@ -56,7 +56,7 @@ export function LoyaltyReportsPage() {
 
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
-            <History size={16} className="text-brand-blue-700" />
+            <History size={16} className="text-accent" />
             <h2 className="text-sm font-semibold text-ink-900">Recent activity</h2>
           </div>
           {transactionsQuery.isLoading ? (

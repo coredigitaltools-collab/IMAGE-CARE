@@ -60,7 +60,7 @@ export function BillsReportsPage() {
                   <ul className="divide-y divide-ink-100">
                     {bucket.rows.map((row) => (
                       <li key={row.bill.id} className="flex items-center justify-between py-2 text-sm">
-                        <Link to={`/bills/${row.bill.id}`} className="text-ink-900 hover:text-brand-blue-700">
+                        <Link to={`/bills/${row.bill.id}`} className="text-ink-900 hover:text-accent">
                           {row.bill.reference} · {row.supplierName}
                         </Link>
                         <span className="font-medium text-ink-900">{formatCurrency(row.amountOwed, 'UGX')}</span>
@@ -78,7 +78,7 @@ export function BillsReportsPage() {
         <select
           value={statementSupplierId}
           onChange={(e) => setStatementSupplierId(e.target.value)}
-          className="mb-4 w-full max-w-sm rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+          className="mb-4 w-full max-w-sm rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
         >
           <option value="">Select a supplier…</option>
           {activeSuppliers.map((s) => (

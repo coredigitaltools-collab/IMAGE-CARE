@@ -71,7 +71,7 @@ export function AssignComponentModal({ kind, availableTypes, userId, onClose, on
               id="ac-type"
               value={componentTypeId}
               onChange={(e) => setComponentTypeId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {availableTypes.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -82,7 +82,7 @@ export function AssignComponentModal({ kind, availableTypes, userId, onClose, on
             <button
               type="button"
               onClick={() => setIsCreatingType(true)}
-              className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+              className="shrink-0 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-700 hover:bg-surface-2"
             >
               + New
             </button>
@@ -93,7 +93,7 @@ export function AssignComponentModal({ kind, availableTypes, userId, onClose, on
             type="checkbox"
             checked={useOverride}
             onChange={(e) => setUseOverride(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
           />
           Override the default amount for this employee
         </label>

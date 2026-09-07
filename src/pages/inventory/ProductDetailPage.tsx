@@ -250,7 +250,7 @@ export function ProductDetailPage() {
             onClick={() => setTab(t)}
             className={
               tab === t
-                ? 'border-b-2 border-brand-blue-700 px-3 py-2 text-sm font-medium text-brand-blue-700'
+                ? 'border-b-2 border-accent px-3 py-2 text-sm font-medium text-accent'
                 : 'border-b-2 border-transparent px-3 py-2 text-sm text-ink-500 hover:text-ink-900'
             }
           >
@@ -268,7 +268,7 @@ export function ProductDetailPage() {
                 <input
                   id="pd-name"
                   {...generalForm.register('name')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
                 />
               </div>
               <div>
@@ -276,7 +276,7 @@ export function ProductDetailPage() {
                 <input
                   id="pd-sku"
                   {...generalForm.register('sku')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
                 />
               </div>
             </div>
@@ -303,7 +303,7 @@ export function ProductDetailPage() {
                 id="pd-description"
                 {...generalForm.register('description')}
                 rows={3}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
               />
             </div>
             <div className="flex justify-end">
@@ -385,7 +385,7 @@ export function ProductDetailPage() {
                     type="checkbox"
                     checked={selectedBranchIds.includes(b.id)}
                     onChange={() => toggleBranch(b.id)}
-                    className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+                    className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
                   />
                   {b.name}
                 </label>
@@ -482,7 +482,7 @@ export function ProductDetailPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={6}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
           />
           <div className="mt-3 flex justify-end">
             <Button onClick={saveNotes}>Save notes</Button>

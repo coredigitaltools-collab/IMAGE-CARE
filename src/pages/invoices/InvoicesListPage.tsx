@@ -65,7 +65,7 @@ export function InvoicesListPage() {
             className={
               statusFilter === s
                 ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
             }
           >
             {s === 'all' ? 'All' : INVOICE_STATUS_LABELS[s]}
@@ -109,7 +109,7 @@ export function InvoicesListPage() {
                 <li key={inv.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Link to={`/invoices/${inv.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/invoices/${inv.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                         {inv.invoiceNumber}
                       </Link>
                       <Badge tone={STATUS_TONE[status]}>{INVOICE_STATUS_LABELS[status]}</Badge>

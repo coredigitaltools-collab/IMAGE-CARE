@@ -21,7 +21,7 @@ export function ErrorState({
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-ink-100 bg-white px-3.5 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-50"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-ink-100 bg-surface px-3.5 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-surface-2"
         >
           <RotateCw size={14} aria-hidden="true" />
           Try again

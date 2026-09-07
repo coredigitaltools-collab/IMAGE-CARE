@@ -108,7 +108,7 @@ export function PurchaseOrdersPage() {
                 <li key={order.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Link to={`/purchasing/orders/${order.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/purchasing/orders/${order.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                         {order.reference}
                       </Link>
                       <Badge tone={STATUS_TONE[order.status]}>{PO_STATUS_LABELS[order.status]}</Badge>

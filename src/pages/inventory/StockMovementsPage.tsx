@@ -42,7 +42,7 @@ export function StockMovementsPage() {
         <select
           value={productFilter}
           onChange={(e) => setProductFilter(e.target.value)}
-          className="rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          className="rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
         >
           <option value="all">All products</option>
           {productsQuery.data?.map((p) => (

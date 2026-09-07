@@ -81,11 +81,11 @@ export function BranchManagementPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-ink-900">{branch.name}</p>
-                    <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-500">
                       {branch.code}
                     </span>
                     {!branch.is_active && (
-                      <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">Inactive</span>
+                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-500">Inactive</span>
                     )}
                   </div>
                   <p className="text-xs text-ink-500">
@@ -96,13 +96,13 @@ export function BranchManagementPage() {
                 <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     onClick={() => setModalState({ mode: 'edit', branch })}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => setBranchActive.mutate({ id: branch.id, isActive: !branch.is_active })}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                   >
                     {branch.is_active ? 'Deactivate' : 'Reactivate'}
                   </button>

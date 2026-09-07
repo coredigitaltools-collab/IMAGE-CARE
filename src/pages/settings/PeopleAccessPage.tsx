@@ -181,7 +181,7 @@ export function PeopleAccessPage() {
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium text-ink-900">{member.fullName}</p>
                     <RoleBadge roleId={member.role} roleName={roleName(member.role, member.is_owner)} />
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${member.is_active ? 'bg-success-100 text-success-700' : 'bg-ink-50 text-ink-500'}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${member.is_active ? 'bg-success-100 text-success-700' : 'bg-surface-2 text-ink-500'}`}>
                       {member.is_active ? 'ACTIVE' : 'DISABLED'}
                     </span>
                   </div>
@@ -201,14 +201,14 @@ export function PeopleAccessPage() {
                 <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     onClick={() => setModalState({ mode: 'edit', staff: member })}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                   >
                     Edit
                   </button>
                   {!member.is_owner && (
                     <button
                       onClick={() => setResettingPin(member)}
-                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                     >
                       <KeyRound size={13} /> Reset PIN
                     </button>

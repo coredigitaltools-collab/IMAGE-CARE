@@ -78,7 +78,7 @@ export function TargetsListPage() {
             className={
               scopeFilter === s
                 ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
             }
           >
             {s === 'all' ? 'All' : TARGET_SCOPE_LABELS[s]}

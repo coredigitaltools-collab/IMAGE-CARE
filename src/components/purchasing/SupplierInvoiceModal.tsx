@@ -102,7 +102,7 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
                 setSupplierId(e.target.value)
                 setPurchaseOrderId('')
               }}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {suppliers.length === 0 && <option value="">No suppliers yet</option>}
               {suppliers.map((s) => (
@@ -114,7 +114,7 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
             <button
               type="button"
               onClick={() => setIsAddingSupplier(true)}
-              className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+              className="shrink-0 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-700 hover:bg-surface-2"
             >
               + New
             </button>
@@ -128,7 +128,7 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
             id="inv-po"
             value={purchaseOrderId}
             onChange={(e) => handleSelectOrder(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             <option value="">None</option>
             {relatedOrders.map((o) => (
@@ -149,7 +149,7 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
             id="inv-number"
             value={invoiceNumber}
             onChange={(e) => setInvoiceNumber(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -163,7 +163,7 @@ export function SupplierInvoiceModal({ suppliers, orders, userId, onClose, onSub
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
         </div>

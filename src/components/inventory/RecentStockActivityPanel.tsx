@@ -36,7 +36,7 @@ export function RecentStockActivityPanel({ movements, products, isLoading }: Rec
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink-900">Recent stock activity</h2>
-        <Link to="/inventory/movements" className="text-xs font-medium text-brand-blue-700 hover:underline">
+        <Link to="/inventory/movements" className="text-xs font-medium text-accent hover:underline">
           View all
         </Link>
       </div>

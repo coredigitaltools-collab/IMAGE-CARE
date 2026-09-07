@@ -82,7 +82,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
         {isEditing ? (
           <div>
             <p className="mb-1.5 block text-sm font-medium text-ink-700">Who this target is for</p>
-            <p className="rounded-md border border-ink-100 bg-ink-50 px-3 py-2 text-sm text-ink-700">
+            <p className="rounded-md border border-ink-100 bg-surface-2 px-3 py-2 text-sm text-ink-700">
               {scope === 'business'
                 ? 'Business-wide'
                 : scope === 'branch'
@@ -102,7 +102,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
               id="tg-scope"
               value={scope}
               onChange={(e) => setScope(e.target.value as TargetScope)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {SCOPES.map((s) => (
                 <option key={s} value={s}>
@@ -123,7 +123,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
                 id="tg-branch"
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
               >
                 {branches.length === 0 && <option value="">No branches yet</option>}
                 {branches.map((b) => (
@@ -135,7 +135,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
               <button
                 type="button"
                 onClick={() => setIsAddingBranch(true)}
-                className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+                className="shrink-0 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-700 hover:bg-surface-2"
               >
                 + New
               </button>
@@ -152,7 +152,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
               id="tg-staff"
               value={staffId}
               onChange={(e) => setStaffId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {staff.length === 0 && <option value="">No staff yet</option>}
               {staff.map((s) => (
@@ -177,7 +177,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
               type="date"
               value={periodStart}
               onChange={(e) => setPeriodStart(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
           <div>
@@ -189,7 +189,7 @@ export function CreateTargetModal({ branches, staff, userId, onClose, onSubmit, 
               type="date"
               value={periodEnd}
               onChange={(e) => setPeriodEnd(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
         </div>

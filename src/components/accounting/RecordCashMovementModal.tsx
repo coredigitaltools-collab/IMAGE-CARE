@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import type { CashMovementType } from '../../types/accounting'
 import type { BankAccount } from '../../types/bankReconciliation'
 
@@ -39,7 +39,7 @@ export function RecordCashMovementModal({ bankAccounts, onClose, onSubmit, submi
             id="cm-type"
             value={type}
             onChange={(e) => setType(e.target.value as CashMovementType)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             <option value="bank_deposit">Bank Deposit (cash leaving the till, going to the bank)</option>
             <option value="owner_withdrawal">Owner Withdrawal (cash taken out by the owner)</option>
@@ -60,7 +60,7 @@ export function RecordCashMovementModal({ bankAccounts, onClose, onSubmit, submi
                 id="cm-bank-account"
                 value={bankAccountId}
                 onChange={(e) => setBankAccountId(e.target.value)}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
               >
                 {bankAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -71,12 +71,12 @@ export function RecordCashMovementModal({ bankAccounts, onClose, onSubmit, submi
             )}
           </div>
         )}
-        <FormField
+        <NumberField
           id="cm-amount"
           label={type === 'adjustment' ? 'Amount (UGX, negative for a shortfall)' : 'Amount (UGX)'}
-          type="number"
+          allowNegative={type === 'adjustment'}
           value={amount}
-          onChange={(e) => setAmount(Number(e.target.value))}
+          onChange={setAmount}
         />
         <div>
           <label htmlFor="cm-reason" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -88,7 +88,7 @@ export function RecordCashMovementModal({ bankAccounts, onClose, onSubmit, submi
             onChange={(e) => setReason(e.target.value)}
             rows={2}
             placeholder="Why this movement happened, required for every entry"
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}

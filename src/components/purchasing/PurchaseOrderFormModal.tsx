@@ -102,7 +102,7 @@ export function PurchaseOrderFormModal({
           instead of squeezing it into the old default max-w-lg. */}
       <div className="space-y-5">
         {notice && (
-          <p className="rounded-md bg-brand-blue-50 px-3 py-2 text-sm text-brand-blue-700">{notice}</p>
+          <p className="rounded-md bg-brand-blue-50 px-3 py-2 text-sm text-accent">{notice}</p>
         )}
 
         <FormRow>
@@ -114,7 +114,7 @@ export function PurchaseOrderFormModal({
               id="po-supplier"
               value={supplierId}
               onChange={(e) => setSupplierId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {suppliers.length === 0 && <option value="">No suppliers yet, add one under Inventory → Suppliers</option>}
               {suppliers.map((s) => (
@@ -133,7 +133,7 @@ export function PurchaseOrderFormModal({
               type="date"
               value={expectedDeliveryDate}
               onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
         </FormRow>
@@ -152,11 +152,11 @@ export function PurchaseOrderFormModal({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-ink-100 bg-white px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
 
-        <p className="rounded-md bg-ink-50 px-3 py-2 text-sm">
+        <p className="rounded-md bg-surface-2 px-3 py-2 text-sm">
           Order total: <span className="font-semibold text-ink-900">{formatCurrency(total, 'UGX')}</span>
         </p>
 

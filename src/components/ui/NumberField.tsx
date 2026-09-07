@@ -248,7 +248,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
           aria-label={hideLabel ? label : undefined}
           className={
             inputClassName ||
-            `w-full rounded-lg border bg-white px-4 py-3.5 text-sm text-ink-900 shadow-card transition-all duration-150 placeholder:text-ink-300 focus:border-brand-blue-500 focus:shadow-[0_0_0_3px_rgb(59_130_246_/_0.12)] focus:outline-none disabled:bg-ink-50 disabled:text-ink-400 ${
+            `w-full rounded-lg border bg-surface px-4 py-3.5 text-sm text-ink-900 shadow-card transition-all duration-150 placeholder:text-ink-300 focus:border-brand-blue-500 focus:shadow-[0_0_0_3px_rgb(59_130_246_/_0.12)] focus:outline-none disabled:bg-surface-2 disabled:text-ink-400 ${
               error ? 'border-brand-red-500' : 'border-ink-100 hover:border-ink-300'
             } ${suffix ? 'pr-10' : ''}`
           }

@@ -62,11 +62,11 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: ModalPr
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative flex max-h-[90vh] w-full ${SIZE_CLASSES[size]} flex-col animate-[modalIn_180ms_ease-out] rounded-card border border-ink-100 bg-white shadow-card-hover`}
+        className={`relative flex max-h-[90vh] w-full ${SIZE_CLASSES[size]} flex-col animate-[modalIn_180ms_ease-out] rounded-card border border-ink-100 bg-surface shadow-card-hover`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-ink-100 px-7 py-6">
           <h2 className="text-xl font-semibold text-ink-900">{title}</h2>
-          <button onClick={onClose} className="rounded-lg p-2 text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900" aria-label="Close">
+          <button onClick={onClose} className="rounded-lg p-2 text-ink-500 transition-colors hover:bg-surface-2 hover:text-ink-900" aria-label="Close">
             <X size={20} />
           </button>
         </div>

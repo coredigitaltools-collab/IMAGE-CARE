@@ -4,7 +4,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CashFlowTabs } from '../../components/cashFlow/CashFlowTabs'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/toastContext'
 import { useAccountingSettings, useSaveAccountingSettings } from '../../features/accounting/hooks/useAccountingData'
@@ -38,22 +38,8 @@ export function CashFlowSettingsPage() {
       ) : (
         <Card className="p-5">
           <div className="grid grid-cols-2 gap-4">
-            <FormField
-              id="cf-opening-cash"
-              label="Opening cash balance (UGX)"
-              type="number"
-              min={0}
-              value={openingCash}
-              onChange={(e) => setOpeningCash(Number(e.target.value))}
-            />
-            <FormField
-              id="cf-opening-bank"
-              label="Opening bank balance (UGX)"
-              type="number"
-              min={0}
-              value={openingBank}
-              onChange={(e) => setOpeningBank(Number(e.target.value))}
-            />
+            <NumberField id="cf-opening-cash" label="Opening cash balance (UGX)" min={0} value={openingCash} onChange={setOpeningCash} />
+            <NumberField id="cf-opening-bank" label="Opening bank balance (UGX)" min={0} value={openingBank} onChange={setOpeningBank} />
           </div>
           <div className="flex justify-end pt-3">
             <Button
@@ -71,7 +57,7 @@ export function CashFlowSettingsPage() {
       <Card className="mt-4 p-5">
         <p className="text-sm text-ink-700">
           Bank deposits, owner withdrawals, and cash adjustments are recorded from{' '}
-          <Link to="/cash-movements" className="text-brand-blue-700 hover:underline">
+          <Link to="/cash-movements" className="text-accent hover:underline">
             Cash Movements
           </Link>
           . Every one of them flows into the totals on this module's Dashboard and Ledger automatically.

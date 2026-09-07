@@ -1,8 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import type { LoyaltyReward, LoyaltyRewardInput } from '../../types/loyalty'
 
@@ -23,6 +24,7 @@ interface RewardFormModalProps {
 export function RewardFormModal({ initial, onClose, onSubmit }: RewardFormModalProps) {
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -42,12 +44,24 @@ export function RewardFormModal({ initial, onClose, onSubmit }: RewardFormModalP
             id="rw-desc"
             {...register('description')}
             rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Points cost" type="number" {...register('pointsCost', { valueAsNumber: true })} error={errors.pointsCost?.message} />
-          <FormField label="Cash value (UGX)" type="number" {...register('valueUgx', { valueAsNumber: true })} error={errors.valueUgx?.message} />
+          <Controller
+            name="pointsCost"
+            control={control}
+            render={({ field }) => (
+              <NumberField label="Points cost" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.pointsCost?.message} />
+            )}
+          />
+          <Controller
+            name="valueUgx"
+            control={control}
+            render={({ field }) => (
+              <NumberField label="Cash value (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.valueUgx?.message} />
+            )}
+          />
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

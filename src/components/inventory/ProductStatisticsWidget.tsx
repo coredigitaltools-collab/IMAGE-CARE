@@ -21,7 +21,7 @@ export function ProductStatisticsWidget({ stats, isLoading, currency, layout = '
     ? [
         {
           icon: Award,
-          iconTone: 'bg-brand-blue-50 text-brand-blue-700',
+          iconTone: 'bg-brand-blue-50 text-accent',
           label: 'Most expensive',
           value: stats.mostExpensive?.name ?? '-',
           hint: stats.mostExpensive ? formatCurrency(stats.mostExpensive.sellingPrice, currency) : undefined,

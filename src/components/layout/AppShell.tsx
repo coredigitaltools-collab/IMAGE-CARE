@@ -6,7 +6,7 @@
 //          Hosts all authenticated SRS module pages.
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, CreditCard, FileText, ClipboardList,
@@ -18,8 +18,25 @@ import { usePermission } from '../../hooks/usePermission';
 import { BranchSelector } from './BranchSelector';
 import { UserMenu } from './UserMenu';
 import { OfflineBanner } from '../feedback/ServiceStates';
+import { useAppearanceSettings } from '../../features/settings/hooks/useSettingsData';
+import { setThemePreference } from '../../lib/theme';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+
+// Keeps the app's actual theme in sync with the user's saved Appearance
+// -> Theme preference. AppShell wraps every authenticated route (see
+// RootLayout.tsx), so this is the one place that's guaranteed to mount
+// once login has happened - main.tsx already applied a cached guess
+// before first paint (see src/lib/theme.ts), this corrects it to the
+// real value once it's loaded and keeps it in sync if changed elsewhere
+// (e.g. the Appearance settings page, in another tab).
+function useThemeSync() {
+  const query = useAppearanceSettings();
+  const theme = query.data?.theme;
+  useEffect(() => {
+    if (theme) setThemePreference(theme);
+  }, [theme]);
+}
 
 // ---- Nav item definition -----------------------------------
 
@@ -75,6 +92,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isOnline] = useState(navigator.onLine);
+  useThemeSync();
 
   return (
     <div className="app-shell">

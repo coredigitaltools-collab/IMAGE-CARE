@@ -1,9 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { AlertTriangle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
-import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
 
@@ -24,6 +24,7 @@ interface WriteOffModalProps {
 export function WriteOffModal({ customerName, outstandingBalance, onClose, onSubmit, submitError }: WriteOffModalProps) {
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { amount: outstandingBalance, reason: '' } })
@@ -37,7 +38,13 @@ export function WriteOffModal({ customerName, outstandingBalance, onClose, onSub
             This permanently reduces the customer's balance as bad debt. Outstanding: {formatCurrency(outstandingBalance, 'UGX')}.
           </p>
         </div>
-        <FormField label="Amount to write off (UGX)" type="number" {...register('amount', { valueAsNumber: true })} error={errors.amount?.message} />
+        <Controller
+          name="amount"
+          control={control}
+          render={({ field }) => (
+            <NumberField label="Amount to write off (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.amount?.message} />
+          )}
+        />
         <div>
           <label htmlFor="wo-reason" className="mb-1.5 block text-sm font-medium text-ink-700">
             Reason
@@ -47,7 +54,7 @@ export function WriteOffModal({ customerName, outstandingBalance, onClose, onSub
             {...register('reason')}
             rows={2}
             placeholder="e.g. Customer unreachable, business closed, negotiated settlement"
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
           {errors.reason && <p className="mt-1 text-xs text-brand-red-700">{errors.reason.message}</p>}
         </div>

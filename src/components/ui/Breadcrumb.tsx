@@ -15,7 +15,7 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
           <span key={item.label} className="flex items-center gap-1.5">
             {i > 0 && <ChevronRight size={12} className="text-ink-300" aria-hidden="true" />}
             {item.to && !isLast ? (
-              <Link to={item.to} className="hover:text-brand-blue-700">
+              <Link to={item.to} className="hover:text-accent">
                 {item.label}
               </Link>
             ) : (

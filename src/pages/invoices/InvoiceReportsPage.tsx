@@ -60,7 +60,7 @@ export function InvoiceReportsPage() {
                   <ul className="divide-y divide-ink-100">
                     {b.rows.map((inv: Invoice) => (
                       <li key={inv.id} className="flex items-center justify-between py-2 text-sm">
-                        <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-brand-blue-700">
+                        <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-accent">
                           {inv.invoiceNumber} · {inv.customerName}
                         </Link>
                         <span className="font-medium text-ink-900">{formatCurrency(inv.totalAmount, 'UGX')}</span>

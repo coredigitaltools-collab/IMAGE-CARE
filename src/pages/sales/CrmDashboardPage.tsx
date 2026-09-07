@@ -85,8 +85,8 @@ export function CrmDashboardPage() {
             onClick={onClick}
             className={
               comingSoon
-                ? 'group relative flex flex-col items-center gap-1.5 rounded-card border border-dashed border-ink-100 bg-white px-3 py-3 text-center opacity-70 transition-all duration-200 hover:opacity-100'
-                : 'group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]'
+                ? 'group relative flex flex-col items-center gap-1.5 rounded-card border border-dashed border-ink-100 bg-surface px-3 py-3 text-center opacity-70 transition-all duration-200 hover:opacity-100'
+                : 'group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-surface px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]'
             }
           >
             {comingSoon && (
@@ -97,8 +97,8 @@ export function CrmDashboardPage() {
             <span
               className={
                 comingSoon
-                  ? 'flex h-8 w-8 items-center justify-center rounded-full bg-ink-50 text-ink-400'
-                  : 'flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white'
+                  ? 'flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-ink-400'
+                  : 'flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white'
               }
             >
               <Icon size={16} strokeWidth={1.75} />
@@ -109,8 +109,8 @@ export function CrmDashboardPage() {
       </div>
 
       {isEmptyInstall ? (
-        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
+        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-surface px-6 py-16 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-accent">
             <Users size={26} strokeWidth={1.75} />
           </span>
           <div>
@@ -177,7 +177,7 @@ export function CrmDashboardPage() {
           <div id="reports" className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card className="p-5">
               <div className="mb-4 flex items-center gap-2">
-                <BarChart3 size={16} className="text-brand-blue-700" />
+                <BarChart3 size={16} className="text-accent" />
                 <h2 className="text-sm font-semibold text-ink-900">Top customers by spend</h2>
               </div>
               {customersQuery.isLoading ? (
@@ -188,10 +188,10 @@ export function CrmDashboardPage() {
                 <ul className="divide-y divide-ink-100">
                   {topCustomers.map((c, i) => (
                     <li key={c.id} className="flex items-center gap-3 py-2.5">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-50 text-xs font-medium text-ink-500">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-ink-500">
                         {i + 1}
                       </span>
-                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-accent">
                         {c.name}
                       </Link>
                       <span className="shrink-0 text-sm font-semibold text-ink-900">{formatCurrency(c.lifetimePurchases, 'UGX')}</span>
@@ -214,7 +214,7 @@ export function CrmDashboardPage() {
                 <ul className="divide-y divide-ink-100">
                   {customersWithCredit.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
-                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-accent">
                         {c.name}
                       </Link>
                       <span className="shrink-0 text-sm font-semibold text-brand-red-700">{formatCurrency(c.creditBalance, 'UGX')}</span>

@@ -67,7 +67,7 @@ export function AnnualSalesSummaryPage() {
               {data.topProducts.map((p, i) => (
                 <li key={p.productId} className="flex items-center justify-between py-2.5 text-sm">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-50 text-xs font-medium text-ink-500">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-ink-500">
                       {i + 1}
                     </span>
                     <div>

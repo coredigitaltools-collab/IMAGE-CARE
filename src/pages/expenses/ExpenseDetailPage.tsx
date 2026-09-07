@@ -57,7 +57,7 @@ export function ExpenseDetailPage() {
     <div className="mx-auto max-w-2xl">
       <Link
         to="/expenses/register"
-        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-brand-blue-700"
+        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-ink-500 hover:text-accent"
       >
         <ArrowLeft size={15} aria-hidden="true" />
         Expenses

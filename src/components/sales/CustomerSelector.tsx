@@ -26,7 +26,7 @@ export function CustomerSelector({ customers, selectedCustomer, lastPurchaseAt, 
       <div className="rounded-lg border border-brand-blue-100 bg-brand-blue-50 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-brand-blue-700">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-accent">
               <User size={14} />
             </span>
             <div className="min-w-0">
@@ -41,7 +41,7 @@ export function CustomerSelector({ customers, selectedCustomer, lastPurchaseAt, 
           <button
             onClick={() => onSelect(null)}
             aria-label="Remove customer, sell as walk-in"
-            className="shrink-0 rounded-full p-1.5 text-ink-500 hover:bg-white hover:text-ink-900"
+            className="shrink-0 rounded-full p-1.5 text-ink-500 hover:bg-surface hover:text-ink-900"
           >
             <X size={14} />
           </button>
@@ -82,19 +82,19 @@ export function CustomerSelector({ customers, selectedCustomer, lastPurchaseAt, 
             onFocus={() => setIsOpen(true)}
             onBlur={() => setTimeout(() => setIsOpen(false), 150)}
             placeholder="Walk-in Customer, search to select"
-            className="w-full rounded-lg border border-ink-100 bg-white py-3.5 pl-10 pr-4 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-lg border border-ink-100 bg-surface py-3.5 pl-10 pr-4 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
         <button
           onClick={onAddNew}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-100 bg-surface px-4 py-3.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
         >
           <UserPlus size={13} /> New
         </button>
       </div>
 
       {isOpen && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-ink-100 bg-white shadow-card-hover">
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-ink-100 bg-surface shadow-card-hover">
           {matches.length === 0 ? (
             <p className="px-3 py-3 text-xs text-ink-500">
               {customers.length === 0 ? 'No customers yet, they can be added here or during checkout.' : 'No customers found.'}
@@ -105,7 +105,7 @@ export function CustomerSelector({ customers, selectedCustomer, lastPurchaseAt, 
                 <li key={c.id}>
                   <button
                     onMouseDown={() => onSelect(c)}
-                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-ink-50"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-surface-2"
                   >
                     <span className="text-ink-900">{c.name}</span>
                     <span className="text-xs text-ink-500">{c.phone}</span>

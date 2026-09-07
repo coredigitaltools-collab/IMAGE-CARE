@@ -42,7 +42,7 @@ export function DailyDashboardPage() {
           <button
             key={label}
             onClick={() => navigate(to)}
-            className="rounded-card border border-ink-100 bg-white px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
+            className="rounded-card border border-ink-100 bg-surface px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
           >
             {label}
           </button>

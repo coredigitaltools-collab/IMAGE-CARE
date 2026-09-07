@@ -66,7 +66,7 @@ export function BankAccountsPage() {
             {activeAccounts.map((a) => (
               <li key={a.id} className="flex items-center justify-between py-3 text-sm">
                 <div>
-                  <Link to={`/bank-reconciliation/reconcile?account=${a.id}`} className="font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/bank-reconciliation/reconcile?account=${a.id}`} className="font-medium text-ink-900 hover:text-accent">
                     {a.name}
                   </Link>
                   <p className="text-xs text-ink-500">{a.accountNumber}</p>

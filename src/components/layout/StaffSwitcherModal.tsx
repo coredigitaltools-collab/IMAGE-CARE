@@ -161,13 +161,13 @@ export function StaffSwitcherModal({ onClose }: StaffSwitcherModalProps) {
             disabled={isSubmitting}
             placeholder="••••"
             aria-label={`Enter PIN for ${selected.fullName}`}
-            className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3.5 text-center text-2xl tracking-[0.5em] text-ink-900 shadow-card focus:border-brand-blue-500 focus:outline-none"
+            className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3.5 text-center text-2xl tracking-[0.5em] text-ink-900 shadow-card focus:border-brand-blue-500 focus:outline-none"
           />
           {error && <p className="mt-2 text-center text-xs text-brand-red-700">{error}</p>}
           <button
             type="button"
             onClick={() => setSelected(null)}
-            className="mt-4 w-full text-center text-xs font-medium text-brand-blue-700 hover:underline"
+            className="mt-4 w-full text-center text-xs font-medium text-accent hover:underline"
           >
             Choose a different staff member
           </button>

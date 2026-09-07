@@ -169,7 +169,7 @@ export function useSalesSettings(_userId?: string) {
 export function useSyncSettings(_userId?: string) { return useQuery({ queryKey: ['settings', 'sync'], queryFn: async () => ({ enabled: false, interval: 60 }), staleTime: Infinity }); }
 export function useConfigSettings(_userId?: string) { return useQuery({ queryKey: ['settings', 'config'], queryFn: async () => ({}) as Record<string, unknown>, staleTime: Infinity }); }
 export function useSaveConfigSettings(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: Record<string, unknown>) => input, onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'config'] }) }); }
-const APPEARANCE_SETTINGS_DEFAULTS = { theme: 'light', primaryColor: '#2563eb', language: 'en', density: 'comfortable' as 'comfortable' | 'compact', dateFormat: 'DD/MM/YYYY' as 'DD/MM/YYYY' | 'MM/DD/YYYY', timeFormat: '12h' };
+const APPEARANCE_SETTINGS_DEFAULTS = { theme: 'system' as 'light' | 'dark' | 'system', primaryColor: '#2563eb', language: 'en', density: 'comfortable' as 'comfortable' | 'compact', dateFormat: 'DD/MM/YYYY' as 'DD/MM/YYYY' | 'MM/DD/YYYY', timeFormat: '12h' };
 export function useAppearanceSettings(_userId?: string) {
   const ctx = useUserContext();
   return useQuery({

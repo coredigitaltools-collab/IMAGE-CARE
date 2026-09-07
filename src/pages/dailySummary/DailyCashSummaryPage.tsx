@@ -49,7 +49,7 @@ export function DailyCashSummaryPage() {
 
           <Card className="p-5">
             <div className="mb-1 flex items-center gap-2">
-              <Wallet size={16} className="text-brand-blue-700" />
+              <Wallet size={16} className="text-accent" />
               <p className="text-xs text-ink-500">Cash in hand, as of now, independent of profit</p>
             </div>
             <p className="text-2xl font-semibold text-ink-900">{data ? formatCurrency(data.cashInHandUgx, 'UGX') : '-'}</p>

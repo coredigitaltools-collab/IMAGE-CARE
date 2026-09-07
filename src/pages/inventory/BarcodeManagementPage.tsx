@@ -66,7 +66,7 @@ export function BarcodeManagementPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name, SKU, or barcode..."
-          className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
         />
       </div>
 
@@ -89,7 +89,7 @@ export function BarcodeManagementPage() {
                 type="checkbox"
                 checked={selectedIds.includes(product.id)}
                 onChange={() => toggle(product.id)}
-                className="h-4 w-4 shrink-0 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500 print:hidden"
+                className="h-4 w-4 shrink-0 rounded border-ink-300 text-accent focus:ring-brand-blue-500 print:hidden"
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink-900">{product.name}</p>

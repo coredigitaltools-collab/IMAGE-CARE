@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
-import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import type { Product, StockAdjustmentInput } from '../../types/inventory'
 
@@ -26,6 +26,7 @@ interface StockAdjustmentModalProps {
 export function StockAdjustmentModal({ products, presetProductId, onClose, onSubmit, submitError }: StockAdjustmentModalProps) {
   const {
     register,
+    control,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
@@ -50,7 +51,7 @@ export function StockAdjustmentModal({ products, presetProductId, onClose, onSub
             id="adj-product"
             {...register('productId')}
             disabled={Boolean(presetProductId)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500 disabled:bg-ink-50"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500 disabled:bg-surface-2"
           >
             {products.map((p) => (
               <option key={p.id} value={p.id}>
@@ -66,19 +67,19 @@ export function StockAdjustmentModal({ products, presetProductId, onClose, onSub
           <select
             id="adj-direction"
             {...register('direction')}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           >
             <option value="in">Stock in (add)</option>
             <option value="out">Stock out (remove)</option>
           </select>
         </div>
 
-        <FormField
-          label="Quantity"
-          type="number"
-          min={1}
-          {...register('quantity', { valueAsNumber: true })}
-          error={errors.quantity?.message}
+        <Controller
+          name="quantity"
+          control={control}
+          render={({ field }) => (
+            <NumberField label="Quantity" min={1} value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.quantity?.message} />
+          )}
         />
 
         <div>
@@ -88,7 +89,7 @@ export function StockAdjustmentModal({ products, presetProductId, onClose, onSub
             {...register('reason')}
             rows={2}
             placeholder="e.g. Damaged in storage, physical count correction, transfer in"
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
           {errors.reason && <p className="mt-1 text-xs text-brand-red-700">{errors.reason.message}</p>}
         </div>

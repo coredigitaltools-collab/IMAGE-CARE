@@ -62,9 +62,9 @@ export function LoyaltyDashboardPage() {
           <button
             key={label}
             onClick={onClick}
-            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
+            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-surface px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
               <Icon size={16} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>
@@ -120,8 +120,8 @@ export function LoyaltyDashboardPage() {
           <ul className="divide-y divide-ink-100">
             {(topMembersQuery.data ?? []).map((m, i) => (
               <li key={m.customerId} className="flex items-center gap-3 py-2.5">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-50 text-xs font-medium text-ink-500">{i + 1}</span>
-                <Link to={`/customers/${m.customerId}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-ink-500">{i + 1}</span>
+                <Link to={`/customers/${m.customerId}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-accent">
                   {m.customerName}
                 </Link>
                 <span className="shrink-0 text-sm font-semibold text-ink-900">{m.pointsBalance} pts</span>

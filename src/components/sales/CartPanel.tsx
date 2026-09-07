@@ -74,7 +74,7 @@ export function CartPanel({
       <div className="flex-1 overflow-y-auto">
         {!hasItems ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-10 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-ink-50">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2">
               <ShoppingCart size={22} className="text-ink-300" />
             </span>
             <p className="text-sm font-semibold text-ink-900">Your cart is empty</p>
@@ -91,7 +91,7 @@ export function CartPanel({
                 <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     onClick={() => onDecrement(item.productId)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-ink-50 active:bg-ink-100"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-surface-2 active:bg-ink-100"
                     aria-label={`Decrease quantity of ${item.productName}`}
                   >
                     <Minus size={13} />
@@ -100,7 +100,7 @@ export function CartPanel({
                   <button
                     onClick={() => onIncrement(item.productId)}
                     disabled={item.quantity >= item.availableStock}
-                    className="flex h-10 w-10 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-ink-50 active:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-ink-100 text-ink-500 hover:bg-surface-2 active:bg-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label={`Increase quantity of ${item.productName}`}
                   >
                     <Plus size={13} />
@@ -128,7 +128,7 @@ export function CartPanel({
           problem this layout is meant to avoid. */}
       {hasItems && (
         <div className="shrink-0 space-y-4 border-t border-ink-100 pt-4">
-          <details className="group rounded-lg border border-ink-100 bg-ink-50/60 open:bg-transparent">
+          <details className="group rounded-lg border border-ink-100 bg-surface-2/60 open:bg-transparent">
             <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs font-medium text-ink-700">
               <span>Discount &amp; tax {discountAmount > 0 || taxAmount > 0 ? <span className="text-ink-500">(applied)</span> : <span className="text-ink-400">(optional)</span>}</span>
               <span className="text-ink-400 transition-transform group-open:rotate-180">⌄</span>
@@ -151,7 +151,7 @@ export function CartPanel({
                   id="pos-tax"
                   value={taxRateId ?? ''}
                   onChange={(e) => onTaxRateChange(e.target.value || null)}
-                  className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card"
+                  className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3 text-sm text-ink-900 shadow-card"
                 >
                   <option value="">No tax</option>
                   {taxRates.map((r) => (
@@ -164,7 +164,7 @@ export function CartPanel({
             </div>
           </details>
 
-          <div className="space-y-1.5 rounded-lg bg-ink-50 px-4 py-3.5 text-sm">
+          <div className="space-y-1.5 rounded-lg bg-surface-2 px-4 py-3.5 text-sm">
             <div className="flex justify-between text-ink-500">
               <span>Subtotal</span>
               <span>{formatCurrency(subtotal, 'UGX')}</span>
@@ -198,7 +198,7 @@ export function CartPanel({
                   className={
                     paymentMethod === m
                       ? 'rounded-lg border-2 border-brand-blue-700 bg-brand-blue-700 px-3 py-3 text-xs font-semibold text-white'
-                      : 'rounded-lg border-2 border-ink-100 bg-white px-3 py-3 text-xs font-medium text-ink-700 hover:border-ink-300 hover:bg-ink-50'
+                      : 'rounded-lg border-2 border-ink-100 bg-surface px-3 py-3 text-xs font-medium text-ink-700 hover:border-ink-300 hover:bg-surface-2'
                   }
                 >
                   {PAYMENT_METHOD_LABELS[m]}
@@ -209,7 +209,7 @@ export function CartPanel({
 
           {/* Payment-method-specific fields */}
           {paymentMethod === 'cash' && (
-            <div className="rounded-lg bg-ink-50 p-4">
+            <div className="rounded-lg bg-surface-2 p-4">
               <NumberField
                 id="pos-tendered"
                 label="Amount received (UGX)"
@@ -225,7 +225,7 @@ export function CartPanel({
             </div>
           )}
           {paymentMethod === 'mobile_money' && (
-            <div className="rounded-lg bg-ink-50 p-4">
+            <div className="rounded-lg bg-surface-2 p-4">
               <label htmlFor="pos-reference" className="mb-1.5 block text-xs font-medium text-ink-700">
                 Mobile money reference number
               </label>
@@ -234,12 +234,12 @@ export function CartPanel({
                 value={paymentReference}
                 onChange={(e) => onPaymentReferenceChange(e.target.value)}
                 placeholder="e.g. transaction confirmation code"
-                className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
               />
             </div>
           )}
           {paymentMethod === 'card' && (
-            <div className="rounded-lg bg-ink-50 p-4">
+            <div className="rounded-lg bg-surface-2 p-4">
               <label htmlFor="pos-reference" className="mb-1.5 block text-xs font-medium text-ink-700">
                 Card transaction ID
               </label>
@@ -248,7 +248,7 @@ export function CartPanel({
                 value={paymentReference}
                 onChange={(e) => onPaymentReferenceChange(e.target.value)}
                 placeholder="From the card terminal receipt"
-                className="w-full rounded-lg border border-ink-100 bg-white px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-lg border border-ink-100 bg-surface px-4 py-3 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
               />
             </div>
           )}

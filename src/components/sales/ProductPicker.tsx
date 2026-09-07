@@ -107,7 +107,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
   }
 
   return (
-    <div className="rounded-lg border border-ink-100 bg-ink-50/60 p-5">
+    <div className="rounded-lg border border-ink-100 bg-surface-2/60 p-5">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Add items to sale</p>
 
       <label htmlFor="rs-product" className="mb-2 block text-sm font-medium text-ink-700">
@@ -121,7 +121,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
               {selected.sku} · {selected.currentStock} in stock
             </p>
           </div>
-          <button onClick={() => setSelected(null)} className="shrink-0 text-xs font-medium text-brand-blue-700 hover:underline">
+          <button onClick={() => setSelected(null)} className="shrink-0 text-xs font-medium text-accent hover:underline">
             Change
           </button>
         </div>
@@ -141,10 +141,10 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
             onKeyDown={handleKeyDown}
             placeholder="Search product or scan barcode..."
             autoFocus
-            className="w-full rounded-lg border border-ink-100 bg-white py-3.5 pl-10 pr-4 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-lg border border-ink-100 bg-surface py-3.5 pl-10 pr-4 text-sm text-ink-900 shadow-card placeholder:text-ink-400 hover:border-ink-300 focus:border-brand-blue-500"
           />
           {isOpen && (
-            <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-ink-100 bg-white shadow-card-hover">
+            <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-ink-100 bg-surface shadow-card-hover">
               {matches.length === 0 ? (
                 <p className="px-3 py-3 text-xs text-ink-500">
                   {sellable.length === 0 ? 'No products yet, add one from Inventory first.' : `No products match "${query}"`}
@@ -158,10 +158,10 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
                         <button
                           onMouseDown={() => !outOfStock && selectProduct(p)}
                           disabled={outOfStock}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <span className="flex min-w-0 items-center gap-2">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-ink-50">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-2">
                               {p.imageDataUrl ? (
                                 <img src={p.imageDataUrl} alt="" className="h-full w-full object-cover" />
                               ) : (
@@ -219,7 +219,7 @@ export const ProductPicker = forwardRef<ProductPickerHandle, ProductPickerProps>
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">Price / unit</label>
-            <div className="rounded-lg border border-ink-100 bg-ink-50 px-4 py-3.5 text-sm text-ink-500">
+            <div className="rounded-lg border border-ink-100 bg-surface-2 px-4 py-3.5 text-sm text-ink-500">
               {formatCurrency(selected.sellingPrice, 'UGX')}
             </div>
           </div>

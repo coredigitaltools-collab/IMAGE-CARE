@@ -181,14 +181,14 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
           <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-500">Product info</p>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-surface-2">
                 {imageDataUrl ? (
                   <img src={imageDataUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <Upload size={18} className="text-ink-300" />
                 )}
               </div>
-              <label className="cursor-pointer rounded-md border border-ink-100 bg-white px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50">
+              <label className="cursor-pointer rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2">
                 Upload image
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e.target.files?.[0])} />
               </label>
@@ -292,18 +292,18 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
           <div className="space-y-4">
             <div>
               <label htmlFor="w-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">Supplier (optional)</label>
-              <select id="w-supplier" {...register('supplierId')} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500">
+              <select id="w-supplier" {...register('supplierId')} className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500">
                 <option value="">None</option>
                 {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
               <label htmlFor="w-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description (optional)</label>
-              <textarea id="w-description" {...register('description')} rows={2} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500" />
+              <textarea id="w-description" {...register('description')} rows={2} className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500" />
             </div>
             <div>
               <label htmlFor="w-notes" className="mb-1.5 block text-sm font-medium text-ink-700">Notes (optional)</label>
-              <textarea id="w-notes" {...register('notes')} rows={2} className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500" />
+              <textarea id="w-notes" {...register('notes')} rows={2} className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500" />
             </div>
           </div>
         </div>

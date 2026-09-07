@@ -53,7 +53,7 @@ export function MonthlyInventorySummaryPage() {
 
       <p className="mt-4 text-sm text-ink-500">
         For the full breakdown by product, see{' '}
-        <Link to="/stock-summary" className="text-brand-blue-700 hover:underline">
+        <Link to="/stock-summary" className="text-accent hover:underline">
           Stock Summary
         </Link>
         .

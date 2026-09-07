@@ -11,6 +11,13 @@ import './styles/globals.css';
 // was never imported anywhere, so every Tailwind utility class in the
 // app compiled to nothing and rendered as unstyled default HTML.
 import './index.css';
+import { initThemeFromCache } from './lib/theme';
+
+// Apply the cached Light/Dark/System preference before the first paint
+// (see src/lib/theme.ts) - AppShell.tsx re-syncs this from the real
+// saved setting once the user is authenticated and it's finished
+// loading, this just avoids a flash of the wrong theme before then.
+initThemeFromCache();
 
 // 2026-09-01: safety net alongside RouteErrorBoundary (see that file for
 // the full story) - Vite fires this event on `window` whenever a

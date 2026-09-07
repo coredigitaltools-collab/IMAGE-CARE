@@ -21,7 +21,7 @@ export function InventoryByBranchPage() {
         <p className="mt-0.5 text-sm text-ink-500">Stock movement by branch, all-time.</p>
       </div>
 
-      <div className="mb-4 rounded-md bg-ink-50 px-3 py-2.5 text-xs text-ink-500">
+      <div className="mb-4 rounded-md bg-surface-2 px-3 py-2.5 text-xs text-ink-500">
         Stock on hand is tracked business-wide, not split per branch, so this shows movement (what came in and went out at each branch) rather than
         a per-branch stock count.
       </div>

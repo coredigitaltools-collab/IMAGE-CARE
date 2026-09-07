@@ -43,7 +43,7 @@ export function ProductLineItemsEditor({ products, rows, onChange, showUnitCost 
           <select
             value={row.productId}
             onChange={(e) => updateRow(i, { productId: e.target.value })}
-            className="min-w-0 flex-1 rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="min-w-0 flex-1 rounded-md border border-ink-100 bg-surface px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             {products.length === 0 && <option value="">No products available</option>}
             {products.map((p) => (
@@ -59,7 +59,7 @@ export function ProductLineItemsEditor({ products, rows, onChange, showUnitCost 
             value={row.quantity}
             onChange={(quantity) => updateRow(i, { quantity })}
             className="w-20 shrink-0"
-            inputClassName="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            inputClassName="w-full rounded-md border border-ink-100 bg-surface px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
           {showUnitCost && (
             <NumberField
@@ -70,7 +70,7 @@ export function ProductLineItemsEditor({ products, rows, onChange, showUnitCost 
               onChange={(unitCost) => updateRow(i, { unitCost })}
               placeholder="Unit cost"
               className="w-28 shrink-0"
-              inputClassName="w-full rounded-md border border-ink-100 bg-white px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              inputClassName="w-full rounded-md border border-ink-100 bg-surface px-2.5 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           )}
           <button
@@ -87,7 +87,7 @@ export function ProductLineItemsEditor({ products, rows, onChange, showUnitCost 
         type="button"
         onClick={addRow}
         disabled={products.length === 0}
-        className="flex items-center gap-1.5 rounded-md border border-dashed border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex items-center gap-1.5 rounded-md border border-dashed border-ink-300 px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Plus size={13} /> Add line
       </button>
