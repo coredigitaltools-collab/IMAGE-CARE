@@ -280,6 +280,24 @@ export function ProductDetailPage() {
                 />
               </div>
             </div>
+            <div>
+              {/* Bug fix (2026-09-07): this General tab tracked barcode in its
+                  form schema/values and saved it via buildInput all along, but
+                  never actually rendered an input for it - the only place
+                  barcode showed up on this page was the read-only display card
+                  at the bottom. So a product created without one (or via bulk
+                  import) had no way to ever get one added after the fact, even
+                  though Barcode Management explicitly says "Edit the product in
+                  Inventory to add one." Confirmed live: "Blazers" has
+                  barcode = null and no way to set it - this closes that gap. */}
+              <label htmlFor="pd-barcode" className="mb-1.5 block text-sm font-medium text-ink-700">Barcode (optional)</label>
+              <input
+                id="pd-barcode"
+                {...generalForm.register('barcode')}
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+              />
+              <p className="mt-1 text-xs text-ink-500">For scanning at checkout and printing barcode labels.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <CategoryQuickSelect
                 id="pd-category"
