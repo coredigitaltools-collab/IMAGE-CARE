@@ -128,16 +128,32 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
     // value from running far past that cap - typing "10,000" into a
     // Discount % field produced a live preview computing a 10,000%
     // discount (subtotal x 100), showing a nonsensical negative total
-    // before the user ever left the field. Clamping on every keystroke,
-    // not just on blur, means the field - and everything computed from
-    // it live, like the sale preview - can never show a value outside
-    // its declared bounds in the first place. Typing a number that
-    // legitimately falls within range is completely unaffected: digits
-    // are only ever appended to a value, never removed, so once a
-    // partially-typed number exceeds max, no further digit could bring
-    // it back into range anyway.
+    // before the user ever left the field. Clamping the upper bound on
+    // every keystroke, not just on blur, means the field - and everything
+    // computed from it live, like the sale preview - can never show a
+    // value above its declared max in the first place. Typing a number
+    // that legitimately falls within range is completely unaffected:
+    // digits are only ever appended to a value, never removed, so once a
+    // partially-typed number exceeds max, no further digit could bring it
+    // back into range anyway.
+    //
+    // Bug fix (2026-09-07): "that 1 is stubborn again... when I start
+    // typing the 1 should disappear." The line above originally also
+    // live-clamped the LOWER bound (`min`) the same way - which broke
+    // every field with a positive min (Qty, min=1 being the reported
+    // case): the instant the field was cleared to retype a value, the
+    // empty string's numeric value (0) was below min, so it got snapped
+    // straight back to "1" before the next digit could even be typed -
+    // reintroducing the exact "can't clear the 1" bug this component was
+    // originally built to fix (see the 2026-09-01 comment in
+    // ProductPicker.tsx). Unlike max, min was never the thing that needed
+    // live enforcement - the reported bug was always about a value running
+    // too FAR OVER a cap while typing, never about it briefly dipping
+    // below one mid-edit. min is still fully enforced, just back to
+    // blur-time only (handleBlur below), same as before 2026-09-06 - so a
+    // field left below its minimum still corrects itself the moment the
+    // user leaves it, it just isn't fought while they're still typing.
     const typedNumeric = numeric
-    if (typeof min === 'number' && numeric < min) numeric = min
     if (typeof max === 'number' && numeric > max) numeric = max
     const wasClamped = numeric !== typedNumeric
     // Once clamped, display the clamped number itself (e.g. typing past
