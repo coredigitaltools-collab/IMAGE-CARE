@@ -174,10 +174,15 @@ export function parseError(err: unknown): AppError {
   // idx_s2_products_barcode" becomes something a business owner can act
   // on instead of a dead end.
   if (pgCode === '23505' || raw.includes('duplicate key value violates unique constraint')) {
-    if (raw.includes('barcode')) return { code: 'VALIDATION_ERROR', message: 'That barcode is already used by another record.', field: 'barcode' };
-    if (raw.includes('sku'))     return { code: 'VALIDATION_ERROR', message: 'That SKU is already used by another product.', field: 'sku' };
-    if (raw.includes('email'))   return { code: 'VALIDATION_ERROR', message: 'That email is already in use.', field: 'email' };
-    if (raw.includes('phone'))   return { code: 'VALIDATION_ERROR', message: 'That phone number is already in use.', field: 'phone' };
+    if (raw.includes('barcode'))     return { code: 'VALIDATION_ERROR', message: 'That barcode is already used by another record.', field: 'barcode' };
+    if (raw.includes('sku'))         return { code: 'VALIDATION_ERROR', message: 'That SKU is already used by another product.', field: 'sku' };
+    if (raw.includes('email'))       return { code: 'VALIDATION_ERROR', message: 'That email is already in use.', field: 'email' };
+    if (raw.includes('phone'))       return { code: 'VALIDATION_ERROR', message: 'That phone number is already in use.', field: 'phone' };
+    // Supplier invoices: uq_s2_bill_number_per_business (business_id,
+    // bill_number). Left un-covered until now, so a supplier invoice number
+    // reused across two bills fell all the way through to createBill()'s
+    // generic "Failed to record this invoice." with no indication why.
+    if (raw.includes('bill_number')) return { code: 'VALIDATION_ERROR', message: 'That invoice number has already been recorded for this business. Use a different one, or leave it blank to auto-generate one.', field: 'supplierInvoiceNumber' };
     return { code: 'VALIDATION_ERROR', message: 'That value is already in use elsewhere. Please use a different one.' };
   }
 

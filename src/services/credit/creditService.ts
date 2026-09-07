@@ -5,8 +5,8 @@
 // ============================================================
 
 import { supabase, rpc } from '../../lib/supabase';
-import { canDo } from '../../types/app';
-import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
+import { canDo, parseError } from '../../types/app';
+import { serviceOk, serviceFail, makeRequestId, mapErrorCode } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Customer, Invoice, Bill, UUID } from '../../types/database';
@@ -583,9 +583,27 @@ export async function createBill(
       .select('*')
       .single();
 
-    if (error || !billRow) return serviceFail('INTERNAL_ERROR', 'Failed to record this invoice.', { requestId });
+    // Bug fix (2026-09-08): this used to discard whatever real error Supabase
+    // returned and always show the same generic "Failed to record this
+    // invoice." - whether the actual cause was a duplicate invoice number
+    // (unique constraint on (business_id, bill_number) - confirmed live:
+    // several test invoices for this business already exist, so a repeat
+    // submission using the same invoice number will genuinely collide), a
+    // bad/half-loaded supplier or branch selection, or anything else. Every
+    // other create/update path in the app (products, customers, suppliers)
+    // already runs Supabase errors through parseError() to surface what
+    // actually went wrong instead of masking it - this brings supplier
+    // invoices in line with that, rather than just relabeling the same
+    // generic message.
+    if (error || !billRow) {
+      const parsed = error ? parseError(error) : undefined;
+      return serviceFail(parsed ? mapErrorCode(parsed.code) : 'INTERNAL_ERROR', parsed?.message ?? 'Failed to record this invoice.', { requestId, field: parsed?.field });
+    }
     return serviceOk(billRow as Bill, requestId);
-  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to record this invoice.', { requestId }); }
+  } catch (err) {
+    const parsed = parseError(err);
+    return serviceFail(mapErrorCode(parsed.code), parsed.message || 'Failed to record this invoice.', { requestId, field: parsed.field });
+  }
 }
 
 // Bug fix (Save-button audit 2026-09-01): useRecordBillPayment used to call

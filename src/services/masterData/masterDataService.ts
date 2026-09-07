@@ -119,6 +119,21 @@ export async function createProduct(
   }
 }
 
+// Bug fix (2026-09-08), "barcode save fails / Could not save changes.": this
+// used to spread the caller's `updates` object straight into `.update()`
+// ({ ...updates }). Every caller (ProductDetailPage.tsx's General/Pricing/
+// Notes tabs) builds that object in the app's camelCase shape - categoryId,
+// unitId, buyingPrice, sellingPrice, reorderLevel, brandId, supplierId - none
+// of which are real columns on imagecare.products (see toProductRow() below
+// for the real ones); brandId/supplierId/notes have no columns of their own
+// at all and only ever lived inside the jsonb `metadata` column. PostgREST
+// rejects an update containing unknown columns outright, so ANY save from
+// the product edit page failed 100% of the time - it just went unnoticed
+// until the barcode field was added and someone actually tried to save a
+// change here (confirmed live: "Blazers" barcode stayed null through a save
+// attempt). This is the exact same class of bug already fixed for customers/
+// suppliers via toCustomerRow()/toSupplierRow() above - toProductRow() is
+// the same whitelist-translator pattern applied to products.
 export async function updateProduct(
   ctx: UserContext,
   productId: UUID,
@@ -132,7 +147,7 @@ export async function updateProduct(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('products')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...toProductRow(updates as WriteInput), updated_at: new Date().toISOString() })
       .eq('id', productId)
       .eq('business_id', ctx.business_id)
       .select()
@@ -490,6 +505,55 @@ function toSupplierRow(input: WriteInput | undefined): WriteInput {
     src.is_active,
     src.status === 'active' ? true : src.status === 'inactive' ? false : undefined,
   ));
+
+  return row;
+}
+
+// Real columns on imagecare.products (see information_schema, confirmed
+// live): category_id, unit_id, name, sku, barcode, description, image_url,
+// selling_price, cost_price, reorder_level, is_stockable/is_sellable/
+// is_purchasable, track_expiry, tax_rate, metadata (jsonb), is_active.
+// categoryId/unitId/buyingPrice/sellingPrice/reorderLevel are just the
+// camelCase forms of real columns. brandId/supplierId/notes have no columns
+// of their own - useCreateProduct already stores them inside `metadata`
+// ({ brand_id, supplier_id }) at creation time, so updates keep writing them
+// there too, now including notes (the product detail page's Notes tab saves
+// through this same path). openingStock/imageDataUrl are deliberately
+// dropped here: stock is never a column on products (it's derived from
+// inventory_movements - see the inventory engine's own rule) and image
+// persistence isn't implemented at all yet, a separate, pre-existing gap
+// this fix doesn't expand scope to cover.
+function toProductRow(input: WriteInput | undefined): WriteInput {
+  const src = input ?? {};
+  const row: WriteInput = {};
+  const set = (column: string, value: unknown) => { if (value !== undefined) row[column] = value; };
+
+  set('name', src.name);
+  const sku = typeof src.sku === 'string' ? src.sku.trim() : src.sku;
+  if (sku !== undefined) row.sku = sku === '' ? null : sku;
+  // Same empty-string-vs-null fix as useCreateProduct's inline mapping: the
+  // partial unique index on (business_id, barcode) excludes NULL rows but
+  // not '', so an untouched/cleared field must be saved as null, not ''.
+  const barcode = typeof src.barcode === 'string' ? src.barcode.trim() : src.barcode;
+  if (barcode !== undefined) row.barcode = barcode === '' ? null : barcode;
+  set('description', src.description);
+  set('category_id', firstDefined(src.category_id, src.categoryId));
+  set('unit_id', firstDefined(src.unit_id, src.unitId));
+  set('selling_price', firstDefined(src.selling_price, src.sellingPrice));
+  set('cost_price', firstDefined(src.cost_price, src.buyingPrice));
+  set('reorder_level', firstDefined(src.reorder_level, src.reorderLevel));
+  set('is_active', firstDefined(src.is_active, src.isActive));
+
+  const brandId = firstDefined(src.brand_id, src.brandId);
+  const supplierId = firstDefined(src.supplier_id, src.supplierId);
+  const notes = src.notes;
+  if (brandId !== undefined || supplierId !== undefined || notes !== undefined) {
+    row.metadata = {
+      ...(brandId !== undefined ? { brand_id: brandId || null } : {}),
+      ...(supplierId !== undefined ? { supplier_id: supplierId || null } : {}),
+      ...(notes !== undefined ? { notes } : {}),
+    };
+  }
 
   return row;
 }
