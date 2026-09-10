@@ -42,26 +42,35 @@ export function CrmDashboardPage() {
       showToast('No customers to export yet.')
       return
     }
-    const header = ['Name', 'Phone', 'Email', 'Tags', 'Lifetime Purchases (UGX)', 'Loyalty Points', 'Credit Balance (UGX)']
-    const rows = activeCustomers.map((c) => [c.name, c.phone, c.email, c.tags.join('; '), c.lifetimePurchases, c.loyaltyPoints, c.creditBalance])
-    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    // Bug fix (2026-09-09), "Export customer data" timing out: revoking
-    // the object URL in the same tick as click() can race the browser
-    // actually starting the download, especially under an automated
-    // browser driving the click - deferred to the next tick instead (same
-    // fix applied to lib/csv.ts's shared downloadCsv()).
-    setTimeout(() => {
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    }, 0)
-    showToast('Customers exported.', 'success')
+    // Bug fix (2026-09-10), "Export the customer directory": this whole
+    // block used to run with nothing catching a failure - if Blob/anchor
+    // construction ever threw (e.g. a browser blocking the download), the
+    // button just looked permanently stuck with no toast at all. Wrapped so
+    // a real failure is always visible instead of silent.
+    try {
+      const header = ['Name', 'Phone', 'Email', 'Tags', 'Lifetime Purchases (UGX)', 'Loyalty Points', 'Credit Balance (UGX)']
+      const rows = activeCustomers.map((c) => [c.name, c.phone, c.email, c.tags.join('; '), c.lifetimePurchases, c.loyaltyPoints, c.creditBalance])
+      const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      // Bug fix (2026-09-09), "Export customer data" timing out: revoking
+      // the object URL in the same tick as click() can race the browser
+      // actually starting the download, especially under an automated
+      // browser driving the click - deferred to the next tick instead (same
+      // fix applied to lib/csv.ts's shared downloadCsv()).
+      setTimeout(() => {
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 0)
+      showToast('Customers exported.', 'success')
+    } catch {
+      showToast('Could not export customers. Please try again.')
+    }
   }
 
   const quickActions: { label: string; icon: typeof Search; onClick: () => void; comingSoon?: boolean }[] = [

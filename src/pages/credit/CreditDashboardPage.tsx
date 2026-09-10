@@ -24,25 +24,33 @@ export function CreditDashboardPage() {
       showToast('No credit accounts to export yet.')
       return
     }
-    const header = ['Customer', 'Limit (UGX)', 'Balance (UGX)', 'Available (UGX)', 'Days Outstanding', 'Overdue']
-    const rows = accounts.map((a) => [a.customer.name, a.limit, a.balance, a.available, a.daysOutstanding ?? '', a.isOverdue ? 'Yes' : 'No'])
-    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `credit-accounts-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    // Bug fix (2026-09-09), same fix as lib/csv.ts's shared downloadCsv():
-    // revoking the object URL in the same tick as click() can race the
-    // browser actually starting the download, especially under an
-    // automated browser driving the click.
-    setTimeout(() => {
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    }, 0)
-    showToast('Credit accounts exported.', 'success')
+    // Bug fix (2026-09-10), "Export credit information": same as the
+    // Customers export - nothing here used to catch a failure, so a real
+    // error (rather than the empty-accounts case above, which already
+    // toasts) would leave the button looking stuck with no feedback at all.
+    try {
+      const header = ['Customer', 'Limit (UGX)', 'Balance (UGX)', 'Available (UGX)', 'Days Outstanding', 'Overdue']
+      const rows = accounts.map((a) => [a.customer.name, a.limit, a.balance, a.available, a.daysOutstanding ?? '', a.isOverdue ? 'Yes' : 'No'])
+      const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `credit-accounts-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      // Bug fix (2026-09-09), same fix as lib/csv.ts's shared downloadCsv():
+      // revoking the object URL in the same tick as click() can race the
+      // browser actually starting the download, especially under an
+      // automated browser driving the click.
+      setTimeout(() => {
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 0)
+      showToast('Credit accounts exported.', 'success')
+    } catch {
+      showToast('Could not export credit accounts. Please try again.')
+    }
   }
 
   const quickActions = [

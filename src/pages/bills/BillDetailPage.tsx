@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { FileText, Lock, Wallet, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { InvoicePaymentModal } from '../../components/purchasing/InvoicePaymentModal'
@@ -66,7 +66,27 @@ export function BillDetailPage() {
     <div className="mx-auto max-w-2xl">
       <SettingsPageHeader
         title={bill.reference}
-        description={`${supplier?.name ?? 'Unknown supplier'}${bill.supplierInvoiceNumber ? ` · #${bill.supplierInvoiceNumber}` : ''}${order ? ` · from ${order.reference}` : ''}`}
+        description={
+          // Bug fix (2026-09-10), "Record Supplier Invoice": a bill has no
+          // line items of its own (imagecare.bills carries an amount, not
+          // itemized rows - that's the schema, not an oversight), but a
+          // bill linked to a purchase order inherits that order's real,
+          // already-priced line items. The order's reference here used to
+          // be plain text with no way to actually open it and see those
+          // items - linking it gives a real path to verify what was billed.
+          order ? (
+            <>
+              {supplier?.name ?? 'Unknown supplier'}
+              {bill.supplierInvoiceNumber ? ` · #${bill.supplierInvoiceNumber}` : ''}
+              {' · from '}
+              <Link to={`/purchasing/orders/${order.id}`} className="text-accent hover:underline">
+                {order.reference}
+              </Link>
+            </>
+          ) : (
+            `${supplier?.name ?? 'Unknown supplier'}${bill.supplierInvoiceNumber ? ` · #${bill.supplierInvoiceNumber}` : ''}`
+          )
+        }
         action={
           <div className="flex flex-wrap gap-2">
             {canPay && (
