@@ -305,3 +305,15 @@ SELECT * FROM imagecare.fn_business_engine_health_check('<business_uuid>');
 - A product with no movement history anywhere yet is assigned to every active branch of its business, so it doesn't silently disappear from every branch's till the moment this ships.
 
 **Why:** the POS/Record Sale product picker used to show every business-wide product at every branch, rendering unstocked ones as permanently-disabled tiles. This lets that list show only products actually assigned to the active branch instead. See `src/services/masterData/masterDataService.ts` (`listProductBranchIds`/`listBranchProductIds`/`setProductBranches`), `src/features/inventory/hooks/useInventoryData.ts` (`useProducts`, `useProductBranches`, `useSetProductBranches`), and `src/pages/inventory/ProductDetailPage.tsx` (new "Branches" tab).
+
+---
+
+## 0035_fix_outstanding_credit_summary_zero_balance.sql
+
+**Applied live to Supabase on 2026-09-10.**
+
+**Function changed:**
+
+- `imagecare.fn_get_outstanding_credit_summary` - widened the row filter from `credit_balance > 0` to `(credit_balance > 0 OR credit_limit > 0)`.
+
+**Why:** a customer who just had a credit limit set (CreditLimitModal, "Set credit limit") but has not yet been charged anything has `credit_balance = 0`, so the old filter silently excluded them from this RPC entirely - the Credit Accounts page (`CreditAccountsPage.tsx`, via `useCreditAccounts`) and every other reader of this RPC never saw them at all, even though the page's own empty-state copy promises "Accounts appear here once a customer has a credit limit set or an outstanding balance." A zero-balance account still contributes 0 to every summed total, so this only adds visibility - it does not change any existing balance/outstanding figure anywhere the RPC is already read (`useOutstandingCredit`, `useCreditDashboardKpis`, `useCreditAccounts`).
