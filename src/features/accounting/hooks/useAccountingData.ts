@@ -3,12 +3,25 @@ import * as accountingService from '../../../services/accountingService'
 import { useUserContext, useActiveBranch } from '../../../context/AppContext'
 import { listCashTransactions, recordCashMovement as recordCashMovementReal } from '../../../services/financial/financialServices'
 import { getCashPosition } from '../../../services/reporting/reportingService'
-import type { AccountingSettings, CashMovement, CashMovementType, CashFlowDashboardKpis, CashLedgerEntry, CashLedgerEntryType, CashInHandBreakdown } from '../../../types/accounting'
+import type { AccountingSettings, CashMovement, CashMovementType, CashFlowDashboardKpis, CashLedgerEntry, CashLedgerEntryType, CashInHandBreakdown, CashForecast } from '../../../types/accounting'
 import type { CashTransaction } from '../../../types/database'
 
+// Bug fix (2026-09-10), "Run a cash reconciliation": this used to fire
+// invalidateQueries() without returning the promises it produced. Every
+// onSuccess in this file calls it as `onSuccess: () => invalidateAll(qc)`,
+// and react-query's mutateAsync() only waits for what onSuccess returns -
+// since the old version returned undefined, mutateAsync() (and so every
+// `await x.mutateAsync(...)` call site, e.g. CashReconciliationPage.tsx)
+// resolved before the invalidated queries had actually refetched. A
+// caller that read query data (or showed a toast) right after the await -
+// like the reconciliation page's "System says cash in hand" figure -
+// could still be looking at the pre-mutation value. Returning the
+// combined promise makes mutateAsync() genuinely wait for the refetch.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['accounting'] })
-  qc.invalidateQueries({ queryKey: ['dashboard-summary'] })
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['accounting'] }),
+    qc.invalidateQueries({ queryKey: ['dashboard-summary'] }),
+  ])
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,25 +257,106 @@ export function useBankBalance() {
   return useQuery({ queryKey: ['accounting', 'bank-balance'], queryFn: accountingService.getBankBalance })
 }
 
-export function useCashForecast(windowDays?: number, forecastDays?: number) {
-  // LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+// Bug fix (2026-09-10), "View cash flow forecast": this used to call
+// accountingService.getCashForecast(), which reads the same disconnected
+// local/legacy data source as the old cash-reconciliation bug (see
+// useRecordReconciliation below and the comment on
+// accountingService.getCashForecast()) - so the forecast's starting point
+// and trend never matched the real Cash in Hand figure this page's own
+// data actually shows elsewhere in the app. Now computed directly from
+// the same real data useCashInHandBreakdown/useCashLedger already use
+// (getCashPosition + listCashTransactions), and also reports the average
+// daily inflow/outflow separately (not just the blended net), which is
+// what CashForecastPage.tsx needed to show "projected inflows" and
+// "projected outflows" as their own sections.
+export function useCashForecast(windowDays = 30, forecastDays = 14) {
+  const ctx = useUserContext()
+  const branch = useActiveBranch()
   return useQuery({
-    queryKey: ['accounting', 'cash-forecast', windowDays, forecastDays],
-    queryFn: () => accountingService.getCashForecast(windowDays, forecastDays),
+    queryKey: ['accounting', 'cash-forecast', ctx.business_id, branch, windowDays, forecastDays],
+    queryFn: async (): Promise<CashForecast> => {
+      const [position, txns] = await Promise.all([
+        getCashPosition(ctx, branch ?? undefined).then(unwrap),
+        listCashTransactions(ctx, { branch_id: branch ?? undefined }).then(unwrap),
+      ])
+      const cashInHandUgx = typeof position?.net_position === 'number' ? position.net_position : 0
+      const rows: CashTransaction[] = Array.isArray(txns) ? txns : []
+      const windowStart = Date.now() - windowDays * 86_400_000
+      const inWindow = rows.filter((r) => new Date(r.transaction_date).getTime() >= windowStart)
+
+      let inUgx = 0
+      let outUgx = 0
+      for (const row of inWindow) {
+        const amount = Math.abs(Number(row.amount))
+        if (directionFor(row.transaction_type) === 'in') inUgx += amount
+        else outUgx += amount
+      }
+      const dailyAverageInUgx = inWindow.length > 0 ? Math.round(inUgx / windowDays) : 0
+      const dailyAverageOutUgx = inWindow.length > 0 ? Math.round(outUgx / windowDays) : 0
+      const dailyAverageNetUgx = dailyAverageInUgx - dailyAverageOutUgx
+
+      const points: CashForecast['points'] = []
+      let projected = cashInHandUgx
+      for (let i = 1; i <= forecastDays; i++) {
+        projected += dailyAverageNetUgx
+        const date = new Date(Date.now() + i * 86_400_000).toISOString().slice(0, 10)
+        points.push({ date, projectedCashInHandUgx: projected })
+      }
+      return { dailyAverageNetUgx, dailyAverageInUgx, dailyAverageOutUgx, windowDays, points }
+    },
   })
 }
 
 export function useReconciliations() {
-  // LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
+  // LOCAL-ONLY: no real backend table for the reconciliation log itself
+  // exists yet (see docs/MODULE_INTEGRATION_MAP.md gap). The system amount
+  // stored on each entry is real as of the 2026-09-10 fix below though -
+  // see useRecordReconciliation.
   return useQuery({ queryKey: ['accounting', 'reconciliations'], queryFn: accountingService.listReconciliations })
 }
 
+// Bug fix (2026-09-10), "Run a cash reconciliation": this used to call
+// accountingService.recordReconciliation(), which internally recomputed
+// its own "system amount" from a disconnected local/legacy data source
+// (old localStorage-backed sales/credit/purchasing/expense services)
+// instead of the real Supabase cash position this page actually displays
+// (useCashInHandBreakdown, above) - so a logged reconciliation's stored
+// system amount, and any variance/adjustment derived from it, never
+// matched what the user saw on screen. Worse, when there was a variance,
+// it posted a "cash adjustment" through the local-only recordCashMovement,
+// which had zero effect on the real books.
+//
+// Now computes the variance from the same real getCashPosition() data the
+// page displays, and - when there is a variance - posts a real
+// cash_transactions adjustment row via recordCashMovementReal (the same
+// function "Record cash movement" uses), so the adjustment genuinely
+// affects Cash in Hand going forward. The reconciliation log entry itself
+// still gets persisted locally (no real reconciliations table exists
+// yet), but now with the real system amount.
 export function useRecordReconciliation(userId: string) {
+  const ctx = useUserContext()
+  const branch = useActiveBranch()
   const qc = useQueryClient()
-  // LOCAL-ONLY: no real backend service yet for this operation (see docs/MODULE_INTEGRATION_MAP.md gap)
   return useMutation({
-    mutationFn: ({ countedAmountUgx, notes }: { countedAmountUgx: number; notes: string }) =>
-      accountingService.recordReconciliation(countedAmountUgx, notes, userId),
+    mutationFn: async ({ countedAmountUgx, notes }: { countedAmountUgx: number; notes: string }) => {
+      const position = await getCashPosition(ctx, branch ?? undefined).then(unwrap)
+      const systemAmountUgx = typeof position?.net_position === 'number' ? position.net_position : 0
+      const varianceUgx = countedAmountUgx - systemAmountUgx
+
+      if (varianceUgx !== 0) {
+        const today = new Date().toISOString().slice(0, 10)
+        const reason = `Reconciliation on ${today}: counted ${countedAmountUgx.toLocaleString()} vs system ${systemAmountUgx.toLocaleString()}${notes ? `, ${notes}` : ''}`
+        await recordCashMovementReal(ctx, {
+          branch_id: (branch ?? ctx.branch_id) as string,
+          type: 'adjustment',
+          amount: varianceUgx,
+          reason,
+          bank_account_id: null,
+        }).then(unwrap)
+      }
+
+      return accountingService.recordReconciliation(countedAmountUgx, systemAmountUgx, notes, userId)
+    },
     onSuccess: () => invalidateAll(qc),
   })
 }

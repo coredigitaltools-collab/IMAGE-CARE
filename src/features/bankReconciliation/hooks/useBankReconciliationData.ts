@@ -5,9 +5,14 @@ import * as bankReconciliationService from '../../../services/bankReconciliation
 import type { BankAccountInput, BankStatementLineInput } from '../../../types/bankReconciliation'
 import type { CashMovement } from '../../../types/accounting'
 
+// Bug fix (2026-09-10): see useAccountingData.ts's invalidateAll() for the
+// full explanation - this returned undefined instead of the invalidation
+// promises, so mutateAsync() callers resolved before the refetch finished.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['bank-reconciliation'] })
-  qc.invalidateQueries({ queryKey: ['accounting'] })
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['bank-reconciliation'] }),
+    qc.invalidateQueries({ queryKey: ['accounting'] }),
+  ])
 }
 
 // Same unwrap() shape as src/features/invoices/hooks/useInvoicesData.ts: throws

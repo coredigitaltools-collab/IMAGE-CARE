@@ -7,8 +7,11 @@ import { APP_CONSTANTS } from '../../../config/env'
 import type { PayComponentTypeInput, PayrollEmployeeInput } from '../../../types/payroll'
 import type { PayrollRecord } from '../../../types/database'
 
+// Bug fix (2026-09-10): see useAccountingData.ts's invalidateAll() for the
+// full explanation - this returned undefined instead of the invalidation
+// promise, so mutateAsync() callers resolved before the refetch finished.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['payroll'] })
+  return qc.invalidateQueries({ queryKey: ['payroll'] })
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

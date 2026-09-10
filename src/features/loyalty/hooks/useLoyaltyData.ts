@@ -10,10 +10,15 @@ import * as loyaltyService from '../../../services/loyaltyService'
 import type { LoyaltyRewardInput, LoyaltySettings, LoyaltyTransaction as LocalLoyaltyTransaction } from '../../../types/loyalty'
 import type { LoyaltyTransaction as DbLoyaltyTransaction } from '../../../types/database'
 
+// Bug fix (2026-09-10): see useAccountingData.ts's invalidateAll() for the
+// full explanation - this returned undefined instead of the invalidation
+// promises, so mutateAsync() callers resolved before the refetch finished.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['loyalty'] })
-  qc.invalidateQueries({ queryKey: ['sales', 'customers'] })
-  qc.invalidateQueries({ queryKey: ['sales', 'crm-kpis'] })
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['loyalty'] }),
+    qc.invalidateQueries({ queryKey: ['sales', 'customers'] }),
+    qc.invalidateQueries({ queryKey: ['sales', 'crm-kpis'] }),
+  ])
 }
 
 // Same unwrap() shape as src/features/invoices/hooks/useInvoicesData.ts: throws on

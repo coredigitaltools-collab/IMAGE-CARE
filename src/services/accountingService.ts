@@ -253,13 +253,30 @@ export async function getCashLedger(): Promise<CashLedgerEntry[]> {
 /** A simple, honestly-labeled projection: the average daily net cash
  *  flow over the trailing window, extrapolated forward. No hidden
  *  model, no fabricated trend, just the same arithmetic a business
- *  owner could do with a calculator, automated. */
+ *  owner could do with a calculator, automated.
+ *
+ *  Bug fix (2026-09-10), "View cash flow forecast": superseded. This
+ *  local version (and the getCashLedger()/getCashInHandBreakdown() it is
+ *  built from) reads the same disconnected local/legacy data sources as
+ *  the old recordReconciliation() below, not the real Supabase cash data
+ *  the Cash Flow pages actually display. useCashForecast() in
+ *  useAccountingData.ts now computes the forecast directly from real
+ *  data (getCashPosition + listCashTransactions) instead of calling this
+ *  function. Left in place only because getCashLedger()/
+ *  getCashInHandBreakdown() are still used by other local-only summary
+ *  services (dailySummaryService.ts, monthlySummaryService.ts,
+ *  annualSummaryService.ts, dashboardService.ts) - not touched here to
+ *  avoid widening this fix's scope. */
 export async function getCashForecast(windowDays = 30, forecastDays = 14): Promise<CashForecast> {
   const [ledger, breakdown] = await Promise.all([getCashLedger(), getCashInHandBreakdown()])
   const windowStart = Date.now() - windowDays * 86_400_000
   const inWindow = ledger.filter((e) => new Date(e.date).getTime() >= windowStart)
   const netInWindow = inWindow.reduce((sum, e) => sum + (e.direction === 'in' ? e.amountUgx : -e.amountUgx), 0)
+  const inflowInWindow = inWindow.filter((e) => e.direction === 'in').reduce((sum, e) => sum + e.amountUgx, 0)
+  const outflowInWindow = inWindow.filter((e) => e.direction === 'out').reduce((sum, e) => sum + e.amountUgx, 0)
   const dailyAverageNetUgx = inWindow.length > 0 ? Math.round(netInWindow / windowDays) : 0
+  const dailyAverageInUgx = inWindow.length > 0 ? Math.round(inflowInWindow / windowDays) : 0
+  const dailyAverageOutUgx = inWindow.length > 0 ? Math.round(outflowInWindow / windowDays) : 0
 
   const points: CashForecast['points'] = []
   let projected = breakdown.cashInHandUgx
@@ -268,7 +285,7 @@ export async function getCashForecast(windowDays = 30, forecastDays = 14): Promi
     const date = new Date(Date.now() + i * 86_400_000).toISOString().slice(0, 10)
     points.push({ date, projectedCashInHandUgx: projected })
   }
-  return { dailyAverageNetUgx, windowDays, points }
+  return { dailyAverageNetUgx, dailyAverageInUgx, dailyAverageOutUgx, windowDays, points }
 }
 
 // ---------- Cash Reconciliation ----------
@@ -283,9 +300,30 @@ export async function listReconciliations(): Promise<CashReconciliation[]> {
   return [...list].sort((a, b) => new Date(b.reconciledAt).getTime() - new Date(a.reconciledAt).getTime())
 }
 
-export async function recordReconciliation(countedAmountUgx: number, notes: string, userId: string): Promise<CashReconciliation> {
-  const breakdown = await getCashInHandBreakdown()
-  const systemAmountUgx = breakdown.cashInHandUgx
+// Bug fix (2026-09-10), "Run a cash reconciliation": this used to
+// recompute its own "system amount" from getCashInHandBreakdown() above -
+// a disconnected local/legacy calculation, not the real Supabase cash
+// data the Cash Reconciliation page actually displays and compares
+// against (useCashInHandBreakdown in useAccountingData.ts). So a logged
+// reconciliation's stored system amount (and variance) never matched what
+// the user saw on screen, and the "adjustment" this function posted below
+// via the local recordCashMovement() went into local-only storage with no
+// effect on the real books at all.
+//
+// Fixed by moving the real-data lookup and the real adjustment-posting
+// out to the caller (useRecordReconciliation in useAccountingData.ts,
+// which already has the real system amount and the real
+// recordCashMovement service on hand) - this function now only persists
+// the reconciliation log entry with whatever system amount it is given,
+// and no longer posts any movement itself. There is still no real
+// backend table for the reconciliation log itself, so that part stays
+// local, same as before.
+export async function recordReconciliation(
+  countedAmountUgx: number,
+  systemAmountUgx: number,
+  notes: string,
+  userId: string,
+): Promise<CashReconciliation> {
   const varianceUgx = countedAmountUgx - systemAmountUgx
 
   const reconciliation: CashReconciliation = {
@@ -302,11 +340,6 @@ export async function recordReconciliation(countedAmountUgx: number, notes: stri
   const existing = await getCollection<CashReconciliation>(RECONCILIATIONS_KEY, () => [])
   await setCollection(RECONCILIATIONS_KEY, [...existing, reconciliation])
   await enqueueSync({ entityType: 'cash_reconciliation', entityId: reconciliation.id, operation: 'create' })
-
-  if (varianceUgx !== 0) {
-    const reason = `Reconciliation on ${reconciliation.date}: counted ${countedAmountUgx.toLocaleString()} vs system ${systemAmountUgx.toLocaleString()}${notes ? `, ${notes}` : ''}`
-    await recordCashMovement('adjustment', varianceUgx, reason, userId)
-  }
 
   return reconciliation
 }

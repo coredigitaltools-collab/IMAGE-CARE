@@ -16,8 +16,11 @@ import type { Invoice as DbInvoiceRow, Sale as DbSaleRow, UUID } from '../../../
 import type { Sale as LocalSale } from '../../../types/sales'
 import type { UserContext } from '../../../types/app'
 
+// Bug fix (2026-09-10): see useAccountingData.ts's invalidateAll() for the
+// full explanation - this returned undefined instead of the invalidation
+// promise, so mutateAsync() callers resolved before the refetch finished.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['invoices'] })
+  return qc.invalidateQueries({ queryKey: ['invoices'] })
 }
 
 // Same unwrap() shape as src/features/credit/hooks/useCreditData.ts: throws on

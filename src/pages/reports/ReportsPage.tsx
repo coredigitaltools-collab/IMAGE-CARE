@@ -115,6 +115,23 @@ function OverviewReport() {
 
 function SalesReport() {
   const salesQuery = useSales()
+  const ctx    = useUserContext()
+  const branch = useActiveBranch()
+  // Bug fix (2026-09-10), "Review the sales performance report": this tab
+  // showed revenue and a payment-method split but no profitability figure.
+  // Reuses the same real P&L query (journal_lines-derived Revenue/COGS)
+  // that OverviewReport() above already uses for its own Gross Profit row -
+  // same real numbers, no new backend query, just also shown here where a
+  // sales performance report would reasonably include profitability.
+  const plQuery = useQuery({
+    queryKey: ['reports', 'pl-summary', ctx.business_id, branch],
+    queryFn: () => getPLSummary(ctx, branch ?? undefined).then(r => {
+      if (r.error) throw new Error(r.error.message ?? 'Failed to load P&L');
+      return r.data!;
+    }),
+    refetchInterval: 60_000,
+  })
+  const grossProfit = plQuery.data?.grossProfit ?? 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const confirmed  = (Array.isArray(salesQuery.data) ? salesQuery.data : []).filter((s: any) => s.status === 'confirmed')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,6 +151,11 @@ function SalesReport() {
           {salesQuery.isLoading ? <Skeleton className="h-40 w-full" /> : <>
             <StatRow label="Completed Sales"  value={String(confirmed.length)} />
             <StatRow label="Total Revenue"    value={formatCurrency(revenue, 'UGX')} tone="green" />
+            <StatRow
+              label="Gross Profit"
+              value={plQuery.isLoading ? '…' : formatCurrency(grossProfit, 'UGX')}
+              tone={grossProfit >= 0 ? 'green' : 'red'}
+            />
             {Object.entries(byMethod).map(([method, total]) => (
               <StatRow key={method} label={`  ${method}`} value={formatCurrency(total, 'UGX')} />
             ))}

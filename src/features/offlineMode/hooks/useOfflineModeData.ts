@@ -8,8 +8,15 @@ import type { OfflineSettings } from '../../../services/offlineModeService'
 import type { SupportedCurrency } from '../../../lib/currency'
 import type { DashboardKPIs } from '../../../types/database'
 
+// Bug fix (2026-09-10): this used to fire invalidateQueries() without
+// returning the resulting promise, so `onSuccess: () => invalidateAll(qc)`
+// returned undefined and mutateAsync() resolved before the invalidated
+// queries had actually refetched - a caller awaiting the mutation could
+// still read stale data right after. See useAccountingData.ts's
+// invalidateAll() for the full explanation (same bug, same fix, repeated
+// across every feature hook file that has one of these).
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['offline-mode'] })
+  return qc.invalidateQueries({ queryKey: ['offline-mode'] })
 }
 
 // Same unwrap() shape as src/features/invoices/hooks/useInvoicesData.ts: throws on

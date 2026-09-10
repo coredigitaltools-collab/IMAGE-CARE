@@ -8,8 +8,11 @@ import type { UserContext } from '../../../types/app'
 import type { SalesTarget, SalesTargetInput, SalesTargetsSettings } from '../../../types/salesTargets'
 import type { TargetsDashboardData, LeaderboardRow, NearingTargetAlert } from '../../../services/salesTargetsService'
 
+// Bug fix (2026-09-10): see useAccountingData.ts's invalidateAll() for the
+// full explanation - this returned undefined instead of the invalidation
+// promise, so mutateAsync() callers resolved before the refetch finished.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['sales-targets'] })
+  return qc.invalidateQueries({ queryKey: ['sales-targets'] })
 }
 
 // ---------------------------------------------------------------------------

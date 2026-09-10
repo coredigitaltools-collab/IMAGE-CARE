@@ -42,9 +42,14 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
   return d
 }
 
+// Bug fix (2026-09-10): see useAccountingData.ts's invalidateAll() for the
+// full explanation - this returned undefined instead of the invalidation
+// promises, so mutateAsync() callers resolved before the refetch finished.
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['bills'] })
-  qc.invalidateQueries({ queryKey: ['purchasing'] })
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['bills'] }),
+    qc.invalidateQueries({ queryKey: ['purchasing'] }),
+  ])
 }
 
 type RealBillRow = RealBill & { suppliers?: { name: string } | null }
