@@ -33,7 +33,6 @@ describe('toCsv', () => {
   });
 
   it('renders null/undefined cells as empty strings', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(toCsv([[null as any, undefined as any, 'x']])).toBe(',,x');
   });
 
@@ -94,9 +93,7 @@ describe('downloadCsv', () => {
     const createObjectURL = vi.fn().mockReturnValue('blob:mock-url');
     const revokeObjectURL = vi.fn();
     // jsdom does not implement these - stub them for the duration of the test.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (URL as any).createObjectURL = createObjectURL;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (URL as any).revokeObjectURL = revokeObjectURL;
 
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});

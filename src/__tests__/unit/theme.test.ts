@@ -89,7 +89,6 @@ describe('theme', () => {
   });
 
   it('initThemeFromCache does not throw when matchMedia is unavailable', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).matchMedia = undefined;
     const { initThemeFromCache } = await freshTheme();
     expect(() => initThemeFromCache()).not.toThrow();
