@@ -12,6 +12,19 @@
   --color-ink-900: #0F172A;  /* = Primary Navy #0F172A */
   --color-ink-700: #334155;
   --color-ink-500: #64748B;
+  /* ink-400 was missing from this scale entirely (jumped 500 -> 300), so
+     every `text-ink-400` / `placeholder:text-ink-400` in the app (icons,
+     placeholder-adjacent hints, muted labels - 24 usages across 16 files,
+     confirmed absent from the deployed CSS: no `.text-ink-400` rule and no
+     `--color-ink-400` variable at all) silently compiled to nothing and
+     fell back to the inherited dark body text color. That's what made the
+     search icons in Sales/POS (and every other muted-gray icon using this
+     token) render bold and dark instead of a subtle gray, which is what
+     made them look like they were overlapping the placeholder text next to
+     them. Value matches the rest of this scale, which is Tailwind's slate
+     palette under different names (900/700/500/300/100/50 above are exact
+     slate matches) - slate-400 is #94A3B8. */
+  --color-ink-400: #94A3B8;
   --color-ink-300: #CBD5E1;
   --color-ink-100: #E2E8F0;
   --color-ink-50:  #F8FAFC;  /* Workspace background */
@@ -46,13 +59,109 @@
   --color-warning-500: #D97706;
   --color-warning-100: #FEF3C7;
 
+  /* Dark-mode support (2026-09-07, "appearance should be dark/light/
+     standard mode"): these three are NEW tokens, not present before. They
+     exist so the ~180 places across the app that used the literal Tailwind
+     `white` color (card/modal/input/dropdown backgrounds) and the ~115
+     places that used `ink-50` as a muted panel/hover tint have something
+     theme-aware to point at instead - `white` and the workspace-background
+     role of `ink-50` both still need to stay put for other uses (see the
+     dark override block below), so this app's actual card-surface color
+     needed its own name. `accent` exists for the same reason: `text-
+     brand-blue-700` was used ~115 times as a plain accent/link/icon color
+     on ordinary surfaces (not paired with its own colored background), but
+     `brand-blue-700` is ALSO the app's solid button-background color
+     (paired with `text-white`, unrelated to page theme) - one CSS variable
+     can't be "stay near-black for buttons" AND "get lighter for text
+     contrast on a dark surface" at the same time, so the accent-text case
+     got its own token, replacing every `text-brand-blue-700` used that way. */
+  --color-surface:   #FFFFFF;
+  --color-surface-2: #F8FAFC;
+  --color-accent:    #0F172A;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
   --shadow-card-hover: 0 4px 12px 0 rgb(15 23 42 / 0.08), 0 2px 4px 0 rgb(15 23 42 / 0.06);
   --shadow-sidebar: 1px 0 0 0 rgb(15 23 42 / 0.06);
 
-  --radius-card: 0.75rem;
+  /* Bumped 0.75rem -> 1rem (2026-08-30 "make it bigger" pass): every
+     dialog/card corner in the app reads from this one token, so this is
+     the cheapest way to give the whole app the chunkier, more modern
+     corner radius the user's reference screenshot has. */
+  --radius-card: 1rem;
+}
+
+/* ---- Dark mode ----------------------------------------------
+   Applied by setting data-theme="dark" on <html> (see
+   src/lib/theme.ts / AppearanceSettingsPage.tsx) - resolved from the
+   user's saved Appearance -> Theme preference (Light / Dark / System).
+   Every Tailwind utility generated from the @theme block above compiles
+   to `color: var(--color-ink-900)` etc rather than a baked-in hex value
+   (confirmed against the production build's output CSS), so redeclaring
+   these same custom properties here is enough to re-theme every card,
+   button, input, and page that already uses them - no per-component
+   changes needed for the ~90% of the app built from these tokens.
+
+   Three token families intentionally do NOT flip here, because they're
+   also used as solid, self-contained fills paired with their own
+   `text-white` (buttons, filled badges/pills) - changing them would
+   break THAT contrast instead of fixing this one:
+     - brand-blue-500/700/900 (primary buttons, sidebar, focus accent)
+     - brand-red-500/700 danger-button fill, success-500/warning-500 (icons/dots)
+   Their light "-50/-100" tint counterparts (used only as tab/badge
+   backgrounds, always paired with -700 text) DO flip below, alongside the
+   -700 text tone they're paired with - see Badge.tsx/*Tabs.tsx for the
+   pattern this follows. */
+:root[data-theme="dark"] {
+  /* Tells the browser to render its own native widgets (select
+     dropdown menus, date/time picker popups, checkboxes, scrollbar
+     fallback where the ::-webkit-scrollbar rules below don't apply)
+     in dark style instead of their default white - those aren't
+     drawn from these CSS variables at all, only this property reaches
+     them. */
+  color-scheme: dark;
+
+  /* Text / border / divider scale - inverted */
+  --color-ink-900: #F1F5F9;
+  --color-ink-700: #CBD5E1;
+  --color-ink-500: #94A3B8;
+  --color-ink-400: #64748B;
+  --color-ink-300: #475569;
+  --color-ink-100: #334155;
+  --color-ink-50:  #0B1120; /* workspace/page background (body{}, below) */
+
+  /* Card/modal/input surface (was literal `white`) and its one-step-up
+     hover/muted-panel tone (was `ink-50` reused for that role in light
+     mode - see the token comment above for why they had to split). */
+  --color-surface:   #111827;
+  --color-surface-2: #1E293B;
+
+  /* Accent text/icon/border (was `brand-blue-700` reused for that role -
+     see token comment above) - lightened for contrast on a dark surface;
+     the brand-blue-500 "Electric Blue" accent stays as-is, it's already
+     bright enough to read on light or dark. */
+  --color-accent: #60A5FA;
+
+  /* Tint backgrounds for badges/tabs/pills, paired with their -700 text
+     (which lightens directly, below - none of these are also a solid
+     button fill, confirmed by search, so no split needed for them). */
+  --color-brand-blue-50:  #16233A;
+  --color-brand-blue-100: #1C3A5E;
+  --color-brand-red-50:   #2E1614;
+  --color-brand-red-100:  #3F211E;
+  --color-brand-red-700:  #F87171;
+  --color-success-100:    #0F3823;
+  --color-success-700:    #4ADE80;
+  --color-warning-100:    #422C06;
+  --color-warning-700:    #FBBF24;
+
+  /* Light-mode shadows read as a faint edge on white; on a dark surface
+     they'd be invisible, so dark mode leans on a visible border plus a
+     true black shadow for elevation instead. */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 0 rgb(0 0 0 / 0.4);
+  --shadow-card-hover: 0 4px 14px 0 rgb(0 0 0 / 0.5), 0 2px 4px 0 rgb(0 0 0 / 0.4);
+  --shadow-sidebar: 1px 0 0 0 rgb(0 0 0 / 0.3);
 }
 
 html {
@@ -100,4 +209,21 @@ body {
 @keyframes modalIn {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Bug fix (2026-09-03, ReceiptModal print): pairs with the
+   `receipt-printing` class ReceiptModal.tsx adds to <body> while it's
+   open. The receipt itself now renders through a React portal straight
+   onto <body> (see that file's comment for why - printing a
+   `position: fixed` element nested inside AppShell's scrollable <main>
+   produced a blank page), so it's a sibling of #root rather than a
+   descendant of it. Hiding #root during print (only while a receipt
+   portal is actually mounted) keeps the printed page to just the
+   receipt, instead of the whole app UI printing underneath/alongside it.
+   Scoped to this one class so it can't affect the several other pages
+   that call window.print() for their own in-page printable content. */
+@media print {
+  body.receipt-printing #root {
+    display: none !important;
+  }
 }

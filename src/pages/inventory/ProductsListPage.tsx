@@ -18,13 +18,11 @@ import {
   useCategories,
   useCreateProduct,
   useDuplicateProduct,
-  useGeneratedSku,
+  useEnsureDefaultUnit,
   useProducts,
   useReactivateProduct,
   useSuppliers,
-  useUnits,
 } from '../../features/inventory/hooks/useInventoryData'
-import { DuplicateBarcodeError, DuplicateSkuError } from '../../services/productService'
 import type { ProductInput } from '../../types/inventory'
 
 export function ProductsListPage() {
@@ -36,16 +34,45 @@ export function ProductsListPage() {
   const productsQuery = useProducts()
   const categoriesQuery = useCategories()
   const brandsQuery = useBrands()
-  const unitsQuery = useUnits()
+  // Units has no UI of its own here by design (the user's explicit,
+  // repeated direction: the system just runs on pieces, no unit picker) -
+  // this silently ensures one real "Piece" unit row exists the first time
+  // it's needed and returns it the same shape useUnits() would.
+  const unitsQuery = useEnsureDefaultUnit()
   const suppliersQuery = useSuppliers()
-  const generatedSkuQuery = useGeneratedSku()
+  // 2026-09-01: AddProductWizard now generates its own fresh SKU every time
+  // it mounts (see the comment above generateSku() in that file) instead of
+  // reading a single shared, page-lifetime-cached value from here - that
+  // was the actual cause of "That SKU is already used by another product."
+  // on the 2nd+ product added in a session, since the old shared value
+  // never changed after the page first loaded.
   const createProduct = useCreateProduct(user.id)
   const duplicateProduct = useDuplicateProduct(user.id)
   const archiveProduct = useArchiveProduct(user.id)
   const reactivateProduct = useReactivateProduct(user.id)
 
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
-  const [showArchived, setShowArchived] = useState(false)
+  // Bug fix (2026-09-09), "Filter products in the inventory list": this was
+  // a plain "Show archived" checkbox - a real filter (active products are
+  // hidden by default unless checked), just not shaped or labeled like one,
+  // so a "Status" control alongside Category/Supplier here (the Inventory
+  // Dashboard's separate InventoryFilterBar already has exactly this
+  // 3-option shape - see aria-label="Filter by status" there) wasn't found.
+  // Same default behavior as before (archived hidden unless explicitly
+  // selected), now as an actual Status dropdown that matches the existing
+  // Category/Supplier controls.
+  const [statusFilter, setStatusFilter] = useState<'active' | 'archived' | 'all'>('active')
+  // Bug fix (2026-09-07): "Category: Blazers, Supplier: Blazers United"
+  // didn't narrow the list at all - this is the real product list users
+  // browse day to day, and it had no category/supplier filter controls or
+  // logic whatsoever (the only existing category/supplier filter UI lives
+  // on the separate Inventory Dashboard tab, and even there it only ever
+  // narrowed two small side widgets, never this list). Both constraints
+  // apply together (AND), matching how the test - and the labels
+  // "Category: X, Supplier: Y" - describe narrowing to products that
+  // match both at once.
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [supplierFilter, setSupplierFilter] = useState('all')
   const [isAddOpen, setIsAddOpen] = useState(searchParams.get('new') === '1')
   const [formError, setFormError] = useState<string | undefined>()
 
@@ -55,11 +82,13 @@ export function ProductsListPage() {
     const products = productsQuery.data ?? []
     const q = query.trim().toLowerCase()
     return products.filter((p) => {
-      if (!showArchived && p.status === 'archived') return false
+      if (statusFilter !== 'all' && p.status !== statusFilter) return false
+      if (categoryFilter !== 'all' && p.categoryId !== categoryFilter) return false
+      if (supplierFilter !== 'all' && p.supplierId !== supplierFilter) return false
       if (!q) return true
       return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q)
     })
-  }, [productsQuery.data, query, showArchived])
+  }, [productsQuery.data, query, statusFilter, categoryFilter, supplierFilter])
 
   const closeAddModal = () => {
     setIsAddOpen(false)
@@ -73,15 +102,25 @@ export function ProductsListPage() {
   const handleCreate = async (input: ProductInput) => {
     setFormError(undefined)
     try {
-      await createProduct.mutateAsync(input)
+      const created = await createProduct.mutateAsync(input)
       showToast('Product added.', 'success')
+      // Bug fix (2026-09-07): "why do the new products show grayed out" -
+      // opening stock / branch assignment failures used to be swallowed
+      // silently (console.error only). Now surfaced as a follow-up toast
+      // so a product that quietly ended up at 0 stock or unassigned isn't
+      // mistaken for one where nothing was entered.
+      for (const warning of created?.warnings ?? []) showToast(warning)
       closeAddModal()
     } catch (err) {
-      setFormError(
-        err instanceof DuplicateSkuError || err instanceof DuplicateBarcodeError
-          ? err.message
-          : 'Something went wrong. Please try again.',
-      )
+      // 2026-09-01: this used to only recognize DuplicateSkuError/
+      // DuplicateBarcodeError, both from the old local-storage productService
+      // that this page doesn't actually call anymore - the real save path
+      // (masterDataService.createProduct, via useCreateProduct) throws a
+      // plain Error whose message now comes from parseError()'s much more
+      // specific handling (see types/app.ts) - e.g. "That barcode is
+      // already used by another record." instead of a dead-end generic
+      // message. Use it whenever there is one.
+      setFormError(err instanceof Error && err.message ? err.message : 'Something went wrong. Please try again.')
     }
   }
 
@@ -111,18 +150,45 @@ export function ProductsListPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name, SKU, or barcode..."
-            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-ink-700">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
-          />
-          Show archived
-        </label>
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          aria-label="Filter by category"
+          className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        >
+          <option value="all">All categories</option>
+          {(categoriesQuery.data ?? []).filter((c) => c.is_active).map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={supplierFilter}
+          onChange={(e) => setSupplierFilter(e.target.value)}
+          aria-label="Filter by supplier"
+          className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        >
+          <option value="all">All suppliers</option>
+          {(suppliersQuery.data ?? []).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'active' | 'archived' | 'all')}
+          aria-label="Filter by status"
+          className="rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        >
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+          <option value="all">All statuses</option>
+        </select>
       </div>
 
       <Card className="overflow-hidden">
@@ -143,7 +209,7 @@ export function ProductsListPage() {
           <ul className="divide-y divide-ink-100">
             {filtered.map((product) => (
               <li key={product.id} className="flex flex-wrap items-center gap-4 p-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-surface-2">
                   {product.imageDataUrl ? (
                     <img src={product.imageDataUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
@@ -151,7 +217,7 @@ export function ProductsListPage() {
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <Link to={`/inventory/products/${product.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/inventory/products/${product.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                     {product.name}
                   </Link>
                   <p className="text-xs text-ink-500">
@@ -202,7 +268,6 @@ export function ProductsListPage() {
           brands={brandsQuery.data ?? []}
           units={unitsQuery.data ?? []}
           suppliers={suppliersQuery.data ?? []}
-          generatedSku={generatedSkuQuery.data}
           userId={user.id}
           onClose={closeAddModal}
           onSubmit={handleCreate}

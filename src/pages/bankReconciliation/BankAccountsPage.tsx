@@ -55,13 +55,18 @@ export function BankAccountsPage() {
         {accountsQuery.isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : activeAccounts.length === 0 ? (
-          <EmptyState icon={Building2} title="No bank accounts yet" description="Add the accounts the business actually banks with." />
+          <EmptyState
+            icon={Building2}
+            title="No bank accounts yet"
+            description="Add the accounts the business actually banks with."
+            action={{ label: '+ New account', onClick: () => setIsAddOpen(true) }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {activeAccounts.map((a) => (
               <li key={a.id} className="flex items-center justify-between py-3 text-sm">
                 <div>
-                  <Link to={`/bank-reconciliation/reconcile?account=${a.id}`} className="font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/bank-reconciliation/reconcile?account=${a.id}`} className="font-medium text-ink-900 hover:text-accent">
                     {a.name}
                   </Link>
                   <p className="text-xs text-ink-500">{a.accountNumber}</p>

@@ -53,7 +53,7 @@ export function InvoicesListPage() {
             setIsGenerateOpen(true)
           }}
         >
-          <Plus size={15} /> New invoice
+          <Plus size={15} /> Invoice a sale
         </Button>
       </div>
 
@@ -65,7 +65,7 @@ export function InvoicesListPage() {
             className={
               statusFilter === s
                 ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-                : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+                : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
             }
           >
             {s === 'all' ? 'All' : INVOICE_STATUS_LABELS[s]}
@@ -81,7 +81,26 @@ export function InvoicesListPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={FileText} title="No invoices found" description="Invoices generated from completed sales will appear here." />
+          <EmptyState
+            icon={FileText}
+            title={statusFilter === 'all' ? 'No invoices yet' : 'No invoices match this filter'}
+            description={
+              statusFilter === 'all'
+                ? 'Generate an invoice from a completed sale to start tracking what customers owe.'
+                : 'Try a different status filter, or view all invoices.'
+            }
+            action={
+              statusFilter === 'all'
+                ? {
+                    label: '+ Invoice a sale',
+                    onClick: () => {
+                      setGenError(undefined)
+                      setIsGenerateOpen(true)
+                    },
+                  }
+                : { label: 'Show all invoices', onClick: () => setStatusFilter('all') }
+            }
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {filtered.map((inv) => {
@@ -90,7 +109,7 @@ export function InvoicesListPage() {
                 <li key={inv.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Link to={`/invoices/${inv.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/invoices/${inv.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                         {inv.invoiceNumber}
                       </Link>
                       <Badge tone={STATUS_TONE[status]}>{INVOICE_STATUS_LABELS[status]}</Badge>

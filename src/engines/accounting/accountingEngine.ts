@@ -118,42 +118,87 @@ export class AccountingEngine {
       }
     }
 
-    // Resolve account IDs from the authoritative Chart of Accounts
-    const resolvedLines: Array<JournalLineInput & { account_id?: UUID }> = [];
-
-    for (const line of cmd.lines) {
-      const account = await resolveAccount(ctx.business_id, line.account_code);
-      // account_id is set when found; if not found the line still posts but
-      // the DB trigger will validate if account_id is provided.
-      resolvedLines.push({ ...line, account_id: account?.id });
-    }
+    // Resolve account IDs from the authoritative Chart of Accounts.
+    // 2026-09-01: every caller (buildSaleJournalLines, buildExpenseJournalLines,
+    // buildPurchaseJournalLines, reverseJournal) already resolves each
+    // account and attaches account_id before calling postJournal - this
+    // loop used to ignore that and re-query every single line by
+    // account_code again from scratch, one at a time, doubling the number
+    // of account lookups on every sale/expense/payroll save for no reason.
+    // Now it only queries when a line arrives without an account_id
+    // (kept as a fallback for any future caller that doesn't pre-resolve),
+    // and runs any lines that do need it in parallel rather than one by one.
+    // 2026-09-01: resolving account IDs and generating the next journal
+    // number are independent of each other - neither needs the other's
+    // result - but were being awaited one after another. Running them
+    // together saves a full round trip on every journal post (sale,
+    // expense, purchase, payroll, reversal all go through here).
+    const [resolvedLines, entryNum] = await Promise.all([
+      Promise.all(
+        cmd.lines.map(async (line) => {
+          if (line.account_id) return line;
+          const account = await resolveAccount(ctx.business_id, line.account_code);
+          // account_id is set when found; if not found the line still posts but
+          // the DB trigger will validate if account_id is provided.
+          return { ...line, account_id: account?.id };
+        })
+      ),
+      nextJournalNumber(ctx.business_id),
+    ]);
 
     const entryDate  = cmd.entry_date ?? new Date().toISOString();
     const entryMonth = new Date(entryDate).getMonth() + 1;
     const entryYear  = new Date(entryDate).getFullYear();
-    const entryNum   = await nextJournalNumber(ctx.business_id);
 
-    // Insert journal entry header
-    const { data: jeData, error: jeErr } = await db.journal_entries()
-      
-      .insert({
-        business_id:    ctx.business_id,
-        branch_id:      cmd.branch_id,
-        entry_number:   entryNum,
-        entry_date:     entryDate,
-        entry_type:     cmd.entry_type,
-        description:    cmd.description,
-        reference_type: cmd.reference_type,
-        reference_id:   cmd.reference_id,
-        total_debit:    totalDebit,
-        total_credit:   totalCredit,
-        status:         'posted',
-        period_month:   entryMonth,
-        period_year:    entryYear,
-        created_by:     ctx.user_id,
-      })
-      .select('id, entry_number, total_debit, total_credit, status')
-      .single();
+    // Insert journal entry header.
+    //
+    // Bug fix (2026-09-07, "Add a business expense" -> "Failed to create
+    // journal entry"): nextJournalNumber() picks the next number by
+    // counting existing rows (`count + 1`), then this insert uses that
+    // number - two of these running close together (any two modules
+    // posting a journal entry around the same time: a sale, an expense,
+    // a purchase, payroll all go through this same postJournal()) can
+    // both read the same count before either has inserted, then both try
+    // to insert the same entry_number. imagecare.journal_entries has a
+    // real UNIQUE(business_id, entry_number) constraint
+    // (uq_s2_journal_entry_number), so the loser gets a plain Postgres
+    // unique-violation (23505) back as jeErr, which used to surface as
+    // the opaque "Failed to create journal entry." with no way to
+    // recover except retyping the whole expense. Since the number itself
+    // has no meaning beyond being unique, the fix is to just regenerate
+    // it and retry - a handful of attempts, only on that specific error,
+    // so a genuine failure (RLS, immutability, a real DB problem) still
+    // fails immediately as before instead of retrying pointlessly.
+    let jeData: { id: string; entry_number: string; total_debit: number; total_credit: number; status: string } | null = null;
+    let jeErr: { message?: string; code?: string } | null | undefined = null;
+    let attemptEntryNum = entryNum;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error } = await db.journal_entries()
+        .insert({
+          business_id:    ctx.business_id,
+          branch_id:      cmd.branch_id,
+          entry_number:   attemptEntryNum,
+          entry_date:     entryDate,
+          entry_type:     cmd.entry_type,
+          description:    cmd.description,
+          reference_type: cmd.reference_type,
+          reference_id:   cmd.reference_id,
+          total_debit:    totalDebit,
+          total_credit:   totalCredit,
+          status:         'posted',
+          period_month:   entryMonth,
+          period_year:    entryYear,
+          created_by:     ctx.user_id,
+        })
+        .select('id, entry_number, total_debit, total_credit, status')
+        .single();
+      jeData = data;
+      jeErr = error;
+      if (!jeErr) break;
+      const isEntryNumberCollision = jeErr.code === '23505' && (jeErr.message?.includes('entry_number') ?? false);
+      if (!isEntryNumberCollision) break;
+      attemptEntryNum = await nextJournalNumber(ctx.business_id);
+    }
 
     if (jeErr || !jeData) {
       // DB immutability trigger raises IMC-IMMUTABLE; surface that specifically
@@ -283,10 +328,14 @@ export class AccountingEngine {
       debitCode = '1100'; // Cash in Hand
     }
 
-    const debitAcct = await resolveAccount(ctx.business_id, debitCode);
-    const revenueAcct = await resolveAccount(ctx.business_id, '4000');
-    const cogsAcct = await resolveAccount(ctx.business_id, '5000');
-    const inventoryAcct = await resolveAccount(ctx.business_id, '1300');
+    // 2026-09-01: these four account lookups are independent of each other -
+    // run them together instead of one after another.
+    const [debitAcct, revenueAcct, cogsAcct, inventoryAcct] = await Promise.all([
+      resolveAccount(ctx.business_id, debitCode),
+      resolveAccount(ctx.business_id, '4000'),
+      resolveAccount(ctx.business_id, '5000'),
+      resolveAccount(ctx.business_id, '1300'),
+    ]);
 
     const lines: JournalLineInput[] = [];
 
@@ -351,8 +400,11 @@ export class AccountingEngine {
       creditCode = '1100'; // Cash
     }
 
-    const expenseAcct = await resolveAccount(ctx.business_id, '6000');
-    const payAcct     = await resolveAccount(ctx.business_id, creditCode);
+    // 2026-09-01: independent lookups, run together (see buildSaleJournalLines).
+    const [expenseAcct, payAcct] = await Promise.all([
+      resolveAccount(ctx.business_id, '6000'),
+      resolveAccount(ctx.business_id, creditCode),
+    ]);
 
     return engineOk([
       {
@@ -383,14 +435,16 @@ export class AccountingEngine {
   ): Promise<EngineResult<JournalLineInput[]>> {
     const { amount, paymentMethod, isPaid } = opts;
 
-    const inventoryAcct  = await resolveAccount(ctx.business_id, '1300');
-    const payableAcct    = await resolveAccount(ctx.business_id, '2000');
-
     let cashCode = '1100';
     if (paymentMethod === 'mobile_money')               cashCode = '1120';
     else if (['bank_transfer','card'].includes(paymentMethod)) cashCode = '1130';
 
-    const cashAcct = await resolveAccount(ctx.business_id, cashCode);
+    // 2026-09-01: independent lookups, run together (see buildSaleJournalLines).
+    const [inventoryAcct, payableAcct, cashAcct] = await Promise.all([
+      resolveAccount(ctx.business_id, '1300'),
+      resolveAccount(ctx.business_id, '2000'),
+      resolveAccount(ctx.business_id, cashCode),
+    ]);
 
     // Dr Inventory, Cr Payable (always - stock received)
     const lines: JournalLineInput[] = [

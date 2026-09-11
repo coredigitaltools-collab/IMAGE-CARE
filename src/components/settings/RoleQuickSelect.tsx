@@ -25,11 +25,15 @@ export function RoleQuickSelect({ id, roles, value, onChange, userId, error }: R
   const [newName, setNewName] = useState('')
   const [createError, setCreateError] = useState<string | undefined>()
 
+  const startCreating = () => {
+    setIsCreating(true)
+    setNewName('')
+    setCreateError(undefined)
+  }
+
   const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (e.target.value === CREATE_NEW_VALUE) {
-      setIsCreating(true)
-      setNewName('')
-      setCreateError(undefined)
+      startCreating()
     } else {
       onChange(e.target.value)
     }
@@ -66,7 +70,7 @@ export function RoleQuickSelect({ id, roles, value, onChange, userId, error }: R
               }
             }}
             placeholder="e.g. Social Media Manager, Warehouse Assistant..."
-            className="w-full rounded-md border border-brand-blue-500 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-brand-blue-500 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
           <button
             type="button"
@@ -79,13 +83,45 @@ export function RoleQuickSelect({ id, roles, value, onChange, userId, error }: R
           <button
             type="button"
             onClick={() => setIsCreating(false)}
-            className="shrink-0 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"
+            className="shrink-0 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-700 hover:bg-surface-2"
           >
             Cancel
           </button>
         </div>
         {createError && <p className="mt-1 text-xs text-brand-red-700">{createError}</p>}
         <p className="mt-1 text-xs text-ink-500">New roles start with no permissions, set them in the Permission Matrix below.</p>
+      </div>
+    )
+  }
+
+  // Bug fix (2026-09-06): "I am not able to add role." When a business has
+  // zero real roles yet (imagecare.permission_groups genuinely empty - the
+  // common case right after the 2026-09-05 fix reconnected this screen,
+  // since nothing had ever been saved to the real table before that), this
+  // <select> only ever has ONE option: "+ Add new role...". A native
+  // select's onChange only fires when the user picks a DIFFERENT option
+  // than the one already showing - with just one option there is nothing
+  // else to pick, so clicking the only entry silently did nothing and the
+  // create-role text field never appeared. Rendering a plain button
+  // instead whenever there are no roles to choose from sidesteps that
+  // entirely (a click always works), and it re-appears as a normal
+  // dropdown the moment at least one real role exists.
+  if (roles.length === 0) {
+    return (
+      <div>
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink-700">
+          Role
+        </label>
+        <button
+          type="button"
+          id={id}
+          onClick={startCreating}
+          className="w-full rounded-md border border-dashed border-ink-300 bg-surface px-3 py-2 text-left text-sm text-accent shadow-card hover:border-brand-blue-500 hover:bg-brand-blue-50"
+        >
+          + Add new role…
+        </button>
+        <p className="mt-1 text-xs text-ink-500">No roles set up yet - add one to assign staff permissions.</p>
+        {error && <p className="mt-1 text-xs text-brand-red-700">{error}</p>}
       </div>
     )
   }
@@ -99,7 +135,7 @@ export function RoleQuickSelect({ id, roles, value, onChange, userId, error }: R
         id={id}
         value={value}
         onChange={handleSelectChange}
-        className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+        className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
       >
         {roles.map((r) => (
           <option key={r.id} value={r.id}>

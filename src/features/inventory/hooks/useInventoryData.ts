@@ -1,14 +1,19 @@
 // Stage 5: Inventory feature hooks - rewired to Stage 4 services.
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
 import {
   listProducts, getProduct, createProduct, updateProduct, softDeleteProduct,
-  listCategories, createCategory, updateCategory, archiveCategory,
+  listCategories, createCategory, updateCategory, archiveCategory, mergeCategories,
+  listUnits, createUnit, updateUnit, archiveUnit,
   listSuppliers, createSupplier, updateSupplier, archiveSupplier,
+  listProductBranchIds, listBranchProductIds, setProductBranches,
 } from '../../../services/masterData/masterDataService';
-import { listInventory, getInventoryMovements, createStockAdjustment, createStockTransfer } from '../../../services/inventory/inventoryService';
+import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
+import { listBrands, createBrand, updateBrand, archiveBrand } from '../../../services/brandService';
 import type { UUID } from '../../../types/database';
-import type { Product as InventoryProduct } from '../../../types/inventory';
+import type { Product as InventoryProduct, Supplier as InventorySupplier, StockMovementType } from '../../../types/inventory';
+import { convertFromUgx } from '../../../lib/currency';
 import type { SupportedCurrency } from '../../../lib/currency';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,47 +55,236 @@ export function useCategories() {
   return useQuery({ queryKey: ['inventory', 'categories', ctx.business_id], queryFn: () => listCategories(ctx).then(unwrap) });
 }
 
+// 2026-09-02: this used to always return [] (staleTime: Infinity, so it
+// never even refetched), while useCreateBrand/useUpdateBrand/useArchiveBrand
+// fabricated in-memory-only objects that touched no storage at all - not
+// even IndexedDB - so a saved brand vanished on refresh, on top of never
+// showing up in this list. There is no imagecare.brands table (Stage 4
+// note in masterDataService.ts), so this can't go through Supabase without
+// a schema change, which is out of scope here. brandService.ts already has
+// a genuine IndexedDB-backed CRUD implementation (same getCollection/
+// setCollection pattern as expenseService.ts) that nothing was calling -
+// wiring these hooks to it is an honest local persistence fix: it won't
+// sync across devices, but it survives a browser refresh, unlike before.
 export function useBrands() {
-  return useQuery({ queryKey: ['inventory', 'brands'], queryFn: async () => [] as import('../../../types/inventory').Brand[], staleTime: Infinity });
+  return useQuery({ queryKey: ['inventory', 'brands'], queryFn: () => listBrands() });
 }
 
+// 2026-09-01: listProducts() only ever selected from the products table
+// (plus joined category/unit names) - it never included quantity_on_hand,
+// so `currentStock` fell back to 0 for every product, always, regardless
+// of any real movements (opening stock, purchases, sales, adjustments).
+// Stock is deliberately never a column on products (see inventoryEngine's
+// own rule) - it has to come from vw_stock_summary via listInventory(),
+// same view the Inventory dashboard already reads.
+//
+// Bug fix (2026-09-06), "branch product visibility": when a branchId IS
+// passed, the returned list is now also filtered down to only products
+// assigned to that branch (imagecare.product_branches - see
+// masterDataService.ts). Every caller that does NOT pass a branchId
+// (Purchasing, the Inventory product catalog, Barcode Management, Stock
+// Adjustments/Movements) is completely unaffected and keeps seeing the
+// full, unfiltered, business-wide catalog exactly as before - only
+// PointOfSalePage's call (the Sales/Record Sale product picker) passes one,
+// which is the one operational list this was actually reported for:
+// products not carried at the active branch used to still appear there as
+// permanently-disabled "out of stock" tiles instead of not appearing at
+// all.
 export function useProducts(branchId?: UUID) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['inventory', 'products', ctx.business_id, branchId],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    queryFn: async () => (await listProducts(ctx).then(unwrap) as any[]).map(mapProduct),
+    queryFn: async () => {
+      const [products, stockRows, allowedProductIds] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listProducts(ctx).then(unwrap) as Promise<any[]>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listInventory(ctx, branchId ? { branch_id: branchId } : {}, { page_size: 500 }).then(unwrap) as Promise<any[]>,
+        branchId ? (listBranchProductIds(ctx, branchId).then(unwrap) as Promise<string[]>) : Promise.resolve(null),
+      ]);
+      const stockByProduct = new Map<string, number>();
+      for (const row of Array.isArray(stockRows) ? stockRows : []) {
+        const key = row.product_id as string;
+        stockByProduct.set(key, (stockByProduct.get(key) ?? 0) + Number(row.quantity_on_hand ?? 0));
+      }
+      const visibleProducts = allowedProductIds
+        ? products.filter((p) => allowedProductIds.includes(p.id))
+        : products;
+      return visibleProducts.map((p) => mapProduct({ ...p, currentStock: stockByProduct.get(p.id) ?? 0 }));
+    },
+  });
+}
+
+// Which branches carry this product - powers the "Branches" tab on the
+// product detail page (see setProductBranches's own comment for the
+// permission/behavior notes).
+export function useProductBranches(productId: string | undefined) {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'product-branches', productId],
+    queryFn: () => listProductBranchIds(ctx, productId as UUID).then(unwrap) as Promise<UUID[]>,
+    enabled: Boolean(productId),
+  });
+}
+
+export function useSetProductBranches(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ productId, branchIds }: { productId: UUID; branchIds: UUID[] }) =>
+      setProductBranches(ctx, productId, branchIds).then(unwrap),
+    onSuccess: (_data, { productId }) => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'product-branches', productId] });
+      // Branch assignment changes what a branch-scoped product list (POS)
+      // shows, so every cached useProducts(branchId) result needs to refetch.
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+    },
   });
 }
 
 export function useProduct(id: string | undefined) {
   const ctx = useUserContext();
+  const branch = useActiveBranch();
   return useQuery({
-    queryKey: ['inventory', 'product', id],
-    queryFn: async () => { const p = await getProduct(ctx, id as UUID).then(unwrap); return p ? mapProduct(p) : null; },
+    queryKey: ['inventory', 'product', id, branch],
+    queryFn: async () => {
+      const p = await getProduct(ctx, id as UUID).then(unwrap);
+      if (!p) return null;
+      // getStock() legitimately "fails" with RESOURCE_NOT_FOUND when a
+      // product has zero movements yet - that's not an error, it just
+      // means zero stock, so this reads the result directly instead of
+      // going through unwrap() (which would throw on ANY error, turning
+      // a brand-new, never-moved product into a broken detail page).
+      let currentStock = 0;
+      if (branch) {
+        const stockResult = await getStock(ctx, id as UUID, branch as UUID);
+        if (stockResult.data) currentStock = Number(stockResult.data.quantity_on_hand ?? 0);
+      }
+      return mapProduct({ ...p, currentStock });
+    },
     enabled: Boolean(id),
   });
 }
 
 export function useCreateProduct(_userId?: string) {
   const ctx = useUserContext();
+  const branch = useActiveBranch();
   const qc = useQueryClient();
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: (input: any) => createProduct(ctx, {
-      name: input.name, sku: input.sku ?? null, barcode: input.barcode ?? null,
-      description: input.description ?? null,
-      category_id: (input.categoryId ?? input.category_id ?? null),
-      unit_id: (input.unitId ?? input.unit_id ?? null),
-      selling_price: input.sellingPrice ?? input.selling_price ?? 0,
-      cost_price: input.buyingPrice ?? input.cost_price ?? 0,
-      reorder_level: input.reorderLevel ?? input.reorder_level ?? 0,
-      is_stockable: true, is_sellable: true, is_purchasable: true,
-      is_active: true, track_expiry: false, tax_rate: 0,
-      metadata: { brand_id: input.brandId ?? null, supplier_id: input.supplierId ?? null },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any).then(unwrap),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'products'] }),
+    mutationFn: async (input: any) => {
+      const costPrice = input.buyingPrice ?? input.cost_price ?? 0;
+      // 2026-09-01: barcode is optional, and an untouched field submits as
+      // '' (empty string), not null/undefined - `?? null` only replaces
+      // null/undefined, so every product saved with barcode left blank was
+      // sending literal ''. products has a partial unique index on
+      // (business_id, barcode) that correctly excludes NULL rows from the
+      // uniqueness check (so many products can have "no barcode") but does
+      // NOT exclude '' - '' is a real, indexed value, so the SECOND product
+      // ever saved without a barcode collided with the first and failed
+      // with "duplicate key value violates unique constraint
+      // idx_s2_products_barcode" (confirmed live). Same treatment for sku,
+      // even though the form currently requires one, so this can't recur
+      // if that ever changes.
+      const barcode = typeof input.barcode === 'string' ? input.barcode.trim() : input.barcode;
+      const sku = typeof input.sku === 'string' ? input.sku.trim() : input.sku;
+      const product = await createProduct(ctx, {
+        name: input.name, sku: sku || null, barcode: barcode || null,
+        description: input.description ?? null,
+        category_id: (input.categoryId ?? input.category_id ?? null),
+        unit_id: (input.unitId ?? input.unit_id ?? null),
+        selling_price: input.sellingPrice ?? input.selling_price ?? 0,
+        cost_price: costPrice,
+        reorder_level: input.reorderLevel ?? input.reorder_level ?? 0,
+        is_stockable: true, is_sellable: true, is_purchasable: true,
+        is_active: true, track_expiry: false, tax_rate: 0,
+        metadata: { brand_id: input.brandId ?? null, supplier_id: input.supplierId ?? null },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any).then(unwrap);
+
+      // 2026-09-01: Opening stock used to be silently dropped here - the
+      // product insert above has nowhere to put it (stock is derived from
+      // inventory_movements, never a column on products - see the engine's
+      // own rule). Every new product showed "0 in stock" right after being
+      // saved, no matter what was entered. This is the fix: if a non-zero
+      // opening count was entered, record it as a real opening_stock
+      // movement right after the product exists. Best-effort - the product
+      // itself is already saved and must not disappear if this part fails.
+      //
+      // Bug fix (2026-09-07): "why do the new products show grayed out."
+      // A failure here used to be swallowed into console.error only - a
+      // real business user never opens devtools, so a product that failed
+      // to get its opening stock (permission hiccup, network blip, etc.)
+      // looked EXACTLY like one where the owner had simply left the field
+      // at 0: silently "0 in stock", no error, no hint anything went
+      // wrong. `warnings` collects a plain-language message for this and
+      // the branch-assignment case below instead, and the caller
+      // (ProductsListPage.tsx) shows it via a toast alongside the normal
+      // "Product added" success - the create itself still never fails
+      // just because this best-effort follow-up did.
+      const warnings: string[] = [];
+      const openingStock = input.openingStock ?? input.opening_stock ?? 0;
+      const branchId = (input.branch_id ?? branch ?? ctx.branch_id) as UUID | null;
+      if (openingStock > 0 && branchId) {
+        try {
+          const stockResult = await recordOpeningStock(ctx, {
+            branch_id: branchId,
+            product_id: product.id as UUID,
+            quantity: openingStock,
+            unit_cost: costPrice,
+          });
+          if (stockResult.error) {
+            console.error('Opening stock was not recorded for new product', product.id, stockResult.error);
+            warnings.push(`"${product.name}" was saved, but its opening stock could not be recorded (${stockResult.error.message}). Add it via Stock Adjustments.`);
+          }
+        } catch (err) {
+          // Product already saved; stock can still be fixed via Stock
+          // Adjustments - this is why the create itself doesn't fail.
+          console.error('Opening stock was not recorded for new product', product.id, err);
+          warnings.push(`"${product.name}" was saved, but its opening stock could not be recorded. Add it via Stock Adjustments.`);
+        }
+      }
+
+      // Bug fix (2026-09-06), "branch product visibility": a new product
+      // used to carry no branch assignment at all, which - once
+      // useProducts(branchId) started filtering on it - would have made
+      // every newly created product invisible on every branch's till
+      // until someone manually assigned it. Auto-assigning to the same
+      // branch the product was actually created in (same `branchId` opening
+      // stock above resolves to - the active branch when a product isn't
+      // explicitly tied to one) matches how products actually get added in
+      // practice: a business adds a product while working in the branch
+      // that will carry it. Best-effort, same reasoning as opening stock
+      // above - the product itself must not disappear if this fails.
+      //
+      // NOTE (2026-09-07, "mix up with the products in branches"): this
+      // only ever assigns the ONE currently-active branch - there is no
+      // way from this wizard to give a new product opening stock at more
+      // than one branch up front. A product later assigned to an
+      // ADDITIONAL branch via the product's own Branches tab starts at 0
+      // stock there (see the note added on that tab) - that is a real
+      // gap in what the wizard can do today, not a bug in this function,
+      // and hasn't been changed here since it would mean redesigning the
+      // Add Product flow rather than fixing something broken.
+      if (branchId) {
+        try {
+          const assignResult = await setProductBranches(ctx, product.id as UUID, [branchId]);
+          if (assignResult.error) {
+            console.error('Branch assignment was not recorded for new product', product.id, assignResult.error);
+            warnings.push(`"${product.name}" was saved, but could not be assigned to a branch (${assignResult.error.message}). Assign it from the product's Branches tab.`);
+          }
+        } catch (err) {
+          console.error('Branch assignment was not recorded for new product', product.id, err);
+          warnings.push(`"${product.name}" was saved, but could not be assigned to a branch. Assign it from the product's Branches tab.`);
+        }
+      }
+
+      return { ...product, warnings };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+      qc.invalidateQueries({ queryKey: ['inventory', 'movements'] });
+    },
   });
 }
 
@@ -110,17 +304,67 @@ export function useArchiveProduct(_userId?: string) {
   return useMutation({ mutationFn: (id: UUID) => softDeleteProduct(ctx, id).then(unwrap), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'products'] }) });
 }
 
+// 2026-09-03: supplier rows used to reach the UI completely unmapped -
+// useSuppliers() returned raw database rows while every consumer reads the
+// app-shape Supplier (types/inventory.ts). A raw row has contact_person and
+// is_active; it has no contactName and no status at all, so
+// `suppliers.filter(s => s.status === 'active')` - the filter behind the
+// supplier dropdown on Purchase Orders, Requisitions, Supplier Invoices,
+// Purchase Returns, the Purchasing dashboard, Payables and Bills reports -
+// always matched nothing, and the Suppliers page rendered an empty status
+// badge and an empty contact line. This mapper is the counterpart of
+// mapCustomer() in useSalesData.ts: the row is translated once, here, so no
+// call site has to know about column names.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function readAddress(address: any): string {
+  if (typeof address === 'string') return address;
+  if (!address || typeof address !== 'object') return '';
+  if (typeof address.raw === 'string') return address.raw;
+  return Object.keys(address).length > 0 ? JSON.stringify(address) : '';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSupplier(s: any): InventorySupplier {
+  return {
+    id: s.id, created_at: s.created_at ?? '', updated_at: s.updated_at ?? '',
+    created_by: s.created_by ?? '', updated_by: s.updated_by ?? '',
+    branch_id: s.branch_id ?? null, is_active: s.is_active ?? true,
+    sync_status: 'synced' as const, last_synced_at: null,
+    name: s.name ?? '',
+    contactName: s.contact_person ?? s.contactName ?? '',
+    phone: s.phone ?? '', email: s.email ?? '', tin: s.tin ?? '',
+    // suppliers.address is JSONB; a typed-in address is written as
+    // { raw: '...' } by the mutations below.
+    address: readAddress(s.address),
+    notes: s.notes ?? '',
+    // There is no `status` column: is_active is the real toggle, and
+    // 'active' | 'inactive' is exactly what it means.
+    status: (s.is_active ?? true) ? 'active' : 'inactive',
+  };
+}
+
 export function useSuppliers() {
   const ctx = useUserContext();
-  return useQuery({ queryKey: ['inventory', 'suppliers', ctx.business_id], queryFn: () => listSuppliers(ctx).then(unwrap) });
+  return useQuery({
+    queryKey: ['inventory', 'suppliers', ctx.business_id],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    queryFn: async () => (await listSuppliers(ctx).then(unwrap) as any[]).map(mapSupplier),
+  });
 }
 
 export function useCreateSupplier(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
+    // Returns a mapped supplier, not the raw row: SupplierInvoiceModal's
+    // inline "add supplier" selects the result immediately.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: (input: any) => createSupplier(ctx, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : (input.address ?? null) } as any).then(unwrap),
+    mutationFn: async (input: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = await createSupplier(ctx, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : (input.address ?? null) } as any).then(unwrap);
+      if (!row || Array.isArray(row)) throw new Error('The supplier was not saved. Please try again.');
+      return mapSupplier(row);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   });
 }
@@ -130,7 +374,12 @@ export function useUpdateSupplier(_userId?: string) {
   const qc = useQueryClient();
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mutationFn: ({ id, input }: { id: UUID; input: any }) => updateSupplier(ctx, id, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : input.address } as any).then(unwrap),
+    mutationFn: async ({ id, input }: { id: UUID; input: any }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = await updateSupplier(ctx, id, { ...input, address: typeof input.address === 'string' ? { raw: input.address } : input.address } as any).then(unwrap);
+      if (!row || Array.isArray(row)) throw new Error('The supplier was not saved. Please try again.');
+      return mapSupplier(row);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   });
 }
@@ -142,25 +391,46 @@ export function useArchiveSupplier(_userId?: string) {
 }
 
 export function useUnits() {
-  // Stage 5 policy: Piece is the only active stock unit.
-  // Unit conversion and configurable units are not supported.
-  return useQuery({
-    queryKey: ['inventory', 'units', 'piece-only'],
-    queryFn: async () => ([{
-      id:             'piece',
-      name:           'Piece',
-      abbreviation:   'pcs',
-      is_active:      true,
-      created_at:     '',
-      updated_at:     '',
-      created_by:     '',
-      updated_by:     '',
-      branch_id:      null as null,
-      sync_status:    'synced' as const,
-      last_synced_at: null as null,
-    }] as import('../../../types/inventory').UnitOfMeasure[]),
-    staleTime: Infinity,
-  });
+  // 2026-09-01: this used to hardcode a single fake "Piece" unit with
+  // id: 'piece' (not a real uuid, not a real row) instead of querying the
+  // real imagecare.units table - see the long comment on createUnit() in
+  // masterDataService.ts for how that silently broke every product save.
+  // Now real, matching useCategories()/useSuppliers() exactly.
+  const ctx = useUserContext();
+  return useQuery({ queryKey: ['inventory', 'units', ctx.business_id], queryFn: () => listUnits(ctx).then(unwrap) });
+}
+
+// 2026-09-01: the user has said - repeatedly, and again after the first fix
+// attempt - that Units should not be a thing they ever see or manage: the
+// system just runs on pieces, full stop, no dropdown, no "add a unit"
+// prompt. Exposing UnitQuickSelect in the product form was the wrong fix
+// for the underlying bug (unit_id: 'piece' not being a real row) - it
+// solved the crash but reintroduced exactly the picker the user had
+// already asked to have removed. This hook is the actual fix: it silently
+// makes sure ONE real "Piece" unit row exists for the business the first
+// time it's needed, with no UI at all - product forms just use it via the
+// existing categoryId-style backfill effect, same as before this ever
+// became visible. Guarded with a ref so it only ever fires the create once
+// per mount, and becomes a no-op forever after that first row exists.
+export function useEnsureDefaultUnit(): UseQueryResult<import('../../../types/inventory').UnitOfMeasure[]> {
+  const unitsQuery = useUnits();
+  const createUnit = useCreateUnit();
+  const attempted = useRef(false);
+
+  useEffect(() => {
+    if (
+      unitsQuery.isSuccess &&
+      (unitsQuery.data ?? []).length === 0 &&
+      !attempted.current &&
+      !createUnit.isPending
+    ) {
+      attempted.current = true;
+      createUnit.mutate({ name: 'Piece', abbreviation: 'pcs' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitsQuery.isSuccess, unitsQuery.data]);
+
+  return unitsQuery;
 }
 
 export function useInventoryKpis(_currency?: SupportedCurrency) {
@@ -172,8 +442,12 @@ export function useInventoryKpis(_currency?: SupportedCurrency) {
       const inv = await listInventory(ctx, { branch_id: branch ?? undefined }).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(inv) ? inv as any[] : [];
+      // Bug fix (Inventory save-button audit 2026-09-03): vw_stock_summary
+      // (the real view this reads from) has no is_low_stock column - only
+      // stock_status ('out_of_stock' | 'low_stock' | 'in_stock') - so this
+      // always counted 0 low-stock items regardless of real stock levels.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const low = items.filter((i: any) => i.is_low_stock).length;
+      const low = items.filter((i: any) => i.stock_status === 'low_stock').length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const oos = items.filter((i: any) => (i.quantity_on_hand ?? 0) <= 0).length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -212,13 +486,58 @@ export function useInventoryList(branchId?: UUID) {
   });
 }
 
+// Bug fix (Inventory save-button audit 2026-09-03): this used to hand
+// StockMovementsPage.tsx the raw inventory_movements rows (product_id,
+// movement_type, quantity, notes, moved_at) untranslated. The page reads
+// productId/type/quantityChange/reason/createdAt, none of which exist on a
+// raw row, so every row rendered as "Unknown product" with a blank type and
+// amount - and filtering to one product via the dropdown always matched
+// nothing (m.productId was always undefined), even though the movements
+// genuinely exist. Same translation useStockAdjustments() below already
+// does for the adjustments-only subset; factored out here so both share it.
+// imagecare.movement_type (the real DB enum) has 11 values; the UI's
+// StockMovementType only distinguishes 7. Mapped onto the closest UI
+// bucket rather than left untyped, so TYPE_TONE[m.type] in
+// StockMovementsPage.tsx stays a valid, typed lookup.
+const MOVEMENT_TYPE_MAP: Record<string, StockMovementType> = {
+  opening_stock: 'opening',
+  purchase: 'purchase',
+  sale: 'sale',
+  return_in: 'refund',
+  return_out: 'purchase_return',
+  adjustment_in: 'adjustment',
+  adjustment_out: 'adjustment',
+  transfer_in: 'transfer',
+  transfer_out: 'transfer',
+  damage: 'adjustment',
+  expiry: 'adjustment',
+};
+const MOVEMENT_OUT_TYPES = new Set(['sale', 'adjustment_out', 'transfer_out', 'return_out', 'damage', 'expiry']);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapMovement(m: any): { id: string; productId: string; type: StockMovementType; quantityChange: number; reason: string; createdAt: string } {
+  return {
+    id: m.id,
+    productId: m.product_id,
+    type: MOVEMENT_TYPE_MAP[m.movement_type] ?? 'adjustment',
+    quantityChange: MOVEMENT_OUT_TYPES.has(m.movement_type) ? -Number(m.quantity) : Number(m.quantity),
+    reason: m.notes ?? '',
+    createdAt: m.moved_at,
+  };
+}
+
 export function useInventoryMovements(productId?: UUID) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
-    queryKey: ['inventory', 'movements', ctx.business_id, productId],
-    queryFn: () => getInventoryMovements(ctx, { product_id: productId, branch_id: (branch ?? '') as UUID }).then(unwrap),
-    enabled: Boolean(productId),
+    queryKey: ['inventory', 'movements', ctx.business_id, branchId, productId],
+    queryFn: async () => {
+      const rows = await getInventoryMovements(ctx, { product_id: productId, branch_id: branchId as UUID }, { page_size: 500 }).then(unwrap);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (Array.isArray(rows) ? rows as any[] : []).map(mapMovement);
+    },
+    enabled: Boolean(branchId),
   });
 }
 
@@ -242,8 +561,15 @@ export function useLowStockItems(branchId?: UUID) {
   const branch = useActiveBranch();
   return useQuery({
     queryKey: ['inventory', 'low-stock', ctx.business_id, branchId ?? branch],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    queryFn: async () => { const inv = await listInventory(ctx, { branch_id: (branchId ?? branch) as string | undefined }).then(unwrap); return (Array.isArray(inv) ? inv : []).filter((i: any) => i.is_low_stock); },
+    queryFn: async () => {
+      const inv = await listInventory(ctx, { branch_id: (branchId ?? branch) as string | undefined }, { page_size: 500 }).then(unwrap);
+      // Bug fix (Inventory save-button audit 2026-09-03): vw_stock_summary
+      // has no is_low_stock column (only stock_status) - this always
+      // filtered out every row, so "Low Stock Alerts" on ReportsPage.tsx
+      // showed "All products adequately stocked" regardless of real stock.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (Array.isArray(inv) ? inv : []).filter((i: any) => i.stock_status === 'low_stock');
+    },
   });
 }
 
@@ -256,16 +582,236 @@ export function useInventoryValueTrend(_trendRange?: unknown, _currency?: unknow
   return useQuery({ queryKey: ['inventory', 'value-trend'], queryFn: async () => [] as Array<{ label: string; value: number }>, staleTime: 5 * 60_000 });
 }
 
-// Stubs
-export function useLowStockReport(branchId?: UUID) { return useLowStockItems(branchId); }
-export function useOutOfStockReport(branchId?: UUID) { return useLowStockItems(branchId); }
 export function useStockSummary(branchId?: UUID) { return useInventoryList(branchId); }
-export function useDeadStockReport(branchId?: UUID) { return useLowStockItems(branchId); }
-export function useFastSlowMovingReport(branchId?: UUID) { return useInventoryList(branchId); }
-export function useProfitabilityReport(branchId?: UUID) { return useInventoryList(branchId); }
-export function useStockLevelsReport(branchId?: UUID) { return useInventoryList(branchId); }
-export function useValuationReport(branchId?: UUID) { return useInventoryList(branchId); }
-export const useDuplicateProduct = useCreateProduct;
+
+// ---- Inventory Reports (Inventory > Reports tab) -------------
+// Bug fix (Inventory save-button audit 2026-09-03): all seven of these used
+// to be bare aliases onto useInventoryList()/useLowStockItems() - hooks
+// with a completely different shape (raw vw_stock_summary rows, or an
+// always-empty array thanks to the is_low_stock bug fixed above) than what
+// InventoryReportsPage.tsx actually renders: ValuationRow{product,
+// stockValue, potentialSaleValue}, DeadStockRow{product,
+// daysSinceLastMovement}, {fast,slow} MovementRankRow lists,
+// ProfitabilityRow{product,marginPercent,potentialProfit}. On top of the
+// shape mismatch, the page calls useValuationReport('UGX') and
+// useProfitabilityReport('UGX') - passing a currency code into hooks whose
+// stub signature expected a branch UUID, which Postgres then rejected
+// outright (invalid uuid syntax for a branch_id filter) - hence "No data"
+// on every tab. Fast/Slow Moving crashed outright: fastSlow.data?.fast.map
+// (...) - a plain array has no .fast property, so .map threw on undefined.
+// Each report below is real, computed from listProducts()/listInventory()
+// (vw_stock_summary, for current stock and stock_status) and, for the two
+// movement-history reports, getInventoryMovements().
+
+async function fetchActiveProducts(ctx: ReturnType<typeof useUserContext>): Promise<InventoryProduct[]> {
+  const [products, stockRows] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    listProducts(ctx).then(unwrap) as Promise<any[]>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    listInventory(ctx, {}, { page_size: 500 }).then(unwrap) as Promise<any[]>,
+  ]);
+  const stockByProduct = new Map<string, number>();
+  for (const row of Array.isArray(stockRows) ? stockRows : []) {
+    const key = row.product_id as string;
+    stockByProduct.set(key, (stockByProduct.get(key) ?? 0) + Number(row.quantity_on_hand ?? 0));
+  }
+  return (Array.isArray(products) ? products : [])
+    .map((p) => mapProduct({ ...p, currentStock: stockByProduct.get(p.id) ?? 0 }))
+    .filter((p) => p.status === 'active');
+}
+
+async function fetchAllMovements(ctx: ReturnType<typeof useUserContext>, branchId: UUID) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = await getInventoryMovements(ctx, { branch_id: branchId }, { page_size: 500 }).then(unwrap) as any[];
+  return Array.isArray(rows) ? rows : [];
+}
+
+export function useValuationReport(currency: SupportedCurrency = 'UGX') {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'valuation', ctx.business_id, currency],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products
+        .map((product) => ({
+          product,
+          stockValue: convertFromUgx(product.buyingPrice * product.currentStock, currency),
+          potentialSaleValue: convertFromUgx(product.sellingPrice * product.currentStock, currency),
+        }))
+        .sort((a, b) => b.stockValue - a.stockValue);
+    },
+  });
+}
+
+export function useStockLevelsReport() {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'stock-levels', ctx.business_id],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return [...products].sort((a, b) => a.name.localeCompare(b.name));
+    },
+  });
+}
+
+export function useLowStockReport() {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'low-stock', ctx.business_id],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products
+        .filter((p) => p.currentStock > 0 && p.currentStock <= p.reorderLevel)
+        .sort((a, b) => a.currentStock - b.currentStock);
+    },
+  });
+}
+
+export function useOutOfStockReport() {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'out-of-stock', ctx.business_id],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products.filter((p) => p.currentStock <= 0);
+    },
+  });
+}
+
+export function useDeadStockReport(windowDays = 30) {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'dead-stock', ctx.business_id, branchId, windowDays],
+    queryFn: async () => {
+      const [products, movements] = await Promise.all([
+        fetchActiveProducts(ctx),
+        branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
+      ]);
+      return products
+        .filter((p) => p.currentStock > 0)
+        .map((product) => {
+          const productMoves = movements
+            .filter((m) => m.product_id === product.id && m.movement_type !== 'opening_stock')
+            .sort((a, b) => new Date(b.moved_at).getTime() - new Date(a.moved_at).getTime());
+          const last = productMoves[0];
+          const daysSinceLastMovement = last
+            ? Math.floor((Date.now() - new Date(last.moved_at).getTime()) / 86_400_000)
+            : null;
+          return { product, daysSinceLastMovement };
+        })
+        .filter((row) => row.daysSinceLastMovement === null || row.daysSinceLastMovement >= windowDays)
+        .sort((a, b) => (b.daysSinceLastMovement ?? Infinity) - (a.daysSinceLastMovement ?? Infinity));
+    },
+  });
+}
+
+export function useFastSlowMovingReport(windowDays = 30) {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'fast-slow', ctx.business_id, branchId, windowDays],
+    queryFn: async () => {
+      const [products, movements] = await Promise.all([
+        fetchActiveProducts(ctx),
+        branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
+      ]);
+      const cutoff = Date.now() - windowDays * 86_400_000;
+      const rows = products.map((product) => {
+        const unitsMoved = movements
+          .filter((m) => m.product_id === product.id && m.movement_type === 'sale' && new Date(m.moved_at).getTime() >= cutoff)
+          .reduce((sum, m) => sum + Math.abs(Number(m.quantity)), 0);
+        return { product, unitsMoved };
+      });
+      const sorted = [...rows].sort((a, b) => b.unitsMoved - a.unitsMoved);
+      return { fast: sorted.slice(0, 10), slow: [...sorted].reverse().slice(0, 10) };
+    },
+  });
+}
+
+export function useProfitabilityReport(currency: SupportedCurrency = 'UGX') {
+  const ctx = useUserContext();
+  return useQuery({
+    queryKey: ['inventory', 'reports', 'profitability', ctx.business_id, currency],
+    queryFn: async () => {
+      const products = await fetchActiveProducts(ctx);
+      return products
+        .map((product) => {
+          const margin = product.sellingPrice > 0
+            ? ((product.sellingPrice - product.buyingPrice) / product.sellingPrice) * 100
+            : 0;
+          return {
+            product,
+            marginPercent: Math.round(margin * 10) / 10,
+            potentialProfit: convertFromUgx((product.sellingPrice - product.buyingPrice) * product.currentStock, currency),
+          };
+        })
+        .sort((a, b) => b.potentialProfit - a.potentialProfit);
+    },
+  });
+}
+// 2026-09-02: this used to be a bare alias to useCreateProduct, which
+// expects a full ProductInput object - but both call sites
+// (ProductsListPage/ProductDetailPage) call .mutateAsync(product.id), a
+// bare string. Every field createProduct() read off that string came back
+// undefined, so "Duplicate" silently created a blank, nameless product.
+// Real fix: fetch the source product, build a fresh ProductInput from it
+// (name suffixed "(Copy)"), and create that - same shape as a brand-new
+// Add Product. sku/barcode are deliberately left out so a new one is
+// required/generated, never copied, per the uniqueness fix on those columns.
+export function useDuplicateProduct(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: UUID | string) => {
+      const source = await getProduct(ctx, id as UUID).then(unwrap);
+      const product = await createProduct(ctx, {
+        name: `${source.name} (Copy)`,
+        sku: null, barcode: null,
+        description: source.description ?? null,
+        category_id: source.category_id ?? null,
+        unit_id: source.unit_id ?? null,
+        selling_price: source.selling_price ?? 0,
+        cost_price: source.cost_price ?? 0,
+        reorder_level: source.reorder_level ?? 0,
+        is_stockable: source.is_stockable ?? true,
+        is_sellable: source.is_sellable ?? true,
+        is_purchasable: source.is_purchasable ?? true,
+        is_active: true,
+        track_expiry: source.track_expiry ?? false,
+        tax_rate: source.tax_rate ?? 0,
+        metadata: { brand_id: source.metadata?.brand_id ?? null, supplier_id: source.metadata?.supplier_id ?? null },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any).then(unwrap);
+
+      // Bug fix (2026-09-06), "branch product visibility": carry the
+      // source product's branch assignments over to the copy, same as
+      // every other field here - without this a duplicate would start
+      // assigned to no branch at all and be invisible on every till until
+      // manually reassigned, the same regression useCreateProduct's own
+      // fix above guards against. Best-effort: the copy itself must not
+      // disappear if this part fails.
+      try {
+        const sourceBranchIds = await listProductBranchIds(ctx, id as UUID).then(unwrap) as UUID[];
+        if (sourceBranchIds.length > 0) {
+          const assignResult = await setProductBranches(ctx, product.id as UUID, sourceBranchIds);
+          if (assignResult.error) {
+            console.error('Branch assignment was not copied to duplicated product', product.id, assignResult.error);
+          }
+        }
+      } catch (err) {
+        console.error('Branch assignment was not copied to duplicated product', product.id, err);
+      }
+
+      return product;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+    },
+  });
+}
 export const useStockMovements = useInventoryMovements;
 export function useReactivateProduct(_userId?: string) {
   const ctx = useUserContext();
@@ -276,9 +822,22 @@ export function useReactivateProduct(_userId?: string) {
   });
 }
 export function useCreateUnit(_userId?: string) {
+  const ctx = useUserContext();
   const qc = useQueryClient();
-  return useMutation({ mutationFn: async (input: { name: string; abbreviation?: string }) => ({ id: crypto.randomUUID(), ...input, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').UnitOfMeasure), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }) });
+  return useMutation({
+    mutationFn: (input: { name: string; abbreviation: string }) => createUnit(ctx, input).then(unwrap),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
+  });
 }
+// Bug fix (Inventory save-button audit 2026-09-03): StockAdjustmentModal.tsx
+// (the only caller) submits {productId, quantityChange, reason} -
+// quantityChange already signed (positive = stock in, negative = stock
+// out). This used to read input.quantity/input.direction instead, neither
+// of which exist on that shape, so the computed quantity was always 0 -
+// and createStockAdjustment() correctly rejects a zero quantity as
+// invalid every time. That's why "Record adjustment" never worked,
+// regardless of what was entered. input.quantity/input.direction kept as
+// a fallback in case anything else ever calls this with that older shape.
 export function useCreateAdjustment(_userId?: string) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
@@ -288,18 +847,74 @@ export function useCreateAdjustment(_userId?: string) {
     mutationFn: async (input: any) => createStockAdjustment(ctx, {
       branch_id: (input.branch_id ?? input.branchId ?? branch ?? ctx.branch_id) as UUID,
       product_id: (input.product_id ?? input.productId) as UUID,
-      quantity: (() => { const qty = Math.abs(input.quantity ?? input.adjustmentQuantity ?? 0); const isOut = input.direction === 'out' || input.type === 'damage' || input.type === 'loss'; return isOut ? -qty : qty; })(),
+      quantity: (() => {
+        if (typeof input.quantityChange === 'number') return input.quantityChange;
+        const qty = Math.abs(input.quantity ?? input.adjustmentQuantity ?? 0);
+        const isOut = input.direction === 'out' || input.type === 'damage' || input.type === 'loss';
+        return isOut ? -qty : qty;
+      })(),
       reason: input.reason ?? input.type ?? 'Manual adjustment',
       notes: input.notes ?? undefined,
     }).then(unwrap),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
   });
 }
-export function useStockAdjustments() { return useInventoryMovements(undefined); }
+// Bug fix (Phase 6, item 5-class bug): useStockAdjustments previously
+// delegated to useInventoryMovements(undefined), whose query was gated on
+// `enabled: Boolean(productId)` - since no productId is ever passed here,
+// the query never ran and the Stock Adjustments page was permanently
+// empty. It also returned raw inventory_movements rows (product_id,
+// quantity, moved_at) while StockAdjustmentsPage expects
+// {id, productId, reason, quantityChange, createdAt}. Fixed with its own
+// hook: enabled on branch_id (not productId), filtered to adjustment
+// movements only, and mapped to the shape the page renders.
+export function useStockAdjustments() {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
+  return useQuery({
+    queryKey: ['inventory', 'movements', 'adjustments', ctx.business_id, branchId],
+    queryFn: async () => {
+      const rows = await getInventoryMovements(ctx, { branch_id: branchId as UUID }).then(unwrap);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items = Array.isArray(rows) ? rows as any[] : [];
+      return items
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((m: any) => m.movement_type === 'adjustment_in' || m.movement_type === 'adjustment_out')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((m: any) => ({
+          id: m.id,
+          productId: m.product_id,
+          reason: m.notes ?? 'Manual adjustment',
+          quantityChange: m.movement_type === 'adjustment_out' ? -Number(m.quantity) : Number(m.quantity),
+          createdAt: m.moved_at,
+        }));
+    },
+    enabled: Boolean(branchId),
+  });
+}
 export function useGeneratedSku() { return useQuery({ queryKey: ['inventory', 'sku-generator'], queryFn: async () => `SKU-${Date.now().toString(36).toUpperCase()}`, staleTime: 0 }); }
-export function useArchiveBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
-export function useCreateBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: { name: string }) => ({ id: crypto.randomUUID(), name: input.name, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').Brand), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
-export function useUpdateBrand(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ id, input }: { id: string; input: { name: string } }) => ({ id, name: input.name, is_active: true, created_at: '', updated_at: '', created_by: '', updated_by: '', branch_id: null as null, sync_status: 'synced' as const, last_synced_at: null as null } as import('../../../types/inventory').Brand), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }) }); }
+export function useCreateBrand(userId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string }) => createBrand(input, userId ?? ''),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
+  });
+}
+export function useUpdateBrand(userId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { name: string } }) => updateBrand(id, input, userId ?? ''),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
+  });
+}
+export function useArchiveBrand(userId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => archiveBrand(id, userId ?? ''),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
+  });
+}
 export function useArchiveCategory(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
@@ -317,9 +932,35 @@ export function useUpdateCategory(_userId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'categories'] }),
   });
 }
-export function useMergeCategories(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ sourceId: _s, targetId: _t }: { sourceId: string; targetId: string }) => ({}), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'categories'] }) }); }
-export function useArchiveUnit(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }) }); }
-export function useUpdateUnit(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async ({ id, input }: { id: string; input: { name: string } }) => ({ id, ...input }), onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }) }); }
+export function useMergeCategories(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, targetId }: { sourceId: string; targetId: string }) =>
+      mergeCategories(ctx, sourceId as UUID, targetId as UUID).then(unwrap),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'categories'] });
+      qc.invalidateQueries({ queryKey: ['inventory', 'products'] });
+    },
+  });
+}
+export function useArchiveUnit(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => archiveUnit(ctx, id as UUID).then(unwrap),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
+  });
+}
+export function useUpdateUnit(_userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: { name?: string; abbreviation?: string } }) =>
+      updateUnit(ctx, id as UUID, input).then(unwrap),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'units'] }),
+  });
+}
 
 export function useCreateCategory(_userId?: string) {
   const ctx = useUserContext();

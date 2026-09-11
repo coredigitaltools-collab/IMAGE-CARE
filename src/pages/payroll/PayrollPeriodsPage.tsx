@@ -12,8 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useCreatePayrollPeriod, usePayrollPeriods } from '../../features/payroll/hooks/usePayrollData'
-import { OverlappingPeriodError } from '../../services/payrollService'
-import { PAYROLL_STATUS_LABELS } from '../../types/payroll'
+import { NoEmployeesInPayrollError, OverlappingPeriodError, PAYROLL_STATUS_LABELS } from '../../types/payroll'
 
 const STATUS_TONE = { draft: 'neutral', calculated: 'warning', approved: 'info', paid: 'success', archived: 'neutral' } as const
 
@@ -54,13 +53,24 @@ export function PayrollPeriodsPage() {
             ))}
           </div>
         ) : (periodsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={CalendarRange} title="No payroll periods yet" description="Create your first payroll period to get started." />
+          <EmptyState
+            icon={CalendarRange}
+            title="No payroll periods yet"
+            description="Create your first payroll period to get started."
+            action={{
+              label: '+ New period',
+              onClick: () => {
+                setAddError(undefined)
+                setIsAddOpen(true)
+              },
+            }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(periodsQuery.data ?? []).map((period) => (
               <li key={period.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <Link to={`/payroll/periods/${period.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/payroll/periods/${period.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                     {period.reference}
                   </Link>
                   <p className="text-xs text-ink-500">
@@ -80,11 +90,20 @@ export function PayrollPeriodsPage() {
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (startDate, endDate) => {
             try {
-              await createPeriod.mutateAsync({ startDate, endDate })
-              showToast('Payroll period created.', 'success')
+              const { skipped } = await createPeriod.mutateAsync({ startDate, endDate })
+              showToast(
+                skipped.length === 0
+                  ? 'Payroll period created.'
+                  : `Payroll period created. Skipped ${skipped.length} staff member${skipped.length === 1 ? '' : 's'}: ${skipped.join(', ')}.`,
+                'success',
+              )
               setIsAddOpen(false)
             } catch (err) {
-              setAddError(err instanceof OverlappingPeriodError ? err.message : 'Could not create this period.')
+              setAddError(
+                err instanceof OverlappingPeriodError || err instanceof NoEmployeesInPayrollError
+                  ? err.message
+                  : 'Could not create this period.',
+              )
             }
           }}
         />

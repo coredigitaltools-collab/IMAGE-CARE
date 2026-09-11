@@ -14,7 +14,7 @@ const schema = z.object({
   barcode: z.string().trim(),
   categoryId: z.string().min(1, 'Select a category.'),
   brandId: z.string(),
-  unitId: z.string().min(1, 'Select a unit.'),
+  unitId: z.string().min(1, 'Still setting up - please wait a moment and try again.'),
   supplierId: z.string(),
   description: z.string(),
   notes: z.string(),
@@ -93,17 +93,17 @@ export function ProductFormModal({
   })
 
   return (
-    <Modal title={isEditing ? 'Edit product' : 'Add product'} onClose={onClose}>
-      <form onSubmit={submit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+    <Modal title={isEditing ? 'Edit product' : 'Add product'} onClose={onClose} size="lg">
+      <form onSubmit={submit} className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
         <div className="flex items-center gap-3">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-ink-50">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md border border-ink-100 bg-surface-2">
             {imageDataUrl ? (
               <img src={imageDataUrl} alt="" className="h-full w-full object-cover" />
             ) : (
               <Upload size={18} className="text-ink-300" />
             )}
           </div>
-          <label className="cursor-pointer rounded-md border border-ink-100 bg-white px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50">
+          <label className="cursor-pointer rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2">
             Upload image
             <input
               type="file"
@@ -117,8 +117,18 @@ export function ProductFormModal({
         <FormField label="Product name" {...register('name')} error={errors.name?.message} />
 
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="SKU" {...register('sku')} error={errors.sku?.message} />
-          <FormField label="Barcode" {...register('barcode')} error={errors.barcode?.message} />
+          <FormField
+            label="SKU"
+            {...register('sku')}
+            error={errors.sku?.message}
+            hint="Auto-filled, editable."
+          />
+          <FormField
+            label="Barcode (optional)"
+            {...register('barcode')}
+            error={errors.barcode?.message}
+            hint="For scanning at checkout."
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -127,7 +137,7 @@ export function ProductFormModal({
             <select
               id="pf-category"
               {...register('categoryId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -142,7 +152,7 @@ export function ProductFormModal({
             <select
               id="pf-brand"
               {...register('brandId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               <option value="">None</option>
               {brands.map((b) => (
@@ -155,16 +165,22 @@ export function ProductFormModal({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          {/* No unit picker by design - the system just runs on pieces.
+              2026-09-01: this used to hardcode units[0]?.id ?? 'piece' -
+              'piece' is not a real unit id, and sending it produced
+              "invalid input syntax for type uuid: 'piece'" from Postgres
+              on every save. Now backed by the real, auto-provisioned unit
+              from useEnsureDefaultUnit() (see useInventoryData.ts), still
+              with no UI - `units` here is expected to already contain it. */}
           <div style={{ display: 'none' }}>
-            {/* Unit locked to Piece for Stage 5 */}
-            <input type="hidden" {...register('unitId')} value={units[0]?.id ?? 'piece'} />
+            <input type="hidden" {...register('unitId')} />
           </div>
           <div>
             <label htmlFor="pf-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">Supplier</label>
             <select
               id="pf-supplier"
               {...register('supplierId')}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
             >
               <option value="">None</option>
               {suppliers.map((s) => (
@@ -182,7 +198,7 @@ export function ProductFormModal({
             id="pf-description"
             {...register('description')}
             rows={2}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
 
@@ -209,6 +225,7 @@ export function ProductFormModal({
             type="number"
             {...register('reorderLevel', { valueAsNumber: true })}
             error={errors.reorderLevel?.message}
+            hint="Alerts you to restock at or below this."
           />
           <FormField
             label={isEditing ? 'Opening stock (historical)' : 'Opening stock'}

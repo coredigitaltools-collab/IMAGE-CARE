@@ -1,17 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Archive, ArchiveRestore, Copy, Printer, ShoppingBag, Truck as TruckIcon } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { NumberField } from '../../components/ui/NumberField'
 import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { BarcodeDisplay } from '../../components/inventory/BarcodeDisplay'
 import { CategoryQuickSelect } from '../../components/inventory/CategoryQuickSelect'
+import { BrandQuickSelect } from '../../components/inventory/BrandQuickSelect'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
@@ -21,15 +23,18 @@ import {
   useCategories,
   useDuplicateProduct,
   useProduct,
+  useProductBranches,
   useReactivateProduct,
+  useSetProductBranches,
   useStockMovements,
   useSuppliers,
   useUpdateProduct,
 } from '../../features/inventory/hooks/useInventoryData'
+import { useBranches } from '../../features/settings/hooks/useSettingsData'
 import { DuplicateBarcodeError, DuplicateSkuError } from '../../services/productService'
 import type { ProductInput } from '../../types/inventory'
 
-const TABS = ['General', 'Pricing', 'Stock', 'Movement History', 'Purchase History', 'Sales History', 'Supplier', 'Notes', 'Audit Log'] as const
+const TABS = ['General', 'Pricing', 'Stock', 'Branches', 'Movement History', 'Purchase History', 'Sales History', 'Supplier', 'Notes', 'Audit Log'] as const
 type Tab = (typeof TABS)[number]
 
 const generalSchema = z.object({
@@ -64,8 +69,50 @@ export function ProductDetailPage() {
   const archiveProduct = useArchiveProduct(user.id)
   const reactivateProduct = useReactivateProduct(user.id)
   const duplicateProduct = useDuplicateProduct(user.id)
+  const branchesQuery = useBranches()
+  const productBranchesQuery = useProductBranches(id)
+  const setProductBranches = useSetProductBranches(user.id)
 
   const product = productQuery.data
+
+  // Bug fix (2026-09-06), "branch product visibility": which branches this
+  // product is assigned to (imagecare.product_branches) - kept as its own
+  // local, editable selection (same pattern as `notes` below) rather than
+  // folded into generalForm/pricingForm, since it saves independently via
+  // its own button, not "Save changes" on an unrelated tab.
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([])
+  useEffect(() => {
+    if (productBranchesQuery.data) setSelectedBranchIds(productBranchesQuery.data)
+  }, [productBranchesQuery.data])
+
+  const toggleBranch = (branchId: string) => {
+    setSelectedBranchIds((prev) => (prev.includes(branchId) ? prev.filter((b) => b !== branchId) : [...prev, branchId]))
+  }
+
+  // Bug fix (2026-09-07): "why do the new products show grayed out ...
+  // mix up with the products in branches." Checking a branch here that
+  // the product wasn't already assigned to does NOT create any stock for
+  // it - opening stock is only ever recorded once, for one branch, at
+  // product creation (see useCreateProduct in useInventoryData.ts). A
+  // product added to a second branch this way will correctly show up in
+  // that branch's till, permanently at 0/"Out of stock", with nothing on
+  // this page explaining why - exactly the reported confusion. This just
+  // names which branch(es) are about to be newly added so that's no
+  // longer a silent surprise; it doesn't change what Save does.
+  const newlyAddedBranchNames = selectedBranchIds
+    .filter((bid) => !(productBranchesQuery.data ?? []).includes(bid))
+    .map((bid) => (branchesQuery.data ?? []).find((b) => b.id === bid)?.name)
+    .filter((name): name is string => Boolean(name))
+
+  const saveBranches = async () => {
+    if (!product) return
+    try {
+      await setProductBranches.mutateAsync({ productId: product.id, branchIds: selectedBranchIds })
+      showToast('Branch assignment saved.', 'success')
+    } catch {
+      showToast('Could not save branch assignment.')
+    }
+  }
 
   const generalForm = useForm<z.infer<typeof generalSchema>>({
     resolver: zodResolver(generalSchema),
@@ -203,7 +250,7 @@ export function ProductDetailPage() {
             onClick={() => setTab(t)}
             className={
               tab === t
-                ? 'border-b-2 border-brand-blue-700 px-3 py-2 text-sm font-medium text-brand-blue-700'
+                ? 'border-b-2 border-accent px-3 py-2 text-sm font-medium text-accent'
                 : 'border-b-2 border-transparent px-3 py-2 text-sm text-ink-500 hover:text-ink-900'
             }
           >
@@ -221,7 +268,7 @@ export function ProductDetailPage() {
                 <input
                   id="pd-name"
                   {...generalForm.register('name')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
                 />
               </div>
               <div>
@@ -229,9 +276,27 @@ export function ProductDetailPage() {
                 <input
                   id="pd-sku"
                   {...generalForm.register('sku')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
                 />
               </div>
+            </div>
+            <div>
+              {/* Bug fix (2026-09-07): this General tab tracked barcode in its
+                  form schema/values and saved it via buildInput all along, but
+                  never actually rendered an input for it - the only place
+                  barcode showed up on this page was the read-only display card
+                  at the bottom. So a product created without one (or via bulk
+                  import) had no way to ever get one added after the fact, even
+                  though Barcode Management explicitly says "Edit the product in
+                  Inventory to add one." Confirmed live: "Blazers" has
+                  barcode = null and no way to set it - this closes that gap. */}
+              <label htmlFor="pd-barcode" className="mb-1.5 block text-sm font-medium text-ink-700">Barcode (optional)</label>
+              <input
+                id="pd-barcode"
+                {...generalForm.register('barcode')}
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+              />
+              <p className="mt-1 text-xs text-ink-500">For scanning at checkout and printing barcode labels.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <CategoryQuickSelect
@@ -242,21 +307,13 @@ export function ProductDetailPage() {
                 userId={user.id}
                 error={generalForm.formState.errors.categoryId?.message}
               />
-              <div>
-                <label htmlFor="pd-brand" className="mb-1.5 block text-sm font-medium text-ink-700">Brand</label>
-                <select
-                  id="pd-brand"
-                  {...generalForm.register('brandId')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
-                >
-                  <option value="">None</option>
-                  {brandsQuery.data?.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <BrandQuickSelect
+                id="pd-brand"
+                brands={brandsQuery.data ?? []}
+                value={generalForm.watch('brandId')}
+                onChange={(id) => generalForm.setValue('brandId', id, { shouldValidate: true, shouldDirty: true })}
+                userId={user.id}
+              />
             </div>
             <div>
               <label htmlFor="pd-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description</label>
@@ -264,7 +321,7 @@ export function ProductDetailPage() {
                 id="pd-description"
                 {...generalForm.register('description')}
                 rows={3}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
               />
             </div>
             <div className="flex justify-end">
@@ -278,32 +335,22 @@ export function ProductDetailPage() {
         <Card className="p-5">
           <form onSubmit={savePricing} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="pd-buying" className="mb-1.5 block text-sm font-medium text-ink-700">Buying price (UGX)</label>
-                <input
-                  id="pd-buying"
-                  type="number"
-                  {...pricingForm.register('buyingPrice', { valueAsNumber: true })}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="pd-selling" className="mb-1.5 block text-sm font-medium text-ink-700">Selling price (UGX)</label>
-                <input
-                  id="pd-selling"
-                  type="number"
-                  {...pricingForm.register('sellingPrice', { valueAsNumber: true })}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
-                />
-              </div>
+              <Controller
+                name="buyingPrice"
+                control={pricingForm.control}
+                render={({ field }) => <NumberField id="pd-buying" label="Buying price (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} />}
+              />
+              <Controller
+                name="sellingPrice"
+                control={pricingForm.control}
+                render={({ field }) => <NumberField id="pd-selling" label="Selling price (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} />}
+              />
             </div>
             <div className="w-1/2 pr-1.5">
-              <label htmlFor="pd-reorder" className="mb-1.5 block text-sm font-medium text-ink-700">Reorder level</label>
-              <input
-                id="pd-reorder"
-                type="number"
-                {...pricingForm.register('reorderLevel', { valueAsNumber: true })}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+              <Controller
+                name="reorderLevel"
+                control={pricingForm.control}
+                render={({ field }) => <NumberField id="pd-reorder" label="Reorder level" value={field.value} onChange={field.onChange} onBlur={field.onBlur} />}
               />
             </div>
             <p className="text-xs text-ink-500">
@@ -337,6 +384,47 @@ export function ProductDetailPage() {
               Stock is at or below the reorder level.
             </p>
           )}
+        </Card>
+      )}
+
+      {tab === 'Branches' && (
+        <Card className="p-5">
+          <p className="mb-1 text-sm font-medium text-ink-700">Assigned branches</p>
+          <p className="mb-3 text-xs text-ink-500">
+            Only assigned branches can sell this product at the till - other branches won&apos;t see it there at all.
+          </p>
+          {branchesQuery.isLoading || productBranchesQuery.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (
+            <div className="space-y-1.5 rounded-md border border-ink-100 p-3">
+              {(branchesQuery.data ?? []).map((b) => (
+                <label key={b.id} className="flex items-center gap-2 text-sm text-ink-900">
+                  <input
+                    type="checkbox"
+                    checked={selectedBranchIds.includes(b.id)}
+                    onChange={() => toggleBranch(b.id)}
+                    className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
+                  />
+                  {b.name}
+                </label>
+              ))}
+            </div>
+          )}
+          {selectedBranchIds.length === 0 && (
+            <p className="mt-2 text-xs text-ink-500">
+              No branches assigned - this product won&apos;t appear for sale anywhere until you assign at least one.
+            </p>
+          )}
+          {newlyAddedBranchNames.length > 0 && (
+            <p className="mt-2 text-xs text-brand-blue-900">
+              {newlyAddedBranchNames.join(', ')} will start at 0 stock for this product - add stock there via Purchasing or Stock Adjustments once you save.
+            </p>
+          )}
+          <div className="mt-4 flex justify-end">
+            <Button onClick={saveBranches} disabled={setProductBranches.isPending}>
+              {setProductBranches.isPending ? 'Saving…' : 'Save branch assignment'}
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -412,7 +500,7 @@ export function ProductDetailPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={6}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm shadow-card focus:border-brand-blue-500"
           />
           <div className="mt-3 flex justify-end">
             <Button onClick={saveNotes}>Save notes</Button>

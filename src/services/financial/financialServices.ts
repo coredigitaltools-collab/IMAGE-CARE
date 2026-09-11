@@ -5,7 +5,7 @@
 //          audit services - all financial service boundaries.
 // ============================================================
 
-import { supabase, rpc } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { canDo, parseError } from '../../types/app';
 import { serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
@@ -13,6 +13,17 @@ import type { UserContext } from '../../types/app';
 import type { Expense, PayrollRecord, CashTransaction, JournalEntry, UUID } from '../../types/database';
 import { createAndPostExpense, processPayroll, type CreateExpenseInput } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
+import { cashEngine, accountingEngine } from '../../engines';
+import type { EngineContext } from '../../engines/types';
+
+function toEngineContext(ctx: UserContext, branchId?: UUID): EngineContext {
+  return {
+    business_id: ctx.business_id,
+    branch_id:   branchId ?? ctx.branch_id ?? null,
+    user_id:     ctx.user_id,
+    user_ctx:    ctx,
+  };
+}
 
 // ===========================================================
 // EXPENSE SERVICE
@@ -41,24 +52,101 @@ export async function listExpenses(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view expenses.', { requestId });
   }
   try {
+    // fn_list_expenses_cursor does not exist live or in any tracked
+    // migration (confirmed by Phase 1 verification) - replaced with a
+    // direct offset-paginated query, matching the pattern already used
+    // by listPurchases/listInventory/listBranches.
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await rpc('fn_list_expenses_cursor', {
-      p_business_id: ctx.business_id,
-      p_branch_id:   filter.branch_id ?? null,
-      p_category:    filter.category  ?? null,
-      p_from_date:   filter.date?.from ?? null,
-      p_to_date:     filter.date?.to   ?? null,
-      p_cursor_date: pagination.cursor_date ?? null,
-      p_cursor_id:   pagination.cursor_id   ?? null,
-      p_limit:       pageSize + 1,
-    });
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
+
+    let query = supabase.schema('imagecare').from('expenses')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .range(offset, offset + pageSize - 1)
+      .order('expense_date', { ascending: false });
+
+    if (filter.branch_id) query = query.eq('branch_id', filter.branch_id);
+    if (filter.category)  query = query.eq('category', filter.category);
+    if (filter.date?.from) query = query.gte('expense_date', filter.date.from);
+    if (filter.date?.to)   query = query.lte('expense_date', filter.date.to);
+
+    const { data, error, count } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId });
-    const rows = (data ?? []) as Expense[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1] as Expense;
-    return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.expense_date ?? null : null, next_cursor_id: hasMore ? last?.id ?? null : null } }, requestId);
+
+    return serviceOk({
+      items: (data ?? []) as Expense[],
+      pagination: {
+        total_count:      count ?? 0,
+        page_size:        pageSize,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
+      },
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load expenses.', { requestId }); }
+}
+
+// Fields intentionally NOT editable here: amount, tax_amount, payment_method.
+// recordExpense() (engines/business/businessEngine.ts) posts a real double-entry
+// journal entry (Dr Expense, Cr Cash) and a cash-out transaction at creation time,
+// keyed off those exact values. Changing them after the fact without also
+// reversing/reposting the linked journal entry and cash transaction would leave
+// the books unbalanced - that reversal/re-posting engine is out of scope here,
+// so this only touches the record-keeping fields that carry no accounting
+// impact. To correct an amount, delete the expense and record it again.
+export interface UpdateExpenseInput {
+  expense_date?: string;
+  category?: string;
+  description?: string;
+  notes?: string;
+}
+
+export async function updateExpense(
+  ctx: UserContext,
+  expenseId: UUID,
+  patch: UpdateExpenseInput
+): Promise<ServiceResponse<{ expense_id: UUID }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'expenses', 'edit')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to edit expenses.', { requestId });
+  }
+  try {
+    const { error } = await supabase
+      .schema('imagecare')
+      .from('expenses')
+      .update({ ...patch, updated_by: ctx.user_id })
+      .eq('id', expenseId)
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null);
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to update expense.', { requestId });
+    return serviceOk({ expense_id: expenseId }, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to update expense.', { requestId }); }
+}
+
+// Soft-delete only, matching the pattern already established for this table
+// (listExpenses already filters `deleted_at IS NULL`). This does not reverse
+// the posted journal entry / cash transaction - same scope note as
+// updateExpense above.
+export async function deleteExpense(
+  ctx: UserContext,
+  expenseId: UUID
+): Promise<ServiceResponse<{ expense_id: UUID }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'expenses', 'delete')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete expenses.', { requestId });
+  }
+  try {
+    const { error } = await supabase
+      .schema('imagecare')
+      .from('expenses')
+      .update({ deleted_at: new Date().toISOString(), updated_by: ctx.user_id })
+      .eq('id', expenseId)
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null);
+    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to delete expense.', { requestId });
+    return serviceOk({ expense_id: expenseId }, requestId);
+  } catch { return serviceFail('INTERNAL_ERROR', 'Failed to delete expense.', { requestId }); }
 }
 
 // ===========================================================
@@ -110,16 +198,28 @@ export async function listPayroll(
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load payroll.', { requestId }); }
 }
 
+// options.metadata (optional): merged metadata to store alongside the
+// approval, e.g. the approver's name when a whole payroll period is
+// approved at once (see services/payroll/payrollPeriodService.ts).
+// Callers pass the already-merged object because PostgREST cannot patch
+// a jsonb column in place. Omitting it leaves metadata untouched.
 export async function approvePayroll(
   ctx: UserContext,
-  payrollId: UUID
+  payrollId: UUID,
+  options?: { metadata?: Record<string, unknown> }
 ): Promise<ServiceResponse<void>> {
   const requestId = makeRequestId();
   if (!canDo(ctx, 'payroll', 'approve')) {
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to approve payroll.', { requestId });
   }
   try {
-    const { error } = await supabase.schema('imagecare').from('payroll').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', payrollId).eq('business_id', ctx.business_id).eq('status', 'pending');
+    const patch: Record<string, unknown> = {
+      status:     'approved',
+      updated_at: new Date().toISOString(),
+      updated_by: ctx.user_id,
+    };
+    if (options?.metadata) patch.metadata = options.metadata;
+    const { error } = await supabase.schema('imagecare').from('payroll').update(patch).eq('id', payrollId).eq('business_id', ctx.business_id).eq('status', 'pending');
     if (error) return serviceFail('BUSINESS_RULE_VIOLATION', parseError(error).message, { requestId });
     return serviceOk(undefined, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to approve payroll.', { requestId }); }
@@ -148,19 +248,94 @@ export async function getCashBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view cash data.', { requestId });
   }
   try {
-    const { data, error } = await rpc('fn_get_cash_position', {
-      p_business_id: ctx.business_id,
-      p_branch_id:   branchId,
-    });
-    if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return serviceOk(data as any, requestId);
+    // fn_get_cash_position does not exist live or in any tracked migration
+    // (confirmed by Phase 1 verification) - delegated to cashEngine.getCashBalance,
+    // which derives cash-in-hand directly from confirmed cash_transactions,
+    // never from accounting profit.
+    const result = await cashEngine.getCashBalance(toEngineContext(ctx, branchId), branchId);
+    if (result.error || !result.data) {
+      return serviceFail('INTERNAL_ERROR', result.error?.message ?? 'Failed to load cash balance.', { requestId });
+    }
+    return serviceOk({
+      cash_in:      result.data.total_in,
+      cash_out:     result.data.total_out,
+      net_position: result.data.balance,
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load cash balance.', { requestId }); }
+}
+
+// Bug fix (2026-09-07, "Record a cash movement from Cash Flow" - recorded
+// movements never appeared in the ledger and did not survive a refresh):
+// the UI's "Record cash movement" action (RecordCashMovementModal, opened
+// from both CashFlowDashboardPage and the legacy CashMovementsPage) called
+// useRecordCashMovement -> accountingService.recordCashMovement, which is
+// LOCAL-ONLY (browser localStorage, see services/accountingService.ts) -
+// it never touched the real imagecare.cash_transactions table that Cash
+// Flow's own ledger (useCashLedger below) and KPIs (useCashFlowDashboardKpis)
+// actually read from. So the movement "succeeded" (localStorage always
+// works) but could never show up anywhere Cash Flow itself looks, and
+// wouldn't survive a refresh in a different browser/session. This is the
+// real, Supabase-backed implementation - it posts through cashEngine (the
+// same engine every other real cash movement in this app already goes
+// through: sales, credit repayments, expenses, payroll) so the new row is
+// real, RLS-checked, and immediately visible in the ledger.
+//
+// Bank deposits and owner withdrawals both remove cash from the till
+// (transaction_type 'cash_out'; see RecordCashMovementModal's own labels:
+// "cash leaving the till" / "cash taken out"). Adjustments are the one
+// signed case - a positive adjustment (found extra cash) posts as
+// 'cash_in', a negative one (a shortfall) posts as 'cash_out'; amount is
+// always stored positive per cash_transactions' own CHECK constraint
+// (chk_s2_cash_txn_amount_pos), with direction carrying the sign.
+// reference_type carries which of the three this is, so the ledger
+// (ledgerTypeFor in useAccountingData.ts) can label it correctly instead
+// of falling into the generic cash-sale/expense-paid buckets.
+export async function recordCashMovement(
+  ctx: UserContext,
+  input: { branch_id: UUID; type: 'bank_deposit' | 'owner_withdrawal' | 'adjustment'; amount: number; reason: string; bank_account_id?: UUID | null },
+): Promise<ServiceResponse<{ transaction_id: UUID; transaction_number: string; amount: number; transaction_type: string }>> {
+  const requestId = makeRequestId();
+  if (!canDo(ctx, 'cash', 'create')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to record cash movements.', { requestId });
+  }
+  if (!input.reason.trim()) {
+    return serviceFail('INVALID_INPUT', 'A reason is required for every cash movement.', { requestId, field: 'reason' });
+  }
+  if (input.type === 'adjustment') {
+    if (input.amount === 0) return serviceFail('INVALID_INPUT', 'Enter a non-zero adjustment amount.', { requestId, field: 'amount' });
+  } else if (input.amount <= 0) {
+    return serviceFail('INVALID_INPUT', 'Enter an amount greater than 0.', { requestId, field: 'amount' });
+  }
+  const transactionType = input.type === 'adjustment' ? (input.amount < 0 ? 'cash_out' : 'cash_in') : 'cash_out';
+  const result = await cashEngine.recordMovement(toEngineContext(ctx, input.branch_id), {
+    branch_id:        input.branch_id,
+    transaction_type: transactionType,
+    amount:           Math.abs(input.amount),
+    payment_method:   input.type === 'bank_deposit' ? 'bank_transfer' : 'cash',
+    reference_type:   input.type,
+    description:      input.reason.trim(),
+    bank_account_id:  input.type === 'bank_deposit' ? (input.bank_account_id ?? undefined) : undefined,
+  });
+  if (!result.ok || !result.data) return serviceFail('INTERNAL_ERROR', result.error?.message ?? 'Failed to record cash movement.', { requestId });
+  return serviceOk({
+    transaction_id:     result.data.transaction_id,
+    transaction_number: result.data.transaction_number,
+    amount:              result.data.amount,
+    transaction_type:    result.data.transaction_type,
+  }, requestId);
 }
 
 export async function listCashTransactions(
   ctx: UserContext,
-  filter: { branch_id?: UUID; transaction_type?: string; date?: DateFilter } = {},
+  // Bug fix (2026-09-06): payment_method added. Bank Reconciliation's
+  // "unmatched deposits" needs to find real cash-in transactions that were
+  // paid by bank transfer - that is carried on payment_method (same field
+  // POS/credit-repayment/expense-import already set to 'bank_transfer'),
+  // never on transaction_type (which only ever holds direction values like
+  // 'cash_in'/'cash_out' - see cashEngine.ts's recordMovement). See
+  // useBankReconciliationData.ts's useUnmatchedDeposits for the caller this
+  // was added for.
+  filter: { branch_id?: UUID; transaction_type?: string; payment_method?: string; date?: DateFilter } = {},
   pagination: PaginationRequest = {}
 ): Promise<ServiceResponse<PagedResponse<CashTransaction>>> {
   const requestId = makeRequestId();
@@ -173,6 +348,7 @@ export async function listCashTransactions(
     let query = supabase.schema('imagecare').from('cash_transactions').select('*', { count: 'exact' }).eq('business_id', ctx.business_id).is('deleted_at', null).range(offset, offset + pageSize - 1).order('transaction_date', { ascending: false });
     if (filter.branch_id)       query = query.eq('branch_id', filter.branch_id);
     if (filter.transaction_type) query = query.eq('transaction_type', filter.transaction_type);
+    if (filter.payment_method)  query = query.eq('payment_method', filter.payment_method);
     if (filter.date?.from) query = query.gte('transaction_date', filter.date.from);
     if (filter.date?.to)   query = query.lte('transaction_date', filter.date.to);
     const { data, error, count } = await query;
@@ -218,15 +394,37 @@ export async function getAccountBalance(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view account balances.', { requestId });
   }
   try {
-    const { data, error } = await rpc('fn_get_account_balance', {
-      p_business_id:  ctx.business_id,
-      p_account_code: accountCode,
-      p_year:         filter?.year   ?? null,
-      p_month:        filter?.month  ?? null,
-      p_branch_id:    filter?.branch_id ?? null,
-    });
+    // fn_get_account_balance does not exist live or in any tracked migration
+    // (confirmed by Phase 1 verification). imagecare.vw_account_balances
+    // (created by 0010_stage2_accounting.sql) already aggregates posted
+    // journal_lines per account per branch per period - query it directly
+    // instead of inventing a new RPC.
+    const resolved = await accountingEngine.resolveAccountCode(ctx.business_id, accountCode);
+    if (resolved.error || !resolved.data) {
+      return serviceFail('RESOURCE_NOT_FOUND', resolved.error?.message ?? 'Account not found.', { requestId });
+    }
+
+    let query = supabase.schema('imagecare').from('vw_account_balances')
+      .select('net_balance')
+      .eq('business_id', ctx.business_id)
+      .eq('account_code', accountCode);
+
+    if (filter?.branch_id) query = query.eq('branch_id', filter.branch_id);
+    if (filter?.year)      query = query.eq('period_year', filter.year);
+    if (filter?.month)     query = query.eq('period_month', filter.month);
+
+    const { data, error } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load account balance.', { requestId });
-    return serviceOk(data as number, requestId);
+
+    const rawBalance = (data ?? []).reduce((sum, row) => sum + Number(row.net_balance ?? 0), 0);
+
+    // net_balance = debits - credits. Asset/expense accounts carry a normal
+    // debit balance (positive as-is); liability/equity/revenue accounts
+    // carry a normal credit balance, so flip the sign for a readable figure.
+    const creditNormal = ['liability', 'equity', 'revenue'].includes(resolved.data.account_type);
+    const balance = creditNormal ? -rawBalance : rawBalance;
+
+    return serviceOk(balance, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load account balance.', { requestId }); }
 }
 
@@ -245,23 +443,35 @@ export async function listAuditLogs(
     return serviceFail('PERMISSION_DENIED', 'You do not have permission to view audit logs.', { requestId });
   }
   try {
+    // fn_list_audit_logs_cursor does not exist live or in any tracked
+    // migration (confirmed by Phase 1 verification) - replaced with a
+    // direct offset-paginated query against imagecare.audit_logs.
     const pageSize = Math.min(pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE, APP_CONSTANTS.MAX_PAGE_SIZE);
-    const { data, error } = await rpc('fn_list_audit_logs_cursor', {
-      p_business_id: ctx.business_id,
-      p_table_name:  filter.table_name ?? null,
-      p_user_id:     filter.user_id   ?? null,
-      p_action:      null,
-      p_from_date:   filter.date?.from ?? null,
-      p_cursor_date: pagination.cursor_date ?? null,
-      p_cursor_id:   pagination.cursor_id   ?? null,
-      p_limit:       pageSize + 1,
-    });
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
+
+    let query = supabase.schema('imagecare').from('audit_logs')
+      .select('*', { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .range(offset, offset + pageSize - 1)
+      .order('created_at', { ascending: false });
+
+    if (filter.table_name) query = query.eq('table_name', filter.table_name);
+    if (filter.user_id)    query = query.eq('user_id', filter.user_id);
+    if (filter.date?.from) query = query.gte('created_at', filter.date.from);
+    if (filter.date?.to)   query = query.lte('created_at', filter.date.to);
+
+    const { data, error, count } = await query;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load audit logs.', { requestId });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = (data ?? []) as any[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    const last = items[items.length - 1];
-    return serviceOk({ items, pagination: { total_count: 0, page_size: pageSize, has_more: hasMore, next_cursor_date: hasMore ? last?.created_at ?? null : null, next_cursor_id: hasMore ? last?.id ?? null : null } }, requestId);
+
+    return serviceOk({
+      items: data ?? [],
+      pagination: {
+        total_count:      count ?? 0,
+        page_size:        pageSize,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
+      },
+    }, requestId);
   } catch { return serviceFail('INTERNAL_ERROR', 'Failed to load audit logs.', { requestId }); }
 }

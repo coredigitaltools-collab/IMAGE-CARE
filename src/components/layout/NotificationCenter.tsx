@@ -29,7 +29,7 @@ export function NotificationCenter() {
         }}
         aria-label={`Notifications${totalAlerts > 0 ? `, ${totalAlerts} unread` : ''}`}
         aria-expanded={isOpen}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-ink-50 hover:text-ink-900"
+        className="relative flex h-9 w-9 items-center justify-center rounded-full text-ink-500 transition-colors hover:bg-surface-2 hover:text-ink-900"
       >
         <Bell size={18} strokeWidth={1.75} />
         {totalAlerts > 0 && (
@@ -40,7 +40,7 @@ export function NotificationCenter() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-md border border-ink-100 bg-white shadow-card-hover">
+        <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-md border border-ink-100 bg-surface shadow-card-hover">
           <div className="border-b border-ink-100 px-4 py-3">
             <p className="text-sm font-semibold text-ink-900">Alerts</p>
           </div>
@@ -58,7 +58,7 @@ export function NotificationCenter() {
                     <Link
                       to="/sales-targets"
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-ink-50"
+                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-surface-2"
                     >
                       <Trophy size={14} className="shrink-0 text-success-500" />
                       <div className="min-w-0">
@@ -73,7 +73,7 @@ export function NotificationCenter() {
                     <Link
                       to={`/expenses/${e.id}`}
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-ink-50"
+                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-surface-2"
                     >
                       <FileMinus size={14} className="shrink-0 text-warning-500" />
                       <div className="min-w-0">
@@ -88,7 +88,7 @@ export function NotificationCenter() {
                     <Link
                       to={`/inventory/products/${p.id}`}
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-ink-50"
+                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-surface-2"
                     >
                       <PackageX size={14} className="shrink-0 text-brand-red-700" />
                       <div className="min-w-0">
@@ -103,7 +103,7 @@ export function NotificationCenter() {
                     <Link
                       to={`/inventory/products/${p.id}`}
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-ink-50"
+                      className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-surface-2"
                     >
                       <AlertOctagon size={14} className="shrink-0 text-warning-500" />
                       <div className="min-w-0">
@@ -129,7 +129,7 @@ export function NotificationCenter() {
                     : '/sales-targets'
               }
               onClick={() => setIsOpen(false)}
-              className="block border-t border-ink-100 px-4 py-2.5 text-center text-xs font-medium text-brand-blue-700 hover:bg-brand-blue-50"
+              className="block border-t border-ink-100 px-4 py-2.5 text-center text-xs font-medium text-accent hover:bg-brand-blue-50"
             >
               View all
             </Link>

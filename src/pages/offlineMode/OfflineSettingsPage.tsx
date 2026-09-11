@@ -50,7 +50,7 @@ export function OfflineSettingsPage() {
               type="checkbox"
               checked={autoSyncEnabled}
               onChange={(e) => setAutoSyncEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+              className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
             />
             Sync automatically in the background
           </label>
@@ -65,7 +65,7 @@ export function OfflineSettingsPage() {
               value={intervalMinutes}
               onChange={(e) => setIntervalMinutes(Number(e.target.value))}
               disabled={!autoSyncEnabled}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500 disabled:opacity-50"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500 disabled:opacity-50"
             />
           </div>
           <Button

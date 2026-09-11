@@ -48,7 +48,7 @@ export function ReceiptSettingsPage() {
                 id="footerMessage"
                 value={footerMessage}
                 onChange={(e) => setFooterMessage(e.target.value)}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
               />
             </div>
             <ToggleRow label="Show business logo" checked={showLogo} onChange={setShowLogo} />

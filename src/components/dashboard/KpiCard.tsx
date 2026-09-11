@@ -12,10 +12,10 @@ const ACCENT_CLASSES: Record<KpiTone, string> = {
 }
 
 const ICON_CLASSES: Record<KpiTone, string> = {
-  blue: 'bg-brand-blue-50 text-brand-blue-700',
+  blue: 'bg-brand-blue-50 text-accent',
   red: 'bg-brand-red-50 text-brand-red-700',
   success: 'bg-success-100 text-success-700',
-  neutral: 'bg-ink-50 text-ink-500',
+  neutral: 'bg-surface-2 text-ink-500',
 }
 
 interface KpiCardProps {

@@ -40,7 +40,7 @@ export function RedeemRewardModal({ customers, rewards, onClose, onSubmit, submi
             id="rd-customer"
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             {eligible.length === 0 && <option value="">No customers have points yet</option>}
             {eligible.map((c) => (
@@ -58,7 +58,7 @@ export function RedeemRewardModal({ customers, rewards, onClose, onSubmit, submi
             id="rd-reward"
             value={rewardId}
             onChange={(e) => setRewardId(e.target.value)}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             {rewards.length === 0 && <option value="">No rewards in the catalogue yet</option>}
             {rewards.map((r) => (

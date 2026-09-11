@@ -41,7 +41,7 @@ export function PermissionMatrixTable({ matrix, roles, onChange, onAddRole, onAr
               <button
                 type="button"
                 onClick={onAddRole}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-brand-blue-700 hover:bg-brand-blue-50"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-brand-blue-50"
               >
                 <Plus size={12} /> Add role
               </button>
@@ -59,7 +59,7 @@ export function PermissionMatrixTable({ matrix, roles, onChange, onAddRole, onAr
                     checked={matrix[role.id]?.[permission] ?? false}
                     disabled={role.id === OWNER_ROLE_ID || disabled}
                     onChange={(e) => onChange(role.id, permission, e.target.checked)}
-                    className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label={`${PERMISSION_LABELS[permission]}, ${role.name}`}
                   />
                 </td>

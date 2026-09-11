@@ -57,7 +57,18 @@ export function LoyaltyRedemptionsPage() {
             ))}
           </div>
         ) : (redemptionsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={Gift} title="No redemptions yet" description="Points redeemed for rewards will appear here." />
+          <EmptyState
+            icon={Gift}
+            title="No redemptions yet"
+            description="Points redeemed for rewards will appear here."
+            action={{
+              label: '+ Redeem points',
+              onClick: () => {
+                setRedeemError(undefined)
+                setIsRedeemOpen(true)
+              },
+            }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(redemptionsQuery.data ?? []).map((r) => (

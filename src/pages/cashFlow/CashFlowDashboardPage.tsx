@@ -1,17 +1,37 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Landmark, TrendingUp, ListChecks, LineChart, ClipboardCheck } from 'lucide-react'
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, PiggyBank, Landmark, TrendingUp, ListChecks, LineChart, ClipboardCheck, Plus } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CashFlowTabs } from '../../components/cashFlow/CashFlowTabs'
 import { KpiCard } from '../../components/dashboard/KpiCard'
+import { RecordCashMovementModal } from '../../components/accounting/RecordCashMovementModal'
+import { useToast } from '../../components/ui/toastContext'
+import { useAuth } from '../../hooks/useAuth'
+import { useBankAccounts } from '../../features/bankReconciliation/hooks/useBankReconciliationData'
 import { formatCurrency } from '../../lib/format'
-import { useCashFlowDashboardKpis } from '../../features/accounting/hooks/useAccountingData'
+import { useCashFlowDashboardKpis, useRecordCashMovement } from '../../features/accounting/hooks/useAccountingData'
 
 export function CashFlowDashboardPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { showToast } = useToast()
   const kpisQuery = useCashFlowDashboardKpis()
+  const bankAccountsQuery = useBankAccounts()
+  const recordMovement = useRecordCashMovement(user.id)
   const data = kpisQuery.data
 
+  const [isRecordOpen, setIsRecordOpen] = useState(false)
+  const [recordError, setRecordError] = useState<string | undefined>()
+
   const quickActions = [
+    {
+      label: 'Record cash movement',
+      icon: Plus,
+      onClick: () => {
+        setRecordError(undefined)
+        setIsRecordOpen(true)
+      },
+    },
     { label: 'Cash ledger', icon: ListChecks, onClick: () => navigate('/cash-flow/ledger') },
     { label: 'Forecast', icon: LineChart, onClick: () => navigate('/cash-flow/forecast') },
     { label: 'Reconciliation', icon: ClipboardCheck, onClick: () => navigate('/cash-flow/reconciliation') },
@@ -27,14 +47,14 @@ export function CashFlowDashboardPage() {
         <p className="mt-0.5 text-sm text-ink-500">Where cash came from, where it went, and what's left.</p>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {quickActions.map(({ label, icon: Icon, onClick }) => (
           <button
             key={label}
             onClick={onClick}
-            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
+            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-surface px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
               <Icon size={16} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>
@@ -86,6 +106,23 @@ export function CashFlowDashboardPage() {
           isLoading={kpisQuery.isLoading}
         />
       </div>
+
+      {isRecordOpen && (
+        <RecordCashMovementModal
+          bankAccounts={(bankAccountsQuery.data ?? []).filter((a) => a.is_active)}
+          submitError={recordError}
+          onClose={() => setIsRecordOpen(false)}
+          onSubmit={async (type, amount, reason, bankAccountId) => {
+            try {
+              await recordMovement.mutateAsync({ type, amount, reason, bankAccountId })
+              showToast('Cash movement recorded.', 'success')
+              setIsRecordOpen(false)
+            } catch (err) {
+              setRecordError(err instanceof Error ? err.message : 'Could not record this movement.')
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

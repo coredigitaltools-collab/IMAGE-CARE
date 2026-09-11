@@ -50,7 +50,7 @@ export function CustomerTimeline({ sales, notes }: CustomerTimelineProps) {
             </>
           ) : (
             <>
-              <span className="z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
+              <span className="z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-blue-50 text-accent">
                 <FileText size={14} />
               </span>
               <div className="min-w-0 flex-1 pt-1">

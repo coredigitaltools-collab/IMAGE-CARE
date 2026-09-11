@@ -114,10 +114,25 @@ export async function getDashboardSummary(branchId: string, reportingCurrency: S
 export async function getLowStockItems(branchId: string): Promise<LowStockItem[]> {
   return withOfflineFallback(`low-stock:${branchId}`, async () => {
     if (isSupabaseConfigured && supabase) {
-      const query = supabase.from('inventory_items').select('*').lte('quantity_remaining', 'reorder_level')
+      // `inventory_items` is not a real table (confirmed absent from both
+      // the live schema and every tracked migration - Phase 8 audit).
+      // Stock levels are derived from movements via the vw_stock_summary
+      // view, which already exposes a computed stock_status
+      // ('low_stock' | 'out_of_stock' | 'in_stock') - the same field
+      // inventoryEngine.getLowStockAlerts() filters on, used here instead
+      // of a column-to-column comparison PostgREST can't express directly.
+      const query = supabase.schema('imagecare').from('vw_stock_summary')
+        .select('*')
+        .in('stock_status', ['low_stock', 'out_of_stock'])
       const { data, error } = branchId === 'all' ? await query : await query.eq('branch_id', branchId)
       if (error) throw error
-      return data as LowStockItem[]
+      return (data ?? []).map((row: Record<string, unknown>) => ({
+        id:                 row.product_id as string,
+        name:               row.product_name as string,
+        quantityRemaining:  Number(row.quantity_on_hand ?? 0),
+        reorderLevel:       Number(row.reorder_level ?? 0),
+        branchId:           (row.branch_id as string) ?? 'all',
+      })) as LowStockItem[]
     }
 
     const lowStock = await getLowStockReport()
@@ -135,7 +150,11 @@ export async function getLowStockItems(branchId: string): Promise<LowStockItem[]
 export async function getRecentSales(branchId: string): Promise<RecentSale[]> {
   return withOfflineFallback(`recent-sales:${branchId}`, async () => {
     if (isSupabaseConfigured && supabase) {
-      const query = supabase.from('sales').select('*').order('created_at', { ascending: false }).limit(8)
+      // Missing .schema('imagecare') here was dangerous: public.sales
+      // exists in the SAME Supabase project belonging to the unrelated
+      // Traxxo/licensing app, so this call could silently read someone
+      // else's data instead of erroring (Phase 7 audit).
+      const query = supabase.schema('imagecare').from('sales').select('*').order('created_at', { ascending: false }).limit(8)
       const { data, error } = branchId === 'all' ? await query : await query.eq('branch_id', branchId)
       if (error) throw error
       return data as RecentSale[]

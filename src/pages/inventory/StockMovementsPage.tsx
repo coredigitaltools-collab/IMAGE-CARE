@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { History } from 'lucide-react'
+import { History, ArrowDownToLine, ArrowUpFromLine, ListChecks } from 'lucide-react'
 import { InventoryTabs } from '../../components/inventory/InventoryTabs'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { KpiCard } from '../../components/dashboard/KpiCard'
 import { formatRelativeTime } from '../../lib/format'
 import { useProducts, useStockMovements } from '../../features/inventory/hooks/useInventoryData'
 import type { StockMovementType } from '../../types/inventory'
@@ -31,6 +32,15 @@ export function StockMovementsPage() {
     return productFilter === 'all' ? movements : movements.filter((m) => m.productId === productFilter)
   }, [movementsQuery.data, productFilter])
 
+  // Bug fix (2026-09-10), "Review Stock Movement Overview": the page listed
+  // every movement but never totalled them. These sums are computed
+  // directly from `filtered` - the same real, already-loaded movement rows
+  // the list below renders - so they always match what's on screen and
+  // automatically respect the product filter above (there's no date filter
+  // on this page to also account for).
+  const totalIn = filtered.filter((m) => m.quantityChange > 0).reduce((sum, m) => sum + m.quantityChange, 0)
+  const totalOut = filtered.filter((m) => m.quantityChange < 0).reduce((sum, m) => sum + Math.abs(m.quantityChange), 0)
+
   return (
     <div className="mx-auto max-w-4xl">
       <InventoryTabs />
@@ -42,7 +52,7 @@ export function StockMovementsPage() {
         <select
           value={productFilter}
           onChange={(e) => setProductFilter(e.target.value)}
-          className="rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          className="rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
         >
           <option value="all">All products</option>
           {productsQuery.data?.map((p) => (
@@ -52,6 +62,14 @@ export function StockMovementsPage() {
           ))}
         </select>
       </div>
+
+      {!movementsQuery.isLoading && (
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <KpiCard label="Total movements" value={String(filtered.length)} icon={ListChecks} tone="neutral" />
+          <KpiCard label="Stock in" value={String(totalIn)} icon={ArrowDownToLine} tone="success" />
+          <KpiCard label="Stock out" value={String(totalOut)} icon={ArrowUpFromLine} tone="neutral" />
+        </div>
+      )}
 
       <Card className="p-5">
         {movementsQuery.isLoading ? (

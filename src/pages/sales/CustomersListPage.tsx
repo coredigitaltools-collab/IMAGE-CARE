@@ -56,7 +56,7 @@ export function CustomersListPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name, phone, or email..."
-            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-ink-700">
@@ -64,7 +64,7 @@ export function CustomersListPage() {
             type="checkbox"
             checked={showArchived}
             onChange={(e) => setShowArchived(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
           />
           Show archived
         </label>
@@ -90,7 +90,7 @@ export function CustomersListPage() {
               <li key={customer.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Link to={`/customers/${customer.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                    <Link to={`/customers/${customer.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                       {customer.name}
                     </Link>
                     {!customer.is_active && (

@@ -6,6 +6,7 @@ import { BankReconciliationTabs } from '../../components/bankReconciliation/Bank
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
@@ -57,7 +58,7 @@ export function ReconciliationPage() {
           <select
             value={accountId}
             onChange={(e) => setSearchParams({ account: e.target.value })}
-            className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           >
             {activeAccounts.map((a) => (
               <option key={a.id} value={a.id}>
@@ -86,13 +87,13 @@ export function ReconciliationPage() {
                   type="date"
                   value={lineDate}
                   onChange={(e) => setLineDate(e.target.value)}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
                 />
               </div>
               <div className="sm:col-span-2">
                 <FormField id="sl-desc" label="Description" value={lineDescription} onChange={(e) => setLineDescription(e.target.value)} />
               </div>
-              <FormField id="sl-amount" label="Amount (UGX)" type="number" min={0} value={lineAmount} onChange={(e) => setLineAmount(Number(e.target.value))} />
+              <NumberField id="sl-amount" label="Amount (UGX)" min={0} value={lineAmount} onChange={setLineAmount} />
             </div>
             <div className="mt-3 flex justify-end">
               <Button
@@ -126,7 +127,7 @@ export function ReconciliationPage() {
                       <button
                         onClick={() => setSelectedLineId(line.id === selectedLineId ? null : line.id)}
                         className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                          selectedLineId === line.id ? 'border-brand-blue-500 bg-brand-blue-50' : 'border-ink-100 bg-white hover:bg-ink-50'
+                          selectedLineId === line.id ? 'border-brand-blue-500 bg-brand-blue-50' : 'border-ink-100 bg-surface hover:bg-surface-2'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -167,7 +168,7 @@ export function ReconciliationPage() {
                             setMatchError(err instanceof AmountMismatchError ? err.message : 'Could not match these.')
                           }
                         }}
-                        className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-left text-sm hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-ink-900">{deposit.reason}</span>

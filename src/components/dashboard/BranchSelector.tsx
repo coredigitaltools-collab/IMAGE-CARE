@@ -25,7 +25,7 @@ export function BranchSelector({ branches, selectedBranchId, onChange }: BranchS
         value={selectedBranchId}
         onChange={(e) => onChange(e.target.value)}
         aria-label="Select branch"
-        className="appearance-none rounded-md border border-ink-100 bg-white py-2 pl-9 pr-8 text-sm font-medium text-ink-900 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500"
+        className="appearance-none rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-8 text-sm font-medium text-ink-900 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500"
       >
         <option value="all">All branches</option>
         {branches.map((branch) => (

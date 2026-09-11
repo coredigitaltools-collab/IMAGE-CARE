@@ -71,14 +71,14 @@ export function CustomerDirectoryPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by name, phone, or email..."
-            className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-3 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
           />
         </div>
         {allTags.length > 0 && (
           <select
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value)}
-            className="rounded-md border border-ink-100 bg-white px-2.5 py-2 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300"
+            className="rounded-md border border-ink-100 bg-surface px-2.5 py-2 text-xs font-medium text-ink-700 shadow-card hover:border-ink-300"
           >
             <option value="all">All tags</option>
             {allTags.map((t) => (
@@ -93,7 +93,7 @@ export function CustomerDirectoryPage() {
             type="checkbox"
             checked={creditOnly}
             onChange={(e) => setCreditOnly(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
           />
           Owes credit
         </label>
@@ -102,7 +102,7 @@ export function CustomerDirectoryPage() {
             type="checkbox"
             checked={showArchived}
             onChange={(e) => setShowArchived(e.target.checked)}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
+            className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
           />
           Show archived
         </label>
@@ -128,7 +128,7 @@ export function CustomerDirectoryPage() {
               <li key={customer.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Link to={`/customers/${customer.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                    <Link to={`/customers/${customer.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                       {customer.name}
                     </Link>
                     {!customer.is_active && <Badge tone="neutral">Archived</Badge>}

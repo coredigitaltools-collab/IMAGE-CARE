@@ -6,38 +6,81 @@
 //          Hosts all authenticated SRS module pages.
 // ============================================================
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import {
+  LayoutDashboard, ShoppingCart, Package, Truck, Users, CreditCard, FileText, ClipboardList,
+  Receipt, Wallet, Landmark, BarChart3, Gift, Target, Boxes, Calendar, CalendarDays, CalendarRange,
+  Building2, Building, WifiOff, BookOpen, Settings as SettingsIcon, Menu, ChevronLeft, ChevronRight,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { usePermission } from '../../hooks/usePermission';
 import { BranchSelector } from './BranchSelector';
 import { UserMenu } from './UserMenu';
 import { OfflineBanner } from '../feedback/ServiceStates';
+import { useAppearanceSettings } from '../../features/settings/hooks/useSettingsData';
+import { setThemePreference } from '../../lib/theme';
 import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
+
+// Keeps the app's actual theme in sync with the user's saved Appearance
+// -> Theme preference. AppShell wraps every authenticated route (see
+// RootLayout.tsx), so this is the one place that's guaranteed to mount
+// once login has happened - main.tsx already applied a cached guess
+// before first paint (see src/lib/theme.ts), this corrects it to the
+// real value once it's loaded and keeps it in sync if changed elsewhere
+// (e.g. the Appearance settings page, in another tab).
+function useThemeSync() {
+  const query = useAppearanceSettings();
+  const theme = query.data?.theme;
+  useEffect(() => {
+    if (theme) setThemePreference(theme);
+  }, [theme]);
+}
 
 // ---- Nav item definition -----------------------------------
 
 interface NavItem {
   label:    string;
   path:     string;
-  icon:     string;
+  icon:     LucideIcon;
   module:   string;
   children?: { label: string; path: string }[];
 }
 
+// Every icon here is a lucide-react icon, the same set the rest of the
+// app already uses for buttons/cards/empty states - the sidebar
+// previously rendered raw emoji characters instead (🛒📦🚚 etc.), which
+// look inconsistent with the app's design system and render differently
+// across operating systems.
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',   path: '/dashboard',  icon: '▦',  module: 'reports' },
-  { label: 'Sales',       path: '/sales',      icon: '🛒', module: 'sales' },
-  { label: 'Inventory',   path: '/inventory',  icon: '📦', module: 'inventory' },
-  { label: 'Purchasing',  path: '/purchasing', icon: '🚚', module: 'purchases' },
-  { label: 'Customers',   path: '/customers',  icon: '👥', module: 'customers' },
-  { label: 'Credit',      path: '/credit',     icon: '💳', module: 'credit' },
-  { label: 'Invoices',    path: '/invoices',   icon: '📄', module: 'invoices' },
-  { label: 'Bills',       path: '/bills',      icon: '📋', module: 'bills' },
-  { label: 'Expenses',    path: '/expenses',   icon: '💸', module: 'expenses' },
-  { label: 'Payroll',     path: '/payroll',    icon: '💰', module: 'payroll' },
-  { label: 'Reports',     path: '/reports',    icon: '📊', module: 'reports' },
-  { label: 'Settings',    path: '/settings',   icon: '⚙',  module: 'settings' },
+  { label: 'Dashboard',   path: '/dashboard',  icon: LayoutDashboard, module: 'reports' },
+  { label: 'Sales',       path: '/sales',      icon: ShoppingCart,    module: 'sales' },
+  { label: 'Inventory',   path: '/inventory',  icon: Package,         module: 'inventory' },
+  { label: 'Purchasing',  path: '/purchasing', icon: Truck,           module: 'purchases' },
+  { label: 'Customers',   path: '/customers',  icon: Users,           module: 'customers' },
+  { label: 'Credit',      path: '/credit',     icon: CreditCard,      module: 'credit' },
+  { label: 'Invoices',    path: '/invoices',   icon: FileText,        module: 'invoices' },
+  { label: 'Bills',       path: '/bills',      icon: ClipboardList,   module: 'bills' },
+  { label: 'Expenses',    path: '/expenses',   icon: Receipt,         module: 'expenses' },
+  { label: 'Payroll',     path: '/payroll',    icon: Wallet,          module: 'payroll' },
+  { label: 'Cash Flow',   path: '/cash-flow',  icon: Landmark,        module: 'cash' },
+  { label: 'Reports',     path: '/reports',    icon: BarChart3,       module: 'reports' },
+  // Restored from the pre-reset 20-module frontend (commit 06972ff,
+  // "Offline Pack") - these modules and their pages/routes still existed
+  // in source, just weren't wired into this shell. See
+  // Module-Inventory-Forensic-Report.md for the full history.
+  { label: 'Loyalty',             path: '/loyalty',             icon: Gift,          module: 'loyalty' },
+  { label: 'Sales Targets',       path: '/sales-targets',       icon: Target,        module: 'salesTargets' },
+  { label: 'Stock Summary',       path: '/stock-summary',       icon: Boxes,         module: 'stockSummary' },
+  { label: 'Daily Summary',       path: '/daily-summary',       icon: Calendar,      module: 'dailySummary' },
+  { label: 'Monthly Summary',     path: '/monthly-summary',     icon: CalendarDays,  module: 'monthlySummary' },
+  { label: 'Annual Summary',      path: '/annual-summary',      icon: CalendarRange, module: 'annualSummary' },
+  { label: 'Bank Reconciliation', path: '/bank-reconciliation', icon: Building2,     module: 'bank' },
+  { label: 'Branch Overview',     path: '/branch-overview',     icon: Building,      module: 'branchOverview' },
+  { label: 'Offline Mode',        path: '/offline-mode',        icon: WifiOff,       module: 'offlineMode' },
+  { label: 'Accounting',          path: '/accounting',          icon: BookOpen,      module: 'accounting' },
+  { label: 'Settings',    path: '/settings',   icon: SettingsIcon, module: 'settings' },
 ];
 
 // ---- Shell component ---------------------------------------
@@ -49,6 +92,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isOnline] = useState(navigator.onLine);
+  useThemeSync();
 
   return (
     <div className="app-shell">
@@ -60,6 +104,22 @@ export function AppShell({ children }: AppShellProps) {
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100vh',
+        // ROOT CAUSE FIX (2026-08-28): the sidebar is `position: fixed`, so it
+        // is removed from this flex row entirely - this main wrapper is the
+        // ONLY item .app-shell's flex layout sees. Without flex-grow it kept
+        // its default `flex: 0 1 auto`, so it sized to its own content
+        // (shrink-to-fit) instead of filling the space left of the sidebar.
+        // That's what produced the narrow content column with a large empty
+        // area on the right across every module (Sales/POS, Payroll,
+        // Inventory, etc.) - confirmed by an isolated reproduction of this
+        // exact markup/CSS before applying this fix. `flex: 1 1 0%` makes it
+        // fill the remaining width (flexbox correctly subtracts the
+        // margin-left offset when distributing that space); `minWidth: 0`
+        // stops it from being kept artificially wide by its own content
+        // (e.g. a wide table), which is what allows horizontal scrolling to
+        // work inside pages instead of pushing the whole layout wider.
+        flex: '1 1 0%',
+        minWidth: 0,
       }}>
         <Header onMenuToggle={() => setSidebarOpen(o => !o)} />
         <OfflineBanner isOnline={isOnline} />
@@ -81,7 +141,7 @@ export function AppShell({ children }: AppShellProps) {
 // ---- Sidebar -----------------------------------------------
 
 function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }) {
-  const { userContext } = useApp();
+  const { userContext, activeStaff } = useApp();
   const { can } = usePermission(userContext);
 
   return (
@@ -139,6 +199,19 @@ function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }
         {NAV_ITEMS.map(item => {
           const hasAccess = can(item.module, 'view');
           if (!hasAccess && item.module !== 'reports') return null;
+          // PIN staff mode: `can()` above now checks the ACTIVE STAFF
+          // MEMBER's own real permissions while one is identified on this
+          // shared device, not the owner's - see AppContext.tsx's
+          // effectiveUserContext and claude/pos-staff-permission-enforcement-2026-09-05.md
+          // (this used to only check the owner's permissions regardless of
+          // who was switched in, which is the "staff see more than their
+          // permission" bug that fix addresses). Settings (business
+          // config, staff PINs, roles/permissions) additionally always
+          // stays hidden while acting as staff regardless of what their
+          // own permissions say - managing other staff's access is
+          // owner-only, full stop, not something to delegate via the
+          // permission matrix.
+          if (activeStaff && item.module === 'settings') return null;
           return (
             <SidebarNavItem
               key={item.path}
@@ -167,7 +240,7 @@ function Sidebar({ isOpen, onToggle }: { isOpen: boolean; onToggle: () => void }
         }}
         title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
       >
-        {isOpen ? '◀' : '▶'}
+        {isOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
       </button>
     </nav>
   );
@@ -206,8 +279,8 @@ function SidebarNavItem({ item, isOpen }: { item: NavItem; isOpen: boolean }) {
         }
       }}
     >
-      <span style={{ fontSize: 16, flexShrink: 0, width: 20, textAlign: 'center' }}>
-        {item.icon}
+      <span style={{ display: 'flex', flexShrink: 0, width: 20, justifyContent: 'center' }}>
+        <item.icon size={17} strokeWidth={1.75} />
       </span>
       {isOpen && (
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -249,7 +322,7 @@ function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
         }}
         title="Toggle sidebar"
       >
-        ☰
+        <Menu size={18} />
       </button>
 
       <PageTitle />
@@ -284,5 +357,34 @@ const shellStyles = `
   .app-shell {
     display: flex;
     min-height: 100vh;
+  }
+
+  /* Bug fix (2026-09-07): "the print invoice shows the sidebar modules
+     too" - every page that prints its own in-page content (Invoice
+     Detail, Product Detail, Barcode Management, Daily/Monthly/Annual
+     Summary, Inventory Dashboard) only ever hid its own action buttons
+     (print:hidden on the Print/Print label/etc. buttons) - none of them
+     hid the app shell itself, so window.print() always printed the
+     sidebar and header alongside/behind the actual printable content.
+     ReceiptModal.tsx's own print already works because it portals the
+     receipt onto <body> and hides #root entirely while that portal is
+     mounted (see the body.receipt-printing rule below) - it never had
+     this problem to begin with. This is the same fix applied at the
+     shell level instead, for every other page's in-page print: the
+     sidebar (.app-shell's <nav>) and header (.app-shell__main's
+     <header>) are real DOM elements on every one of those pages, so
+     hiding them in print - and collapsing the sidebar's margin-left
+     reservation on the content column - leaves only the actual page
+     content on the printed page, for any page that calls
+     window.print(), not just the ones already special-cased. */
+  @media print {
+    .app-shell > nav,
+    .app-shell__main > header {
+      display: none !important;
+    }
+    .app-shell__main {
+      margin-left: 0 !important;
+      min-height: 0 !important;
+    }
   }
 `;

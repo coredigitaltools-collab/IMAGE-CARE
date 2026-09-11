@@ -28,7 +28,7 @@ export function BranchComparisonPage() {
         <CurrencySelector selected={currency} onChange={setCurrency} />
       </div>
 
-      <div className="mb-4 rounded-md bg-ink-50 px-3 py-2.5 text-xs text-ink-500">
+      <div className="mb-4 rounded-md bg-surface-2 px-3 py-2.5 text-xs text-ink-500">
         Stock on hand is tracked business-wide in this version of the app, not split per branch, so this compares stock movement (what came in and
         went out at each branch) rather than a per-branch stock count.
       </div>

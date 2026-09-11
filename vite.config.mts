@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
 export default defineConfig({
@@ -8,7 +9,15 @@ export default defineConfig({
   // root-relative asset paths (/assets/...) which 404/503 in production
   // even though `vite preview`/`vite dev` work fine locally.
   base: '/IMAGE-CARE/',
-  plugins: [react()],
+  // src/index.css already uses Tailwind v4's CSS-first config
+  // (`@import "tailwindcss"` + an `@theme` block defining the ink-*/
+  // brand-blue-*/brand-red-* design tokens), but tailwindcss itself was
+  // never installed and this plugin was never wired in - so every
+  // Tailwind utility class used across the app (KpiCard, *Tabs.tsx nav,
+  // Cash Flow/Loyalty/etc. dashboards, and most pages built after the
+  // original globals.css design system) compiled to literally nothing.
+  // See src/main.tsx for the matching stylesheet import.
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

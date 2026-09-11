@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { NumberField } from '../ui/NumberField'
 import { formatCurrency } from '../../lib/format'
 
 interface InvoicePaymentModalProps {
@@ -28,22 +29,10 @@ export function InvoicePaymentModal({ invoiceReference, amountOwed, onClose, onS
   return (
     <Modal title={`Pay invoice, ${invoiceReference}`} onClose={onClose}>
       <div className="space-y-4">
-        <p className="rounded-md bg-ink-50 px-3 py-2 text-xs text-ink-500">
+        <p className="rounded-md bg-surface-2 px-3 py-2 text-xs text-ink-500">
           Amount owed: <span className="font-medium text-ink-900">{formatCurrency(amountOwed, 'UGX')}</span>
         </p>
-        <div>
-          <label htmlFor="pay-amount" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Payment amount (UGX)
-          </label>
-          <input
-            id="pay-amount"
-            type="number"
-            min={0}
-            value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
-          />
-        </div>
+        <NumberField id="pay-amount" label="Payment amount (UGX)" min={0} value={amount} onChange={setAmount} />
         <div>
           <label htmlFor="pay-ref" className="mb-1.5 block text-sm font-medium text-ink-700">
             Reference (optional)
@@ -53,7 +42,7 @@ export function InvoicePaymentModal({ invoiceReference, amountOwed, onClose, onS
             value={reference}
             onChange={(e) => setReference(e.target.value)}
             placeholder="Bank transaction ID, cheque number..."
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           />
         </div>
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}

@@ -148,9 +148,8 @@ export default function DashboardPage() {
       }}>
         <span style={{ flexShrink: 0, marginTop: 1 }}>ℹ</span>
         <div>
-          <strong>Stage 1: Foundation complete.</strong>
-          {' '}Authentication, business context, branch context, and permissions are live.
-          Full ERP modules will be connected in subsequent build stages.
+          <strong>ImageCare ERP is fully connected to its backend.</strong>
+          {' '}Core ERP workflows and business data are now live.
         </div>
       </div>
     </div>

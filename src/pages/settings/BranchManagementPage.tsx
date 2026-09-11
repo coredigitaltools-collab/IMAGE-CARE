@@ -14,7 +14,6 @@ import {
   useUpdateBranch,
 } from '../../features/settings/hooks/useSettingsData'
 import type { BranchInput, BranchRecord } from '../../types/settings'
-import { DuplicateBranchCodeError } from '../../services/branchService'
 
 export function BranchManagementPage() {
   const { user } = useAuth()
@@ -40,7 +39,19 @@ export function BranchManagementPage() {
       }
       setModalState(null)
     } catch (err) {
-      setFormError(err instanceof DuplicateBranchCodeError ? err.message : 'Something went wrong. Please try again.')
+      // Bug fix (2026-09-04): this used to only special-case
+      // DuplicateBranchCodeError - a class from an unused, pre-Stage-4
+      // mock file that createBranch/updateBranch (masterDataService.ts,
+      // the real Supabase-backed path) never actually throws. So every
+      // real failure, of any kind, fell through to the generic
+      // "Something went wrong. Please try again." with no way to tell
+      // what was actually wrong. createBranch/updateBranch already run
+      // every Supabase error through parseError() (types/app.ts), which
+      // turns known Postgres error codes into clear, specific messages
+      // (a duplicate code, a permissions problem, a missing field, etc.)
+      // - that message is what err.message already carries here, so
+      // just show it instead of re-masking it.
+      setFormError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     }
   }
 
@@ -70,11 +81,11 @@ export function BranchManagementPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-ink-900">{branch.name}</p>
-                    <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-500">
                       {branch.code}
                     </span>
                     {!branch.is_active && (
-                      <span className="rounded-full bg-ink-50 px-2 py-0.5 text-xs font-medium text-ink-500">Inactive</span>
+                      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-500">Inactive</span>
                     )}
                   </div>
                   <p className="text-xs text-ink-500">
@@ -85,13 +96,13 @@ export function BranchManagementPage() {
                 <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     onClick={() => setModalState({ mode: 'edit', branch })}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => setBranchActive.mutate({ id: branch.id, isActive: !branch.is_active })}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                   >
                     {branch.is_active ? 'Deactivate' : 'Reactivate'}
                   </button>

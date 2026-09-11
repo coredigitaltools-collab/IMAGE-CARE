@@ -1,8 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import type { PayComponentTypeInput } from '../../types/payroll'
 
@@ -22,6 +23,7 @@ interface PayComponentTypeFormModalProps {
 export function PayComponentTypeFormModal({ kind, onClose, onSubmit }: PayComponentTypeFormModalProps) {
   const {
     register,
+    control,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
@@ -45,18 +47,26 @@ export function PayComponentTypeFormModal({ kind, onClose, onSubmit }: PayCompon
           <select
             id="pc-type"
             {...register('isPercentageOfBase', { setValueAs: (v) => v === 'true' })}
-            className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+            className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
           >
             <option value="false">Fixed amount (UGX)</option>
             <option value="true">Percentage of base salary</option>
           </select>
         </div>
-        <FormField
-          label={isPercent ? 'Percentage of base salary' : 'Amount (UGX)'}
-          type="number"
-          min={0}
-          {...register('amount', { valueAsNumber: true })}
-          error={errors.amount?.message}
+        <Controller
+          name="amount"
+          control={control}
+          render={({ field }) => (
+            <NumberField
+              label={isPercent ? 'Percentage of base salary' : 'Amount (UGX)'}
+              min={0}
+              allowDecimal={isPercent}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              error={errors.amount?.message}
+            />
+          )}
         />
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>

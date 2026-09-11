@@ -6,6 +6,7 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect } from 'react';
+import { Store, ChevronDown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import type { Branch } from '../../types/database';
@@ -104,9 +105,9 @@ export function BranchSelector() {
           fontWeight: 500,
         }}
       >
-        <span>🏪</span>
+        <Store size={14} />
         <span>{activeBranch?.name ?? 'Select Branch'}</span>
-        <span style={{ fontSize: 10 }}>▼</span>
+        <ChevronDown size={12} />
       </button>
 
       {isOpen && (

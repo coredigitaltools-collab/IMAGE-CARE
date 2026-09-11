@@ -140,8 +140,82 @@
   --z-toast:    500;
 }
 
-/* ---- Reset ------------------------------------------------- */
+/* ---- Dark mode ---------------------------------------------
+   Companion to the `:root[data-theme="dark"]` block in src/index.css -
+   this file's own separate token set (--color-bg/--color-surface/etc,
+   --header-*) is what the app's actual persistent chrome (AppShell.tsx:
+   the sidebar+header shell every authenticated page renders inside of)
+   and the auth screens (LoginPage/RegisterPage/PinSetupPage/UnlockPage/
+   ForgotPinPage, via authStyles.ts) use, through inline `style={{...}}`
+   rather than Tailwind classes - so index.css's overrides alone don't
+   reach them, this block does. Values are chosen to match index.css's
+   dark palette (same surface/text greys) so the two token systems read
+   as one consistent dark theme rather than two different apps.
 
+   --sidebar-* is deliberately left untouched: the sidebar is already a
+   fixed dark-navy rail in light mode (self-contained, its own always-
+   light text on always-dark bg), same "solid fill, not a themed
+   surface" reasoning as brand-blue-500/700/900 in index.css. --color-
+   primary-400/500/600 also stay put for the same reason, they're this
+   file's solid button-background fill (paired with a fixed white
+   label) in AppShell/UserMenu/authStyles/UnauthorizedPage/NotFoundPage/
+   LoadingScreen/RouteErrorBoundary - only the -50/100/200 pastel tints
+   and the -700 text/link tone (BranchSelector's active row,
+   authStyles' noticeBox, and the auth-page Sign in/Register/Back links)
+   flip, matching the brand-blue-50/100+text-accent split already made
+   in index.css. */
+:root[data-theme="dark"] {
+  --color-bg:      #0B1120;
+  --color-surface: #111827;
+  --color-surface-2: #1E293B;
+  --color-border:      #334155;
+  --color-border-dark: #475569;
+
+  --color-text-primary:   #F1F5F9;
+  --color-text-secondary: #CBD5E1;
+  --color-text-muted:     #94A3B8;
+
+  --color-gray-100: #1E293B;
+  --color-gray-200: #334155;
+
+  --color-primary-50:  #16233A;
+  --color-primary-100: #1C3A5E;
+  --color-primary-200: #2C4A73;
+  --color-primary-700: #60A5FA;
+
+  --color-error-50:  #2E1614;
+  --color-error-600: #F87171;
+  --color-error-700: #F87171;
+
+  --color-success-600: #4ADE80;
+
+  --header-bg:     #111827;
+  --header-border: #334155;
+}
+
+/* ---- Reset ------------------------------------------------- */
+/*
+  2026-08-30 root-cause fix: this reset (and the h1-h6/p/a defaults
+  below) used to be plain, un-layered CSS. index.css's Tailwind utility
+  classes (@import "tailwindcss") all compile into `@layer utilities`,
+  specifically so a project's own CSS can override Tailwind's defaults.
+  But per the CSS spec, UN-LAYERED styles always win over ANY layered
+  style regardless of selector specificity or source order - so this
+  plain `* { margin: 0; padding: 0; }` was silently overriding EVERY
+  Tailwind spacing utility (p-*, px-*, py-*, m-*, space-y-*, etc.) on
+  every element in the entire app. Verified directly: before this fix,
+  `getComputedStyle()` on an element with class "p-5" (or "space-y-6",
+  or a button's "py-3") reported 0px padding/margin no matter what the
+  class said. This is almost certainly the real reason dialogs/forms
+  have looked "cramped" through every previous sizing pass - the
+  padding/spacing classes were correct in the code the whole time, but
+  this rule was cancelling them out before they ever reached the
+  screen. Wrapping this reset (and the typography defaults after it)
+  in `@layer base` - the same layer Tailwind's own reset uses - lets
+  Tailwind utility classes override it exactly as intended, without
+  changing anything else in this file.
+*/
+@layer base {
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -193,6 +267,7 @@ h1, h2, h3, h4, h5, h6 {
 p { line-height: var(--leading-relaxed); }
 a { color: var(--color-primary-600); text-decoration: none; }
 a:hover { text-decoration: underline; }
+} /* end @layer base - see root-cause fix note above */
 
 /* ---- Utility classes -------------------------------------- */
 .sr-only {

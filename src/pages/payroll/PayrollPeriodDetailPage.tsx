@@ -9,6 +9,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
+import { useActiveStaff } from '../../context/AppContext'
 import { formatCurrency } from '../../lib/format'
 import {
   useApprovePeriod,
@@ -19,7 +20,6 @@ import {
   usePayslips,
   useRecordPayrollPayment,
 } from '../../features/payroll/hooks/usePayrollData'
-import { InvalidPeriodTransitionError, NoEmployeesInPayrollError, PayrollLockedError } from '../../services/payrollService'
 import { PAYROLL_STATUS_LABELS } from '../../types/payroll'
 
 const STATUS_TONE = { draft: 'neutral', calculated: 'warning', approved: 'info', paid: 'success', archived: 'neutral' } as const
@@ -27,12 +27,20 @@ const STATUS_TONE = { draft: 'neutral', calculated: 'warning', approved: 'info',
 export function PayrollPeriodDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
+  // Bug fix (2026-09-07): "all issues related to staff and owner in
+  // different branches." This was always useApprovePeriod(user.name) - the
+  // real authenticated login, which on this shared-device architecture is
+  // always the owner's own name (see the ActiveStaff comment in
+  // AppContext.tsx), never whichever staff member is actually PIN-switched
+  // in and clicking Approve. Falls back to user.name when no one is
+  // PIN-switched, same as before.
+  const activeStaff = useActiveStaff()
   const { showToast } = useToast()
 
   const periodQuery = usePayrollPeriod(id)
   const payslipsQuery = usePayslips(id)
   const calculate = useCalculatePayroll()
-  const approve = useApprovePeriod(user.name)
+  const approve = useApprovePeriod(activeStaff?.fullName ?? user.name)
   const markGenerated = useMarkPayslipsGenerated()
   const recordPayment = useRecordPayrollPayment()
   const archive = useArchivePeriod()
@@ -73,12 +81,14 @@ export function PayrollPeriodDetailPage() {
                 variant="secondary"
                 onClick={async () => {
                   try {
+                    setActionError(undefined)
                     await calculate.mutateAsync(period.id)
                     showToast('Payroll calculated.', 'success')
                   } catch (err) {
-                    setActionError(
-                      err instanceof NoEmployeesInPayrollError || err instanceof PayrollLockedError ? err.message : 'Could not calculate payroll.',
-                    )
+                    // The period service raises the real business-rule
+                    // messages (locked after approval, nobody to pay,
+                    // write rejected), so show them as-is.
+                    setActionError(err instanceof Error ? err.message : 'Could not calculate payroll.')
                   }
                 }}
               >
@@ -88,8 +98,13 @@ export function PayrollPeriodDetailPage() {
             {period.status === 'calculated' && (
               <Button
                 onClick={async () => {
-                  await approve.mutateAsync(period.id)
-                  showToast('Payroll approved and locked.', 'success')
+                  try {
+                    setActionError(undefined)
+                    await approve.mutateAsync(period.id)
+                    showToast('Payroll approved and locked.', 'success')
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : 'Could not approve this payroll period.')
+                  }
                 }}
               >
                 <CheckCircle2 size={14} /> Approve
@@ -99,8 +114,13 @@ export function PayrollPeriodDetailPage() {
               <Button
                 variant="secondary"
                 onClick={async () => {
-                  await markGenerated.mutateAsync(period.id)
-                  showToast('Payslips generated.', 'success')
+                  try {
+                    setActionError(undefined)
+                    await markGenerated.mutateAsync(period.id)
+                    showToast('Payslips generated.', 'success')
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : 'Could not generate payslips.')
+                  }
                 }}
               >
                 <Send size={14} /> Generate payslips
@@ -110,10 +130,11 @@ export function PayrollPeriodDetailPage() {
               <Button
                 onClick={async () => {
                   try {
+                    setActionError(undefined)
                     await recordPayment.mutateAsync(period.id)
                     showToast('Payroll payment recorded.', 'success')
                   } catch (err) {
-                    setActionError(err instanceof InvalidPeriodTransitionError ? err.message : 'Could not record payment.')
+                    setActionError(err instanceof Error ? err.message : 'Could not record payment.')
                   }
                 }}
               >
@@ -124,8 +145,13 @@ export function PayrollPeriodDetailPage() {
               <Button
                 variant="secondary"
                 onClick={async () => {
-                  await archive.mutateAsync(period.id)
-                  showToast('Payroll archived.', 'success')
+                  try {
+                    setActionError(undefined)
+                    await archive.mutateAsync(period.id)
+                    showToast('Payroll archived.', 'success')
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : 'Could not archive this payroll period.')
+                  }
                 }}
               >
                 <Archive size={14} /> Archive

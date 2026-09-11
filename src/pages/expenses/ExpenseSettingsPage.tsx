@@ -3,7 +3,7 @@ import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { ExpenseTabs } from '../../components/expenses/ExpenseTabs'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/toastContext'
 import { useExpenseSettings, useSaveExpenseSettings } from '../../features/expenses/hooks/useExpensesData'
@@ -32,13 +32,12 @@ export function ExpenseSettingsPage() {
         <Skeleton className="h-40 w-full" />
       ) : (
         <Card className="p-5">
-          <FormField
+          <NumberField
             id="es-threshold"
             label="Auto-approve expenses at or below this amount (UGX)"
-            type="number"
             min={0}
             value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value))}
+            onChange={setThreshold}
             hint="Set to 0 to require manual approval on every expense, with no exceptions."
           />
           <div className="flex justify-end pt-3">

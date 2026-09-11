@@ -6,13 +6,13 @@
 //          Pages must never post sales directly to Supabase tables.
 // ============================================================
 
-import { supabase, rpc } from '../../lib/supabase';
-import { parseError, canDo } from '../../types/app';
+import { supabase } from '../../lib/supabase';
+import { canDo } from '../../types/app';
 import { mapErrorCode, serviceOk, serviceFail, makeRequestId } from '../../types/contracts';
 import type { ServiceResponse, PagedResponse, DateFilter, PaginationRequest } from '../../types/contracts';
 import type { UserContext } from '../../types/app';
 import type { Sale, SaleItem, PaymentMethod, UUID } from '../../types/database';
-import { createAndPostSale, type CreateSaleInput } from '../business/businessEngine';
+import { createAndPostSale, reverseSale, type CreateSaleInput } from '../business/businessEngine';
 import { APP_CONSTANTS } from '../../config/env';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -50,18 +50,18 @@ export async function createSale(
     return serviceFail(mapErrorCode(result.error.code), result.error.message, { requestId });
   }
 
-  const { data } = await supabase
-    .schema('imagecare')
-    .from('sales')
-    .select('total_amount')
-    .eq('id', result.data!.sale_id)
-    .single();
-
+  // Perf fix (2026-09-06, "the system is slow"): this used to make a
+  // whole extra Supabase round trip here just to fetch total_amount for
+  // the sale that createAndPostSale() had literally just posted a
+  // moment earlier - the engine result already carries it (see
+  // total_amount on SaleResult in services/business/businessEngine.ts),
+  // it just wasn't being passed through. Using it directly removes one
+  // full sequential round trip from every single "Complete Sale."
   return serviceOk<SaleResult>({
     sale_id:          result.data!.sale_id,
     sale_number:      result.data!.sale_number,
     status:           result.data!.status,
-    total_amount:     data?.total_amount ?? 0,
+    total_amount:     result.data!.total_amount ?? 0,
     journal_entry_id: result.data!.journal_entry_id,
   }, requestId);
 }
@@ -85,12 +85,25 @@ export async function getSale(
   }
 
   try {
+    // 2026-09-01: 'sale_items' has two foreign keys into 'sales' - the
+    // real one, sale_items_sale_id_fkey, plus a legacy composite
+    // fk_s2_sale_items_biz_sale (same duplicate-FK pattern already fixed
+    // on the sale_items -> products embeds in businessEngine.ts and
+    // inventoryEngine.ts). The unqualified `sale_items(*)` embed here was
+    // ambiguous for the same reason and PostgREST rejected the whole
+    // query - which is why every "View receipt" click failed with a
+    // generic "Could not load this receipt." (the real PGRST201 error
+    // was being swallowed into that one generic message below). The
+    // `!sale_items_sale_id_fkey` hint tells PostgREST which relationship
+    // to use. `users!sales_served_by_fkey` already had this same kind of
+    // hint - 'sales' has three separate FKs into 'users' (created_by,
+    // served_by, updated_by), so it needed one for the same reason.
     const { data, error } = await supabase
       .schema('imagecare')
       .from('sales')
       .select(`
         *,
-        sale_items(*),
+        sale_items!sale_items_sale_id_fkey(*),
         customers(name),
         users!sales_served_by_fkey(first_name, last_name)
       `)
@@ -139,39 +152,55 @@ export async function listSales(
   }
 
   try {
+    // fn_list_sales_cursor does not exist live or in any tracked migration
+    // (confirmed 2026-08-27 by direct inspection of the ImageCare Supabase
+    // project's imagecare schema functions) - replaced with a direct
+    // offset-paginated query, matching the pattern already used by
+    // listPurchases/listInventory in this codebase.
     const pageSize = Math.min(
       pagination.page_size ?? APP_CONSTANTS.DEFAULT_PAGE_SIZE,
       APP_CONSTANTS.MAX_PAGE_SIZE
     );
+    const offset = ((pagination.page ?? 1) - 1) * pageSize;
 
-    const { data, error } = await rpc('fn_list_sales_cursor', {
-      p_business_id:  ctx.business_id,
-      p_branch_id:    filter.branch_id   ?? null,
-      p_status:       filter.status      ?? null,
-      p_customer_id:  filter.customer_id ?? null,
-      p_from_date:    filter.date?.from  ?? null,
-      p_to_date:      filter.date?.to    ?? null,
-      p_cursor_date:  pagination.cursor_date ?? null,
-      p_cursor_id:    pagination.cursor_id   ?? null,
-      p_limit:        pageSize + 1,       // fetch one extra to detect has_more
-    });
+    // 2026-09-01: the Sales list needs each row's product(s) to show a
+    // "Product" column instead of the internal reference number - added
+    // the sale_items embed (with the product name via the same FK-hinted
+    // join already used elsewhere for this duplicate-FK schema) so the
+    // page doesn't need a second round trip per row. Quantity comes along
+    // too so the column can show "6x Denim Jackets" for a single-item
+    // sale.
+    let q = supabase.schema('imagecare').from('sales')
+      .select(`
+        *,
+        sale_items!sale_items_sale_id_fkey(
+          quantity,
+          products!sale_items_product_id_fkey(name)
+        )
+      `, { count: 'exact' })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .range(offset, offset + pageSize - 1)
+      .order('sale_date', { ascending: false });
 
+    if (filter.branch_id)      q = q.eq('branch_id', filter.branch_id);
+    if (filter.customer_id)    q = q.eq('customer_id', filter.customer_id);
+    if (filter.status)         q = q.eq('status', filter.status);
+    if (filter.payment_method) q = q.eq('payment_method', filter.payment_method);
+    if (filter.date?.from)     q = q.gte('sale_date', filter.date.from);
+    if (filter.date?.to)       q = q.lte('sale_date', filter.date.to);
+
+    const { data, error, count } = await q;
     if (error) return serviceFail('INTERNAL_ERROR', 'Failed to load sales.', { requestId });
 
-    const rows = (data ?? []) as Sale[];
-    const hasMore = rows.length > pageSize;
-    const items = hasMore ? rows.slice(0, pageSize) : rows;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const last = items[items.length - 1] as any;
-
     return serviceOk<PagedResponse<Sale>>({
-      items,
+      items: (data ?? []) as Sale[],
       pagination: {
-        total_count:      0,    // cursor pagination - no total count
+        total_count:      count ?? 0,
         page_size:        pageSize,
-        has_more:         hasMore,
-        next_cursor_date: hasMore ? last?.next_cursor_date ?? null : null,
-        next_cursor_id:   hasMore ? last?.next_cursor_id   ?? null : null,
+        has_more:         (offset + pageSize) < (count ?? 0),
+        next_cursor_date: null,
+        next_cursor_id:   null,
       },
     }, requestId);
   } catch {
@@ -179,21 +208,40 @@ export async function listSales(
   }
 }
 
-// ---- Cancel Sale -------------------------------------------
+// ---- Cancel / Delete Sale ------------------------------------
+// One entry point for both cases the Sales page uses this for:
+//   - deleting a parked (draft) sale that was never completed - just
+//     marks it cancelled, nothing to reverse yet.
+//   - deleting a completed (confirmed) sale - routes through the real
+//     reversal engine (businessEngine.reverseSale) to put stock back
+//     and reverse the journal and cash/credit effects together.
+// 2026-09-01: this previously called rpc('engine_return_sale', ...) for
+// confirmed sales - confirmed via direct database inspection that this
+// RPC does not exist and never has, so "Refund" never actually worked
+// for a completed sale; it just returned a Supabase "function not found"
+// error, which the UI surfaced as a generic failure toast. Replaced
+// with the real, tested implementation in src/engines/*.
 
 export async function cancelSale(
   ctx: UserContext,
   saleId: UUID,
-  reason: string
+  reason?: string
 ): Promise<ServiceResponse<void>> {
   const requestId = makeRequestId();
 
-  if (!canDo(ctx, 'sales', 'edit')) {
-    return serviceFail('PERMISSION_DENIED', 'You do not have permission to cancel sales.', { requestId });
+  // A user needs at least one of the two permissions this can require
+  // (deleting a completed sale needs 'delete', deleting a held one needs
+  // 'edit') to get past the door at all - checked here, before the sale
+  // is even loaded, so someone with neither gets a clean PERMISSION_DENIED
+  // instead of a confusing "sale not found". The precise permission for
+  // this specific sale's status is re-checked below once its status is
+  // known.
+  if (!canDo(ctx, 'sales', 'edit') && !canDo(ctx, 'sales', 'delete')) {
+    return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete sales.', { requestId });
   }
 
   if (!reason?.trim()) {
-    return serviceFail('INVALID_INPUT', 'A cancellation reason is required.', { requestId, field: 'reason' });
+    return serviceFail('INVALID_INPUT', 'A reason is required.', { requestId, field: 'reason' });
   }
 
   try {
@@ -201,7 +249,7 @@ export async function cancelSale(
     const { data: sale } = await supabase
       .schema('imagecare')
       .from('sales')
-      .select('status')
+      .select('status, branch_id')
       .eq('id', saleId)
       .eq('business_id', ctx.business_id)
       .single();
@@ -210,26 +258,24 @@ export async function cancelSale(
     if (sale.status === 'cancelled') return serviceFail('BUSINESS_RULE_VIOLATION', 'Sale is already cancelled.', { requestId });
     if (sale.status === 'voided') return serviceFail('BUSINESS_RULE_VIOLATION', 'Voided sales cannot be cancelled.', { requestId });
 
-    // If confirmed, route through return engine to reverse inventory + journal
     if (sale.status === 'confirmed') {
-      // Get all items for full return
-      const { data: items } = await supabase
-        .schema('imagecare')
-        .from('sale_items')
-        .select('product_id, quantity')
-        .eq('sale_id', saleId);
+      if (!canDo(ctx, 'sales', 'delete')) {
+        return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete completed sales.', { requestId });
+      }
 
-      const { error } = await rpc('engine_return_sale', {
-        p_sale_id:  saleId,
-        p_user_id:  ctx.user_id,
-        p_reason:   reason,
-        p_items:    JSON.stringify(items ?? []),
-        p_idempotency_key: uuidv4(),
+      const result = await reverseSale(ctx, {
+        sale_id:   saleId,
+        branch_id: sale.branch_id as UUID,
+        reason,
       });
 
-      if (error) return serviceFail('BUSINESS_RULE_VIOLATION', parseError(error).message, { requestId });
+      if (result.error) return serviceFail(mapErrorCode(result.error.code), result.error.message, { requestId });
     } else {
-      // Draft - just mark cancelled
+      // Draft (parked) - just mark cancelled, nothing to reverse yet
+      if (!canDo(ctx, 'sales', 'edit')) {
+        return serviceFail('PERMISSION_DENIED', 'You do not have permission to delete held sales.', { requestId });
+      }
+
       const { error } = await supabase
         .schema('imagecare')
         .from('sales')
@@ -237,12 +283,12 @@ export async function cancelSale(
         .eq('id', saleId)
         .eq('business_id', ctx.business_id);
 
-      if (error) return serviceFail('INTERNAL_ERROR', 'Failed to cancel sale.', { requestId });
+      if (error) return serviceFail('INTERNAL_ERROR', 'Failed to delete sale.', { requestId });
     }
 
     return serviceOk(undefined, requestId);
   } catch {
-    return serviceFail('INTERNAL_ERROR', 'Failed to cancel sale.', { requestId });
+    return serviceFail('INTERNAL_ERROR', 'Failed to delete sale.', { requestId });
   }
 }
 
@@ -282,6 +328,13 @@ export async function getSaleReceipt(
   }
 
   try {
+    // 2026-09-01: same duplicate-FK ambiguity as getSale() above, on two
+    // more relationships this query embeds unqualified - 'sales' has two
+    // FKs into 'branches' (branch_id -> branches.id, plus a legacy
+    // composite fk_s2_sales_biz_branch), and 'sale_items' has two FKs
+    // into 'products' (see the fix in businessEngine.ts/inventoryEngine.ts
+    // for the full explanation). Both needed an explicit hint for
+    // PostgREST to accept the query instead of rejecting it outright.
     const { data, error } = await supabase
       .schema('imagecare')
       .from('sales')
@@ -290,12 +343,12 @@ export async function getSaleReceipt(
         subtotal, discount_amount, tax_amount,
         total_amount, amount_paid, change_given,
         customers(name),
-        branches(name),
+        branches!sales_branch_id_fkey(name),
         businesses(name),
         users!sales_served_by_fkey(first_name, last_name),
-        sale_items(
+        sale_items!sale_items_sale_id_fkey(
           quantity, unit_price, discount_amount, line_total,
-          products(name)
+          products!sale_items_product_id_fkey(name)
         )
       `)
       .eq('id', saleId)

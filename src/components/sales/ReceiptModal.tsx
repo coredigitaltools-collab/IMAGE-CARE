@@ -1,4 +1,6 @@
-import { CheckCircle2, Printer, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { CheckCircle2, FileText, Printer, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
 import { PAYMENT_METHOD_LABELS } from '../../types/sales'
@@ -14,17 +16,61 @@ interface ReceiptModalProps {
   cashierName: string
   onClose: () => void
   onNewSale: () => void
+  // Feature request (2026-09-07): "Start invoice creation from a completed
+  // sale" - a completed sale had no way to become an invoice except going
+  // to Invoices -> "+ Invoice a sale" and finding it again in a dropdown of
+  // every uninvoiced sale. Optional (and omitted entirely once a sale is
+  // already invoiced - not every completed sale has to have one) so this
+  // stays exactly what it was for every existing caller.
+  onCreateInvoice?: () => void
 }
 
-export function ReceiptModal({ sale, customer, businessName, receiptSettings, cashierName, onClose, onNewSale }: ReceiptModalProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:static print:p-0">
-      <div className="absolute inset-0 bg-ink-900/40 print:hidden" onClick={onClose} aria-hidden="true" />
+// Bug fix (2026-09-03): Print produced a blank page. Root cause: this
+// modal renders inline in the component tree, wherever the page that
+// opened it happens to sit - which, for the Sales page, is inside
+// AppShell's <main style={{ overflow: 'auto' }}>. A `position: fixed`
+// element nested inside a scrollable (overflow: auto/scroll) ancestor is
+// a well-known Chromium print bug: on-screen it positions correctly
+// relative to the viewport as normal, but the print engine can't resolve
+// its position relative to the printed page and renders nothing for it -
+// confirmed by matching the exact "opens fine, Print shows nothing"
+// symptom reported. Rendering it through a portal straight onto
+// `document.body` (a sibling of #root, not a descendant of any scrolling
+// container) sidesteps that entirely. The `receipt-printing` class this
+// adds to <body> while open pairs with the print rule in index.css that
+// hides `#root` (the whole app UI) during print, so only this portaled
+// receipt shows up on the page - without it, the dashboard/sidebar behind
+// the modal would print alongside the receipt once printing it works at
+// all. Scoped to just this component/class so it can't affect the
+// several other pages that also call window.print() for their own
+// in-page printable content.
+export function ReceiptModal({ sale, customer, businessName, receiptSettings, cashierName, onClose, onNewSale, onCreateInvoice }: ReceiptModalProps) {
+  const portalRef = useRef<HTMLDivElement | null>(null)
+  if (!portalRef.current) {
+    portalRef.current = document.createElement('div')
+  }
+
+  useEffect(() => {
+    const node = portalRef.current!
+    document.body.appendChild(node)
+    document.body.classList.add('receipt-printing')
+    return () => {
+      document.body.classList.remove('receipt-printing')
+      document.body.removeChild(node)
+    }
+  }, [])
+
+  return createPortal(
+    // Same z-index fix as the shared Modal.tsx: this uses var(--z-modal)
+    // instead of an arbitrary z-50 so the receipt also paints above the
+    // fixed sidebar (var(--z-sticky)) instead of underneath it.
+    <div className="fixed inset-0 flex items-center justify-center p-4 print:static print:p-0" style={{ zIndex: 'var(--z-modal)' }}>
+      <div className="absolute inset-0 bg-black/40 print:hidden" onClick={onClose} aria-hidden="true" />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Receipt"
-        className="relative w-full max-w-sm rounded-card border border-ink-100 bg-white shadow-card-hover print:max-w-none print:border-0 print:shadow-none"
+        className="relative w-full max-w-sm rounded-card border border-ink-100 bg-surface shadow-card-hover print:max-w-none print:border-0 print:shadow-none"
       >
         <div className="border-b border-ink-100 p-4 print:hidden">
           <div className="flex items-start justify-between">
@@ -37,7 +83,7 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
                 <p className="text-xs text-ink-500">Receipt {sale.reference}</p>
               </div>
             </div>
-            <button onClick={onClose} className="rounded-md p-1 text-ink-500 hover:bg-ink-50" aria-label="Close">
+            <button onClick={onClose} className="rounded-md p-1 text-ink-500 hover:bg-surface-2" aria-label="Close">
               <X size={18} />
             </button>
           </div>
@@ -73,8 +119,16 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
               <span>{formatCurrency(sale.subtotal, 'UGX')}</span>
             </div>
             {sale.discountAmount > 0 && (
+              // Bug fix (2026-09-06): "i do not want the discount in a
+              // percentage form" - sale.discountPercent was always a
+              // hardcoded 0 (this app never stored a real header-level
+              // discount percentage - see mapRawSaleRow in
+              // PointOfSalePage.tsx), so this line always printed
+              // "Discount (0%)" on every receipt that had a real
+              // discount amount applied. Discount is a flat amount now,
+              // shown the same way the till's own cart summary shows it.
               <div className="flex justify-between text-brand-red-700">
-                <span>Discount ({sale.discountPercent}%)</span>
+                <span>Discount</span>
                 <span>-{formatCurrency(sale.discountAmount, 'UGX')}</span>
               </div>
             )}
@@ -124,9 +178,15 @@ export function ReceiptModal({ sale, customer, businessName, receiptSettings, ca
           <Button variant="secondary" onClick={() => window.print()}>
             <Printer size={14} /> Print
           </Button>
+          {onCreateInvoice && (
+            <Button variant="secondary" onClick={onCreateInvoice}>
+              <FileText size={14} /> Create invoice
+            </Button>
+          )}
           <Button onClick={onNewSale}>New sale</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    portalRef.current
   )
 }

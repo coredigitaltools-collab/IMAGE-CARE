@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
-import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import { formatCurrency } from '../../lib/format'
 
@@ -21,28 +21,34 @@ interface CreditLimitModalProps {
 
 export function CreditLimitModal({ customerName, currentLimit, currentBalance, onClose, onSubmit }: CreditLimitModalProps) {
   const {
-    register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { newLimit: currentLimit } })
 
   return (
-    <Modal title={`Approve credit limit, ${customerName}`} onClose={onClose}>
+    <Modal title={`Set credit limit, ${customerName}`} onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <p className="rounded-md bg-ink-50 px-3 py-2 text-xs text-ink-500">
+        <p className="rounded-md bg-surface-2 px-3 py-2 text-xs text-ink-500">
           Current limit: <span className="font-medium text-ink-900">{formatCurrency(currentLimit, 'UGX')}</span> · Current balance:{' '}
           <span className="font-medium text-ink-900">{formatCurrency(currentBalance, 'UGX')}</span>
         </p>
-        <FormField label="New credit limit (UGX)" type="number" {...register('newLimit', { valueAsNumber: true })} error={errors.newLimit?.message} />
+        <Controller
+          name="newLimit"
+          control={control}
+          render={({ field }) => (
+            <NumberField label="New credit limit (UGX)" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={errors.newLimit?.message} />
+          )}
+        />
         <p className="text-xs text-ink-500">
-          Setting this to 0 blocks all future credit sales for this customer until a limit is approved again.
+          This is the most this customer can owe on credit at one time. Setting it to 0 blocks credit sales for this customer until you set a limit again.
         </p>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : 'Approve limit'}
+            {isSubmitting ? 'Saving…' : 'Save limit'}
           </Button>
         </div>
       </form>

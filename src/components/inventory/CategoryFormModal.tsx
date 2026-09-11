@@ -68,7 +68,7 @@ export function MergeCategoryModal({ categories, source, onClose, onMerge }: Mer
         <select
           value={targetId}
           onChange={(e) => setTargetId(e.target.value)}
-          className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+          className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
         >
           {options.map((c) => (
             <option key={c.id} value={c.id}>

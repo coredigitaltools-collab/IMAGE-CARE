@@ -13,7 +13,7 @@
 // ============================================================
 
 import { db } from '../../lib/db';
-import type { UUID } from '../../types/database';
+import type { UUID, PaymentMethod } from '../../types/database';
 import type {
   EngineContext, EngineResult,
   CreatePurchaseCommand, ReceiveStockCommand, PurchaseResult,
@@ -22,6 +22,32 @@ import { engineOk, engineFail, makeError } from '../types';
 import { inventoryEngine } from '../inventory/inventoryEngine';
 import { accountingEngine } from '../accounting/accountingEngine';
 import { cashEngine } from '../cash/cashEngine';
+import { auditEngine } from '../audit/auditEngine';
+
+// ---- Supplier Payment Command --------------------------------
+// Not part of a purchase order's own receipt flow - a supplier
+// payment clears the running `suppliers.outstanding` balance
+// (there is no dedicated supplier "credit account" table the way
+// customers have credit_accounts; `outstanding` is maintained
+// directly on the suppliers row since no DB trigger does it).
+
+export interface RecordSupplierPaymentCommand {
+  supplier_id:      UUID;
+  branch_id:        UUID;
+  amount:           number;
+  payment_method:   PaymentMethod;
+  purchase_id?:     UUID;
+  reference_number?: string;
+  notes?:           string;
+  idempotency_key?: string;
+}
+
+export interface SupplierPaymentResult {
+  transaction_id:  UUID;
+  supplier_id:     UUID;
+  amount:          number;
+  new_outstanding: number;
+}
 
 async function nextPurchaseNumber(businessId: UUID): Promise<string> {
   const { count } = await db.purchases()
@@ -38,6 +64,13 @@ export class PurchasingEngine {
   // Creates a purchase record in draft state.
   // Does NOT create inventory movements or accounting entries.
   // Stock is only received when receiveStock() is called.
+  //
+  // 2026-09-03: the app-level caller (createAndPostPurchase in
+  // services/business/businessEngine.ts) now calls receiveStock()
+  // immediately after this, in the same action - a Purchase Order is
+  // meant to be confirmed the moment it's recorded, no separate
+  // approval step. This method itself is unchanged (still just creates
+  // the draft row); the auto-confirm composition lives one layer up.
 
   async createPurchase(
     ctx: EngineContext,
@@ -47,17 +80,32 @@ export class PurchasingEngine {
       return engineFail(makeError('VALIDATION_ERROR', 'Purchase must have at least one line.'));
     }
 
-    // Validate products
-    for (const line of cmd.lines) {
-      const { data: product, error: pErr } = await db.products()
-        
+    // Perf fix (2026-09-06, "the system is slow"): product validation
+    // and the next purchase number are independent of each other, but
+    // the product check was also a separate round trip PER LINE in a
+    // sequential loop - the same N+1 pattern already fixed on the sale
+    // side (see createSale() in engines/business/businessEngine.ts).
+    // On a 5-item purchase order that was 5 sequential round trips
+    // before any real work started. Batching the product lookups into
+    // a single `.in(...)` query and running it alongside
+    // nextPurchaseNumber() cuts this to one round trip's worth of wait
+    // regardless of how many lines the order has.
+    const productIds = [...new Set(cmd.lines.map(l => l.product_id))];
+    const [{ data: products }, purchaseNum] = await Promise.all([
+      db.products()
         .select('id, is_purchasable, business_id')
-        .eq('id', line.product_id)
+        .in('id', productIds)
         .eq('business_id', ctx.business_id)
-        .is('deleted_at', null)
-        .single();
+        .is('deleted_at', null),
+      nextPurchaseNumber(ctx.business_id),
+    ]);
 
-      if (pErr || !product) {
+    for (const line of cmd.lines) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const product = (products ?? []).find((p: any) => p.id === line.product_id) as
+        | { id: string; is_purchasable: boolean }
+        | undefined;
+      if (!product) {
         return engineFail(makeError('RECORD_NOT_FOUND', `Product ${line.product_id} not found.`, undefined, 'product_id'));
       }
       if (!product.is_purchasable) {
@@ -74,8 +122,6 @@ export class PurchasingEngine {
       subtotal += lineTotal;
       return { ...line, discount_amount: discAmt, tax_amount: taxAmt, line_total: lineTotal };
     });
-
-    const purchaseNum = await nextPurchaseNumber(ctx.business_id);
 
     const { data: purchase, error: pErr } = await db.purchases()
       
@@ -201,6 +247,29 @@ export class PurchasingEngine {
         description:     `Payment for purchase ${purchase.purchase_number}`,
       });
       if (!cashResult.ok) return engineFail(cashResult.error!);
+    } else if (purchase.supplier_id) {
+      // Bug fix (Phase 6, item 10: accounting balance fields not
+      // maintained): a credit purchase increases Accounts Payable
+      // (posted above) but nothing was incrementing the supplier's
+      // denormalized `outstanding` balance to match - only
+      // recordSupplierPayment() below ever decremented it. Left
+      // unfixed, `outstanding` starts at 0 and never reflects real
+      // debt, so the very first supplier payment against real unpaid
+      // purchases would incorrectly fail with "payment exceeds
+      // outstanding balance (0)".
+      const { data: supplier } = await db.suppliers()
+
+        .select('outstanding')
+        .eq('id', purchase.supplier_id)
+        .eq('business_id', ctx.business_id)
+        .single();
+
+      if (supplier) {
+        await db.suppliers()
+
+          .update({ outstanding: Number(supplier.outstanding) + Number(purchase.total_amount), updated_by: ctx.user_id })
+          .eq('id', purchase.supplier_id);
+      }
     }
 
     // Confirm the purchase
@@ -225,6 +294,156 @@ export class PurchasingEngine {
       total_amount:     Number(purchase.total_amount),
       status:           'confirmed',
       journal_entry_id: jeResult.data!.journal_entry_id,
+    });
+  }
+
+  // ---- recordSupplierPayment -------------------------------
+  // Records a cash outflow against a supplier's outstanding
+  // balance, posts Dr Accounts Payable / Cr Cash, and decrements
+  // suppliers.outstanding (no DB trigger maintains this column,
+  // unlike imagecare.fn_update_credit_balance for customer credit,
+  // so the engine is the sole authority here).
+  //
+  // Bug fix (found during Phase 12 E2E verification): this posted
+  // entry_type: 'supplier_payment', but imagecare.journal_entry_type
+  // is a Postgres ENUM whose only values are 'sale', 'purchase',
+  // 'payroll', 'expense', 'credit_payment', 'bank_deposit',
+  // 'bank_withdrawal', 'adjustment', 'opening_balance', 'transfer' -
+  // there is no 'supplier_payment' member. PostJournalCommand.entry_type
+  // is typed as a plain `string` in src/engines/types.ts, so TypeScript
+  // never caught this; every real supplier payment would fail at the
+  // database with error 22P02 (invalid input value for enum) the
+  // moment it tried to insert the journal entry, confirmed live against
+  // the Supabase project. Changed to 'purchase', the closest existing
+  // enum member (this journal entry is always tied to a purchase's
+  // payable), matching the entry_type already used by
+  // confirmPurchase()/receiveStock() above for the original purchase.
+
+  async recordSupplierPayment(
+    ctx: EngineContext,
+    cmd: RecordSupplierPaymentCommand,
+  ): Promise<EngineResult<SupplierPaymentResult>> {
+    if (cmd.amount <= 0) {
+      return engineFail(makeError('VALIDATION_ERROR', 'Payment amount must be positive.', undefined, 'amount'));
+    }
+
+    const { data: supplier, error: supErr } = await db.suppliers()
+      .select('id, business_id, outstanding, name')
+      .eq('id', cmd.supplier_id)
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null)
+      .single();
+
+    if (supErr || !supplier) {
+      return engineFail(makeError('RECORD_NOT_FOUND', 'Supplier not found.'));
+    }
+
+    const outstanding = Number(supplier.outstanding);
+
+    if (cmd.amount > outstanding) {
+      return engineFail(makeError(
+        'OVERPAYMENT',
+        `Payment amount (${cmd.amount}) exceeds outstanding balance (${outstanding}) for this supplier.`,
+        undefined, 'amount',
+      ));
+    }
+
+    // Post accounting: Dr Accounts Payable, Cr Cash
+    // Perf fix (2026-09-06, "the system is slow"): these two account
+    // lookups are independent of each other - run together instead of
+    // one after another (see the identical fix already applied to the
+    // sale/expense/purchase account lookups in accountingEngine.ts).
+    let cashCode = '1100';
+    if (cmd.payment_method === 'mobile_money') cashCode = '1120';
+    else if (cmd.payment_method === 'bank_transfer' || cmd.payment_method === 'card') cashCode = '1130';
+    const [payableAcct, cashAcct] = await Promise.all([
+      accountingEngine.resolveAccountCode(ctx.business_id, '2000'),
+      accountingEngine.resolveAccountCode(ctx.business_id, cashCode),
+    ]);
+
+    const jeResult = await accountingEngine.postJournal(ctx, {
+      branch_id:      cmd.branch_id,
+      entry_type:     'purchase',
+      description:    `Payment to supplier: ${supplier.name}`,
+      reference_type: 'supplier_payment',
+      reference_id:   cmd.purchase_id ?? cmd.supplier_id,
+      lines: [
+        {
+          account_code:  '2000',
+          account_name:  payableAcct.ok ? payableAcct.data!.account_name : 'Accounts Payable',
+          account_type:  'liability',
+          account_id:    payableAcct.ok ? payableAcct.data!.id : undefined,
+          debit_amount:  cmd.amount,
+          credit_amount: 0,
+          description:   'Payment clears payable',
+        },
+        {
+          account_code:  cashCode,
+          account_name:  cashAcct.ok ? cashAcct.data!.account_name : 'Cash',
+          account_type:  'asset',
+          account_id:    cashAcct.ok ? cashAcct.data!.id : undefined,
+          debit_amount:  0,
+          credit_amount: cmd.amount,
+        },
+      ],
+    });
+    if (!jeResult.ok) return engineFail(jeResult.error!);
+
+    // Record cash outflow
+    const cashResult = await cashEngine.recordMovement(ctx, {
+      branch_id:       cmd.branch_id,
+      transaction_type:'cash_out',
+      amount:          cmd.amount,
+      payment_method:  cmd.payment_method,
+      reference_type:  'supplier_payment',
+      reference_id:    cmd.purchase_id ?? cmd.supplier_id,
+      description:     `Payment to supplier: ${supplier.name}`,
+      notes:           cmd.notes,
+    });
+    if (!cashResult.ok) return engineFail(cashResult.error!);
+
+    // Decrement the supplier's running outstanding balance
+    const newOutstanding = outstanding - cmd.amount;
+    const { error: updErr } = await db.suppliers()
+      .update({ outstanding: newOutstanding, updated_by: ctx.user_id })
+      .eq('id', cmd.supplier_id)
+      .eq('business_id', ctx.business_id);
+
+    if (updErr) {
+      return engineFail(makeError('DATABASE_ERROR', 'Failed to update supplier balance.', updErr.message));
+    }
+
+    // If tied to a specific purchase, clear its balance_due too
+    if (cmd.purchase_id) {
+      const { data: purchase } = await db.purchases()
+        .select('amount_paid, balance_due')
+        .eq('id', cmd.purchase_id)
+        .eq('business_id', ctx.business_id)
+        .single();
+
+      if (purchase) {
+        await db.purchases()
+          .update({
+            amount_paid: Number(purchase.amount_paid) + cmd.amount,
+            balance_due: Math.max(0, Number(purchase.balance_due) - cmd.amount),
+            updated_by:  ctx.user_id,
+          })
+          .eq('id', cmd.purchase_id);
+      }
+    }
+
+    await auditEngine.log(ctx, {
+      table_name: 'suppliers',
+      record_id:  cmd.supplier_id,
+      action:     'update',
+      new_value:  { outstanding: newOutstanding },
+    });
+
+    return engineOk({
+      transaction_id:  cashResult.data!.transaction_id,
+      supplier_id:     cmd.supplier_id,
+      amount:          cmd.amount,
+      new_outstanding: newOutstanding,
     });
   }
 }

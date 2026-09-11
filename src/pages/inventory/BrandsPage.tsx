@@ -57,7 +57,7 @@ export function BrandsPage() {
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => setModalState({ mode: 'edit', brand })}
-                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-ink-50"
+                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-ink-700 hover:bg-surface-2"
                     >
                       Edit
                     </button>

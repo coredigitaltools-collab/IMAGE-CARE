@@ -22,6 +22,7 @@ export function PurchaseReturnsPage() {
   const createReturn = useCreatePurchaseReturn(user.id)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [addError, setAddError] = useState<string | undefined>()
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
@@ -37,7 +38,7 @@ export function PurchaseReturnsPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Purchase Returns</h1>
           <p className="mt-0.5 text-sm text-ink-500">Goods sent back to suppliers, reduces stock immediately.</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}>
+        <Button onClick={() => { setAddError(undefined); setIsAddOpen(true) }}>
           <Plus size={15} /> New return
         </Button>
       </div>
@@ -50,7 +51,12 @@ export function PurchaseReturnsPage() {
             ))}
           </div>
         ) : (returnsQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={RotateCcw} title="No returns recorded" description="Goods returned to a supplier will appear here." />
+          <EmptyState
+            icon={RotateCcw}
+            title="No returns recorded"
+            description="Goods returned to a supplier will appear here, and stock updates automatically."
+            action={{ label: '+ New return', onClick: () => { setAddError(undefined); setIsAddOpen(true) } }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -82,11 +88,16 @@ export function PurchaseReturnsPage() {
         <PurchaseReturnModal
           suppliers={activeSuppliers}
           products={activeProducts}
+          submitError={addError}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createReturn.mutateAsync({ ...input, purchaseOrderId: null })
-            showToast('Return recorded, stock updated.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createReturn.mutateAsync({ ...input, purchaseOrderId: null })
+              showToast('Return recorded, stock updated.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              setAddError(err instanceof Error ? err.message : 'Could not record this return.')
+            }
           }}
         />
       )}

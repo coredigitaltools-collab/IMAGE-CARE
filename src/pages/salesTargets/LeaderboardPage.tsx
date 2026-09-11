@@ -30,7 +30,7 @@ export function LeaderboardPage() {
           className={
             tab === 'staff'
               ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-              : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+              : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
           }
         >
           Staff
@@ -40,7 +40,7 @@ export function LeaderboardPage() {
           className={
             tab === 'branch'
               ? 'rounded-full bg-brand-blue-700 px-3 py-1 text-xs font-medium text-white'
-              : 'rounded-full border border-ink-100 bg-white px-3 py-1 text-xs font-medium text-ink-700 hover:bg-ink-50'
+              : 'rounded-full border border-ink-100 bg-surface px-3 py-1 text-xs font-medium text-ink-700 hover:bg-surface-2'
           }
         >
           Branch
@@ -62,7 +62,7 @@ export function LeaderboardPage() {
               <li key={row.id}>
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-50 text-xs font-medium text-ink-500">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-ink-500">
                       {i + 1}
                     </span>
                     <span className="text-sm font-medium text-ink-900">{row.name}</span>

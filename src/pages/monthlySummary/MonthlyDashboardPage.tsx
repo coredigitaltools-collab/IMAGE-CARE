@@ -34,19 +34,19 @@ export function MonthlyDashboardPage() {
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <button
           onClick={() => navigate(`/monthly-summary/sales?month=${month}`)}
-          className="rounded-card border border-ink-100 bg-white px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
+          className="rounded-card border border-ink-100 bg-surface px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
         >
           Sales summary
         </button>
         <button
           onClick={() => navigate(`/monthly-summary/branches?month=${month}`)}
-          className="rounded-card border border-ink-100 bg-white px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
+          className="rounded-card border border-ink-100 bg-surface px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
         >
           Branch comparison
         </button>
         <button
           onClick={() => navigate(`/monthly-summary/report?month=${month}`)}
-          className="rounded-card border border-ink-100 bg-white px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
+          className="rounded-card border border-ink-100 bg-surface px-3 py-3 text-center text-xs font-medium text-ink-700 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
         >
           Full report
         </button>
@@ -64,6 +64,7 @@ export function MonthlyDashboardPage() {
         <KpiCard
           label="Monthly COGS"
           value={financials ? formatCurrency(financials.cogsUgx, 'UGX') : '-'}
+          hint="Cost of goods sold, what you paid for what was sold this month"
           icon={Receipt}
           tone="neutral"
           isLoading={financialsQuery.isLoading}
@@ -71,7 +72,7 @@ export function MonthlyDashboardPage() {
         <KpiCard
           label="Gross profit"
           value={financials ? formatCurrency(financials.grossProfitUgx, 'UGX') : '-'}
-          hint="Sales minus COGS"
+          hint="Sales minus cost of goods sold"
           icon={BadgeDollarSign}
           tone={financials && financials.grossProfitUgx >= 0 ? 'success' : 'red'}
           isLoading={financialsQuery.isLoading}

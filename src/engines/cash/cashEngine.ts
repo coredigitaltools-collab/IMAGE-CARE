@@ -130,6 +130,26 @@ export class CashEngine {
     });
   }
 
+  // ---- reverseSaleCashIn ------------------------------------
+  // Backs out the cash received for a sale that is being deleted.
+  // Recorded as a cash_out so the balance nets back to zero for
+  // this sale, fully traceable to it via reference_type/reference_id.
+
+  async reverseSaleCashIn(
+    ctx: EngineContext,
+    opts: { branch_id: UUID; sale_id: UUID; amount: number; payment_method: string },
+  ): Promise<EngineResult<CashMovementResult>> {
+    return this.recordMovement(ctx, {
+      branch_id:       opts.branch_id,
+      transaction_type:'cash_out',
+      amount:          opts.amount,
+      payment_method:  opts.payment_method as import('../../types/database').PaymentMethod,
+      reference_type:  'sale',
+      reference_id:    opts.sale_id,
+      description:     `Reversal of cash received for cancelled sale`,
+    });
+  }
+
   // ---- recordExpenseCashOut --------------------------------
 
   async recordExpenseCashOut(
@@ -144,6 +164,29 @@ export class CashEngine {
       reference_type:  'expense',
       reference_id:    opts.expense_id,
       description:     opts.description,
+    });
+  }
+
+  // ---- reversePurchaseCashOut --------------------------------
+  // Backs out the cash paid on a confirmed purchase order that is
+  // being voided (2026-09-03, "edit/delete a purchase order"
+  // correction flow). Recorded as a cash_in so the balance nets back
+  // to zero for this order, fully traceable via reference_type/
+  // reference_id - mirrors reverseSaleCashIn() above, opposite
+  // direction (a purchase pays cash OUT, so undoing it is cash IN).
+
+  async reversePurchaseCashOut(
+    ctx: EngineContext,
+    opts: { branch_id: UUID; purchase_id: UUID; amount: number; payment_method: string },
+  ): Promise<EngineResult<CashMovementResult>> {
+    return this.recordMovement(ctx, {
+      branch_id:       opts.branch_id,
+      transaction_type:'cash_in',
+      amount:          opts.amount,
+      payment_method:  opts.payment_method as import('../../types/database').PaymentMethod,
+      reference_type:  'purchase',
+      reference_id:    opts.purchase_id,
+      description:     `Reversal of cash paid for voided purchase order`,
     });
   }
 }

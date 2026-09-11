@@ -97,6 +97,26 @@ export interface CreateSaleCommand {
   lines:             SaleLineInput[];
   idempotency_key?:  string;
   notes?:            string;
+  // Bug fix (2026-09-05): "Sold by" was captured in the checkout UI
+  // (PointOfSalePage's salesPersonId) but never reached this far - a real
+  // sale's imagecare.sales.served_by column was always left NULL, which
+  // meant a staff Sales Target could never show real progress (there was
+  // no data connecting any sale to who made it). See
+  // claude/sales-targets-dashboard-fix-2026-09-05.md.
+  served_by?:        UUID;
+  // Bug fix (2026-09-06): "i do not want the discount in a percentage
+  // form" + the deeper issue found while fixing it - the Record Sale
+  // cart's whole-sale discount (however it was entered) never reached
+  // this far either. The UI computed and displayed a discounted total,
+  // but createSale() below only ever priced each line at full unit_price
+  // (no discount_pct was ever set on any line from the checkout flow),
+  // so the sale actually saved - and the revenue posted to the books -
+  // was always the FULL undiscounted amount, regardless of what the
+  // cashier applied. This is a flat currency amount (e.g. 10000, meaning
+  // "USh 10,000 off"), applied once against the whole cart's subtotal,
+  // matching the till's one discount field for the whole sale rather
+  // than per line.
+  discount_amount?: number;
 }
 
 export interface PostSaleCommand {
@@ -110,6 +130,17 @@ export interface SaleResult {
   total_amount:   number;
   status:         string;
   journal_entry_id: UUID | null;
+}
+
+// ---- Sale reversal (delete a completed sale) ----------------
+// Undoes ALL effects of a confirmed sale: puts stock back, reverses
+// the journal entry, and reverses whatever cash or credit effect the
+// sale recorded. Distinct from a partial "refund" - this is a full
+// undo of one sale, used when the sale itself was a mistake.
+
+export interface ReverseSaleCommand {
+  sale_id: UUID;
+  reason:  string;
 }
 
 // ---- Purchase Commands -------------------------------------
@@ -148,6 +179,18 @@ export interface PurchaseResult {
   journal_entry_id: UUID | null;
 }
 
+// ---- Purchase reversal (void a confirmed purchase order) ----
+// Undoes ALL effects of a confirmed purchase order: puts the received
+// stock back out, reverses the journal entry, and reverses whichever
+// cash or payable effect it recorded. Mirrors ReverseSaleCommand above -
+// added 2026-09-03 for the "edit/delete a purchase order" correction
+// flow (see voidPurchase() in engines/business/businessEngine.ts).
+
+export interface ReversePurchaseCommand {
+  purchase_id: UUID;
+  reason:      string;
+}
+
 // ---- Inventory Commands ------------------------------------
 
 export interface InventoryMovementCommand {
@@ -164,6 +207,18 @@ export interface InventoryMovementCommand {
   batch_number?:    string;
   notes?:           string;
   idempotency_key?: string;
+  // Perf fix (2026-09-06, "the system is slow"): recordMovement()
+  // re-checks stock availability for every "out" movement type by
+  // default (a real safety check for most callers). deductForSale()
+  // in inventoryEngine.ts is called immediately after postSale() in
+  // businessEngine.ts has already verified availability for every
+  // line on the cart in one batched Promise.all - re-running that same
+  // check again per line here was pure duplicated work, done one line
+  // at a time, adding a full extra sequential round trip per cart item
+  // to every single "Complete Sale." Set only by deductForSale's own
+  // call into recordMovement; every other caller is unaffected and
+  // keeps the check.
+  skipAvailabilityCheck?: boolean;
 }
 
 export interface TransferStockCommand {
@@ -287,6 +342,33 @@ export interface ExpenseResult {
   expense_number:  string;
   total_amount:    number;
   status:          string;
+  journal_entry_id: UUID | null;
+}
+
+// ---- Payroll Commands ----------------------------------------
+
+export interface RecordPayrollCommand {
+  branch_id:         UUID;
+  user_id:           UUID;
+  pay_period_start:  string;
+  pay_period_end:    string;
+  pay_date:          string;
+  basic_salary:      number;
+  allowances?:       number;
+  overtime_pay?:     number;
+  tax_deduction?:    number;
+  nssf_deduction?:   number;
+  other_deductions?: number;
+  payment_method:    PaymentMethod;
+  notes?:            string;
+  idempotency_key?:  string;
+}
+
+export interface PayrollResult {
+  payroll_id:       UUID;
+  payroll_number:   string;
+  net_pay:          number;
+  status:           string;
   journal_entry_id: UUID | null;
 }
 

@@ -18,7 +18,12 @@ const TYPE_TONE: Record<StockMovementType, 'success' | 'warning' | 'info' | 'neu
 }
 
 interface RecentStockActivityPanelProps {
-  movements?: StockMovement[]
+  // Only the fields this panel actually renders - the movements list this
+  // gets fed (useStockMovements()) is now honestly mapped from real
+  // inventory_movements rows, which don't carry a running quantityAfter
+  // balance or a resolved createdBy display name, so this isn't widened to
+  // the full StockMovement type just to satisfy an unused field.
+  movements?: Pick<StockMovement, 'id' | 'productId' | 'type' | 'reason' | 'quantityChange' | 'createdAt'>[]
   products: Product[]
   isLoading: boolean
 }
@@ -31,7 +36,7 @@ export function RecentStockActivityPanel({ movements, products, isLoading }: Rec
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-ink-900">Recent stock activity</h2>
-        <Link to="/inventory/movements" className="text-xs font-medium text-brand-blue-700 hover:underline">
+        <Link to="/inventory/movements" className="text-xs font-medium text-accent hover:underline">
           View all
         </Link>
       </div>

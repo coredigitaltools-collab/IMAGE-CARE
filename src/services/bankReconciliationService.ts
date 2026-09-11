@@ -1,6 +1,8 @@
 import { getCollection, setCollection, enqueueSync } from '../lib/localStore'
-import { stampNew, stampUpdated } from '../lib/audit'
 import { listCashMovements } from './accountingService'
+import { supabase } from '../lib/supabase'
+import { canDo, parseError } from '../types/app'
+import type { UserContext } from '../types/app'
 import type { CashMovement } from '../types/accounting'
 import type {
   BankAccount,
@@ -10,8 +12,32 @@ import type {
   BankStatementLineInput,
 } from '../types/bankReconciliation'
 
-const ACCOUNTS_KEY = 'bank-recon:accounts'
 const STATEMENT_LINES_KEY = 'bank-recon:statement-lines'
+
+// ---------------------------------------------------------------------------
+// Bank Accounts are real: imagecare.bank_accounts (database/migrations/
+// 0009_stage2_financial.sql) has RLS and full CRUD support - this used to be
+// local-only (IndexedDB) purely because nothing wired it up. Statement lines
+// below stay local: there is no imagecare.bank_statement_lines table.
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRealBankAccount(row: any): BankAccount {
+  return {
+    id: row.id,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    created_by: row.created_by ?? '',
+    updated_by: row.updated_by ?? '',
+    branch_id: row.branch_id ?? null,
+    is_active: row.is_active,
+    sync_status: 'synced',
+    last_synced_at: null,
+    name: row.account_name,
+    accountNumber: row.account_number,
+    openingBalanceUgx: Number(row.opening_balance ?? 0),
+  }
+}
 
 export class AmountMismatchError extends Error {
   constructor() {
@@ -32,28 +58,61 @@ export class AccountInUseError extends Error {
   }
 }
 
-// ---------- Bank Accounts ----------
+// ---------- Bank Accounts (real) ----------
 
-export async function listBankAccounts(): Promise<BankAccount[]> {
-  return getCollection<BankAccount>(ACCOUNTS_KEY, () => [])
+export async function listBankAccounts(ctx: UserContext): Promise<BankAccount[]> {
+  const { data, error } = await supabase
+    .schema('imagecare')
+    .from('bank_accounts')
+    .select('*')
+    .eq('business_id', ctx.business_id)
+    .is('deleted_at', null)
+    .order('account_name', { ascending: true })
+  if (error) throw new Error(parseError(error).message)
+  return (data ?? []).map(mapRealBankAccount)
 }
 
-export async function createBankAccount(input: BankAccountInput, userId: string): Promise<BankAccount> {
+export async function createBankAccount(ctx: UserContext, input: BankAccountInput, userId: string): Promise<BankAccount> {
   if (!input.name.trim()) throw new Error('Account name is required.')
-  const accounts = await listBankAccounts()
-  const account: BankAccount = { ...stampNew(userId), ...input }
-  await setCollection(ACCOUNTS_KEY, [...accounts, account])
-  await enqueueSync({ entityType: 'bank_account', entityId: account.id, operation: 'create' })
-  return account
+  if (!canDo(ctx, 'cash', 'create')) throw new Error('You do not have permission to create bank accounts.')
+
+  // The form only collects one "name" field (see BankAccountFormModal), so
+  // it doubles as both bank_name and account_name - both are NOT NULL on
+  // the real table and there is no second field in the UI to source a
+  // distinct bank name from.
+  const { data, error } = await supabase
+    .schema('imagecare')
+    .from('bank_accounts')
+    .insert({
+      business_id: ctx.business_id,
+      branch_id: ctx.branch_id ?? null,
+      bank_name: input.name,
+      account_name: input.name,
+      account_number: input.accountNumber,
+      opening_balance: input.openingBalanceUgx,
+      current_balance: input.openingBalanceUgx,
+      is_active: true,
+      created_by: userId,
+      updated_by: userId,
+    })
+    .select()
+    .single()
+  if (error) throw new Error(parseError(error).message)
+  return mapRealBankAccount(data)
 }
 
-export async function archiveBankAccount(id: string, userId: string): Promise<void> {
+export async function archiveBankAccount(ctx: UserContext, id: string, userId: string): Promise<void> {
   const lines = await listStatementLines(id)
   if (lines.length > 0) throw new AccountInUseError()
-  const accounts = await listBankAccounts()
-  const next = accounts.map((a) => (a.id === id ? stampUpdated({ ...a, is_active: false }, userId) : a))
-  await setCollection(ACCOUNTS_KEY, next)
-  await enqueueSync({ entityType: 'bank_account', entityId: id, operation: 'disable' })
+  if (!canDo(ctx, 'cash', 'delete')) throw new Error('You do not have permission to archive bank accounts.')
+
+  const { error } = await supabase
+    .schema('imagecare')
+    .from('bank_accounts')
+    .update({ is_active: false, updated_at: new Date().toISOString(), updated_by: userId })
+    .eq('id', id)
+    .eq('business_id', ctx.business_id)
+  if (error) throw new Error(parseError(error).message)
 }
 
 // ---------- Statement Lines ----------
@@ -146,8 +205,8 @@ export async function unmatchTransaction(statementLineId: string): Promise<BankS
 
 // ---------- Reconciled balance ----------
 
-export async function getReconciledBalance(bankAccountId: string): Promise<number> {
-  const [accounts, lines] = await Promise.all([listBankAccounts(), listStatementLines(bankAccountId)])
+export async function getReconciledBalance(ctx: UserContext, bankAccountId: string): Promise<number> {
+  const [accounts, lines] = await Promise.all([listBankAccounts(ctx), listStatementLines(bankAccountId)])
   const account = accounts.find((a) => a.id === bankAccountId)
   if (!account) return 0
   const matchedTotal = lines.filter((l) => l.isMatched).reduce((sum, l) => sum + l.amountUgx, 0)
@@ -156,14 +215,14 @@ export async function getReconciledBalance(bankAccountId: string): Promise<numbe
 
 // ---------- Dashboard ----------
 
-export async function getBankReconciliationDashboardKpis(): Promise<BankReconciliationDashboardKpis> {
-  const accounts = (await listBankAccounts()).filter((a) => a.is_active)
+export async function getBankReconciliationDashboardKpis(ctx: UserContext): Promise<BankReconciliationDashboardKpis> {
+  const accounts = (await listBankAccounts(ctx)).filter((a) => a.is_active)
   const allLines = await listStatementLines()
 
   let totalReconciledBalanceUgx = 0
   let unmatchedDepositCount = 0
   for (const account of accounts) {
-    totalReconciledBalanceUgx += await getReconciledBalance(account.id)
+    totalReconciledBalanceUgx += await getReconciledBalance(ctx, account.id)
     unmatchedDepositCount += (await listUnmatchedDeposits(account.id)).length
   }
 

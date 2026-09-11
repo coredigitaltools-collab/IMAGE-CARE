@@ -132,8 +132,15 @@ export function InventoryDashboardPage() {
     a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a)
     a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // Bug fix (2026-09-09), "Export inventory data" timing out: revoking
+    // the object URL in the same tick as click() can race the browser
+    // actually starting the download, especially under an automated
+    // browser driving the click - deferred to the next tick instead (same
+    // fix applied to lib/csv.ts's shared downloadCsv()).
+    setTimeout(() => {
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }, 0)
     showToast('Products exported.', 'success')
   }
 
@@ -167,7 +174,7 @@ export function InventoryDashboardPage() {
       </div>
 
       {!isEmptyInstall && (
-        <div className="sticky top-16 z-10 -mx-4 mb-6 border-b border-ink-100 bg-ink-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="sticky top-16 z-10 -mx-4 mb-6 border-b border-ink-100 bg-surface-2/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
           <div className="mx-auto flex max-w-6xl flex-col gap-3">
             <InventorySearchBar
               products={productsQuery.data ?? []}
@@ -204,9 +211,9 @@ export function InventoryDashboardPage() {
           <button
             key={label}
             onClick={onClick}
-            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover focus-visible:-translate-y-0.5 focus-visible:border-brand-blue-500 focus-visible:shadow-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue-500 focus-visible:outline-offset-2 active:translate-y-0 active:scale-[0.97] active:shadow-card"
+            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-surface px-3 py-3 text-center shadow-card outline-none transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover focus-visible:-translate-y-0.5 focus-visible:border-brand-blue-500 focus-visible:shadow-card-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-blue-500 focus-visible:outline-offset-2 active:translate-y-0 active:scale-[0.97] active:shadow-card"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 ease-out group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white group-active:scale-95">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-all duration-200 ease-out group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white group-active:scale-95">
               <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>
@@ -215,8 +222,8 @@ export function InventoryDashboardPage() {
       </div>
 
       {isEmptyInstall ? (
-        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
+        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-surface px-6 py-16 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-accent">
             <Boxes size={26} strokeWidth={1.75} />
           </span>
           <div>

@@ -68,10 +68,10 @@ function OverviewReport() {
           {plQuery.isLoading
             ? <Skeleton className="h-48 w-full" />
             : <>
-                <StatRow label="Revenue (4000)"       value={formatCurrency(revenue, 'UGX')}     tone="green" />
-                <StatRow label="COGS (5000)"          value={formatCurrency(cogs, 'UGX')}        tone="red" />
+                <StatRow label="Revenue"              value={formatCurrency(revenue, 'UGX')}     tone="green" />
+                <StatRow label="Cost of goods sold"   value={formatCurrency(cogs, 'UGX')}        tone="red" />
                 <StatRow label="Gross Profit"         value={formatCurrency(grossProfit, 'UGX')} tone={grossProfit >= 0 ? 'green' : 'red'} />
-                <StatRow label="Expenses (6000)"      value={formatCurrency(expTotal, 'UGX')}    tone="red" />
+                <StatRow label="Expenses"             value={formatCurrency(expTotal, 'UGX')}    tone="red" />
                 <StatRow label="Net Profit"           value={formatCurrency(netProfit, 'UGX')}   tone={netProfit >= 0 ? 'green' : 'red'} />
                 <StatRow label="Outstanding Credit"   value={formatCurrency(creditKpis.data?.totalOutstandingUgx ?? 0, 'UGX')} />
               </>}
@@ -115,6 +115,23 @@ function OverviewReport() {
 
 function SalesReport() {
   const salesQuery = useSales()
+  const ctx    = useUserContext()
+  const branch = useActiveBranch()
+  // Bug fix (2026-09-10), "Review the sales performance report": this tab
+  // showed revenue and a payment-method split but no profitability figure.
+  // Reuses the same real P&L query (journal_lines-derived Revenue/COGS)
+  // that OverviewReport() above already uses for its own Gross Profit row -
+  // same real numbers, no new backend query, just also shown here where a
+  // sales performance report would reasonably include profitability.
+  const plQuery = useQuery({
+    queryKey: ['reports', 'pl-summary', ctx.business_id, branch],
+    queryFn: () => getPLSummary(ctx, branch ?? undefined).then(r => {
+      if (r.error) throw new Error(r.error.message ?? 'Failed to load P&L');
+      return r.data!;
+    }),
+    refetchInterval: 60_000,
+  })
+  const grossProfit = plQuery.data?.grossProfit ?? 0
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const confirmed  = (Array.isArray(salesQuery.data) ? salesQuery.data : []).filter((s: any) => s.status === 'confirmed')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -132,8 +149,13 @@ function SalesReport() {
         <div className="p-4">
           <SectionHeading>Sales Summary</SectionHeading>
           {salesQuery.isLoading ? <Skeleton className="h-40 w-full" /> : <>
-            <StatRow label="Confirmed Sales"  value={String(confirmed.length)} />
+            <StatRow label="Completed Sales"  value={String(confirmed.length)} />
             <StatRow label="Total Revenue"    value={formatCurrency(revenue, 'UGX')} tone="green" />
+            <StatRow
+              label="Gross Profit"
+              value={plQuery.isLoading ? '…' : formatCurrency(grossProfit, 'UGX')}
+              tone={grossProfit >= 0 ? 'green' : 'red'}
+            />
             {Object.entries(byMethod).map(([method, total]) => (
               <StatRow key={method} label={`  ${method}`} value={formatCurrency(total, 'UGX')} />
             ))}
@@ -290,7 +312,6 @@ const TAB_ICONS: Record<ReportTab, React.ElementType> = {
 
 export function ReportsPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('Overview')
-  const ctx    = useUserContext()
   const branch = useActiveBranch()
 
   return (
@@ -300,9 +321,7 @@ export function ReportsPage() {
         <div>
           <h1 className="text-xl font-semibold text-ink-900">Reports</h1>
           <p className="text-sm text-ink-500">
-            Live data from your backend.{' '}
-            {branch ? 'Filtered to active branch.' : 'All branches.'}
-            {` Business: ${ctx.business_id?.slice(0, 8) ?? ''}...`}
+            {branch ? 'Showing your active branch.' : 'Showing all branches.'}
           </p>
         </div>
       </div>
@@ -317,8 +336,8 @@ export function ReportsPage() {
                   onClick={() => setActiveTab(tab)}
                   className={
                     activeTab === tab
-                      ? 'flex items-center gap-1.5 whitespace-nowrap rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-brand-blue-700'
-                      : 'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-ink-50 hover:text-ink-900'
+                      ? 'flex items-center gap-1.5 whitespace-nowrap rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-accent'
+                      : 'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-surface-2 hover:text-ink-900'
                   }
                 >
                   <Icon size={14} />

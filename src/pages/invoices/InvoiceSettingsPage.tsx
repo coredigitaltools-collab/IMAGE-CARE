@@ -59,7 +59,7 @@ export function InvoiceSettingsPage() {
               value={footerText}
               onChange={(e) => setFooterText(e.target.value)}
               rows={2}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
           <ToggleRow label="Show tax breakdown" checked={showTaxBreakdown} onChange={setShowTaxBreakdown} />

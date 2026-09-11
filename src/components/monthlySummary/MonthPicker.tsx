@@ -12,7 +12,7 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
       value={value}
       onChange={(e) => e.target.value && onChange(e.target.value)}
       max={currentMonthStr()}
-      className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500 print:hidden"
+      className="rounded-md border border-ink-100 bg-surface px-3 py-1.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500 print:hidden"
     />
   )
 }

@@ -1,8 +1,18 @@
 // Stage 5: Expenses feature hooks - rewired to Stage 4 services.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUserContext, useActiveBranch } from '../../../context/AppContext';
-import { createExpense, listExpenses } from '../../../services/financial/financialServices';
+import { createExpense, listExpenses, updateExpense, deleteExpense } from '../../../services/financial/financialServices';
+import type { UpdateExpenseInput } from '../../../services/financial/financialServices';
 import { listExpenseCategories, createExpenseCategory } from '../../../services/settings/settingsService';
+import {
+  getExpenseSettings as getExpenseSettingsLocal,
+  saveExpenseSettings as saveExpenseSettingsLocal,
+  listRecurringTemplates as listRecurringTemplatesLocal,
+  createRecurringTemplate as createRecurringTemplateLocal,
+  archiveRecurringTemplate as archiveRecurringTemplateLocal,
+  generateDueRecurringExpenses as generateDueRecurringExpensesLocal,
+} from '../../../services/expenseService';
+import type { ExpenseSettings, RecurringExpenseInput } from '../../../types/expenses';
 import type { UUID } from '../../../types/database';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,7 +26,7 @@ function unwrap<T>(r: { data?: T | null; error?: any; success?: boolean }): any 
 }
 
 export function useExpenseSettings(_userId?: string) {
-  return useQuery({ queryKey: ['expenses', 'settings'], queryFn: async () => ({ maxExpenseAmount: 0, requireReceipt: false, autoApproveThresholdUgx: 0, requireApprovalAboveUgx: 0 }), staleTime: Infinity });
+  return useQuery({ queryKey: ['expenses', 'settings'], queryFn: () => getExpenseSettingsLocal() });
 }
 
 export function useExpenseCategories() {
@@ -70,7 +80,10 @@ export function useExpenseDashboardKpis(branchId?: UUID) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const thisMonth = monthExpenses.reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return { totalThisMonth: thisMonth, totalThisMonthUgx: thisMonth, countThisMonth: monthExpenses.length, totalOverall: items.reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0), pendingApproval: 0, pendingApprovalCount: 0, approvedUnpaidUgx: 0, paidThisMonthUgx: 0 };
+      const totalOverall = items.reduce((s: number, e: any) => s + (e.total_amount ?? 0), 0);
+      // Draft/pending-approval/paid concepts removed 2026-08-31 - every recorded
+      // expense is final, so the only meaningful KPIs are totals and counts.
+      return { totalThisMonth: thisMonth, totalThisMonthUgx: thisMonth, countThisMonth: monthExpenses.length, totalOverall, totalOverallUgx: totalOverall, countOverall: items.length };
     },
   });
 }
@@ -86,82 +99,26 @@ export function useExpense(id: string | undefined, _userId?: string) {
   });
 }
 
-export function useApproveExpense(_userId?: string, _userName?: string) {
+// 2026-08-31: draft/pending-approval/approved/rejected/paid workflow removed
+// at the user's explicit request - expenses now record directly (see
+// engines/business/businessEngine.ts recordExpense, which already always
+// wrote status: 'confirmed'; the UI just used to pretend otherwise).
+// useApproveExpense/useRejectExpense/useSubmitExpense/useCancelExpense/
+// useMarkExpensePaid are gone; useUpdateExpense/useDeleteExpense replace them.
+export function useUpdateExpense(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to approve expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateExpenseInput }) => updateExpense(ctx, id, patch).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
   });
 }
-export function useRejectExpense(_userId?: string) {
+export function useDeleteExpense(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'cancelled', notes: `Rejected: ${reason}`, updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to reject expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-}
-export function useSubmitExpense(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      // In Stage 4, expenses go directly to confirmed. Submit marks as pending review.
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to submit expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-}
-export function useCancelExpense(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: string | { id: string; reason?: string }) => {
-      const id = typeof input === 'string' ? input : input.id;
-      const reason = typeof input === 'object' ? input.reason : undefined;
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'cancelled', notes: reason ? `Cancelled: ${reason}` : 'Cancelled', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to cancel expense');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
-  });
-}
-export function useMarkExpensePaid(_userId?: string) {
-  const ctx = useUserContext();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (await import('../../../lib/supabase')).supabase
-        .schema('imagecare').from('expenses')
-        .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-        .eq('id', id).eq('business_id', ctx.business_id);
-      if (error) throw new Error((error as { message?: string }).message ?? 'Failed to mark expense paid');
-      return { id };
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }),
+    mutationFn: (id: string) => deleteExpense(ctx, id).then(unwrap),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['dashboard-summary'] }); },
   });
 }
 export function useArchiveExpenseCategory(_userId?: string) {
@@ -179,27 +136,70 @@ export function useArchiveExpenseCategory(_userId?: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'categories'] }),
   });
 }
-export function useSaveExpenseSettings() { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: Record<string, unknown>) => input, onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'settings'] }) }); }
+export function useSaveExpenseSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ExpenseSettings) => saveExpenseSettingsLocal(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'settings'] }),
+  });
+}
 
-export function useSpendByCategory(_branchId?: string, _from?: string, _to?: string) {
+// Bug fix (2026-09-07): "Expense Report" had no period/date controls at
+// all, even though the underlying real query already supported date
+// filtering end to end (listExpenses(ctx, {date}) -> .gte/.lte on
+// expense_date, same as every other real report in this app) - from/to
+// were declared on this hook's signature but never actually passed
+// through to the query (the leading underscore was the tell). Now they are.
+export function useSpendByCategory(branchId?: string, from?: string, to?: string) {
   const ctx = useUserContext();
-  const branch = useActiveBranch();
+  const activeBranch = useActiveBranch();
+  const branch = branchId ?? activeBranch;
   return useQuery({
-    queryKey: ['expenses', 'by-category', ctx.business_id],
+    queryKey: ['expenses', 'by-category', ctx.business_id, branch, from, to],
     queryFn: async () => {
-      const all = await listExpenses(ctx, { branch_id: branch as string | undefined }).then(unwrap);
+      const all = await listExpenses(ctx, {
+        branch_id: branch as string | undefined,
+        date: from && to ? { from, to } : undefined,
+      }).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(all) ? all as any[] : [];
-      const map = new Map<string, number>();
-      for (const e of items) map.set(e.category ?? 'Other', (map.get(e.category ?? 'Other') ?? 0) + (e.total_amount ?? 0));
-      return Array.from(map.entries()).map(([category, totalUgx], idx) => ({ category, categoryId: String(idx), categoryName: category, totalUgx, count: 0 }));
+      const map = new Map<string, { totalUgx: number; count: number }>();
+      for (const e of items) {
+        const key = e.category ?? 'Other';
+        const existing = map.get(key) ?? { totalUgx: 0, count: 0 };
+        existing.totalUgx += e.total_amount ?? 0;
+        existing.count += 1;
+        map.set(key, existing);
+      }
+      return Array.from(map.entries()).map(([category, { totalUgx, count }], idx) => ({ category, categoryId: String(idx), categoryName: category, totalUgx, count }));
     },
   });
 }
 
 export function useRecurringTemplates() {
-  return useQuery({ queryKey: ['expenses', 'recurring'], queryFn: async () => [] as Array<{ id: string; categoryName: string; description: string; amount: number; frequency: string; nextDueDate: string; is_active: boolean; generated: string[] }>, staleTime: Infinity });
+  return useQuery({ queryKey: ['expenses', 'recurring'], queryFn: () => listRecurringTemplatesLocal() });
 }
-export function useCreateRecurringTemplate(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (input: Record<string, unknown>) => input, onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }) }); }
-export function useArchiveRecurringTemplate(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async (id: string) => ({ id }), onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }) }); }
-export function useGenerateDueRecurringExpenses(_userId?: string) { const qc = useQueryClient(); return useMutation({ mutationFn: async () => ({ generated: 0, ids: [] as string[] }), onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses'] }) }); }
+export function useCreateRecurringTemplate(userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RecurringExpenseInput) => createRecurringTemplateLocal(input, userId ?? ctx.user_id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }),
+  });
+}
+export function useArchiveRecurringTemplate(userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await archiveRecurringTemplateLocal(id, userId ?? ctx.user_id); return { id }; },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }),
+  });
+}
+export function useGenerateDueRecurringExpenses(userId?: string) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => generateDueRecurringExpensesLocal(userId ?? ctx.user_id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); qc.invalidateQueries({ queryKey: ['expenses', 'recurring'] }); },
+  });
+}

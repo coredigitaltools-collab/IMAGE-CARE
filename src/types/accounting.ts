@@ -121,6 +121,12 @@ export interface CashForecastPoint {
 
 export interface CashForecast {
   dailyAverageNetUgx: number
+  // Bug fix (2026-09-10), "View cash flow forecast": the page only showed
+  // the blended net average; the test expected separate projected inflow
+  // and outflow figures too. Additive fields, same real source as the net
+  // figure - see useCashForecast in useAccountingData.ts.
+  dailyAverageInUgx: number
+  dailyAverageOutUgx: number
   windowDays: number
   points: CashForecastPoint[]
 }

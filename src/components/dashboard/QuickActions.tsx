@@ -26,9 +26,9 @@ export function QuickActions({ onNavigate }: QuickActionsProps) {
         <button
           key={label}
           onClick={onClick}
-          className="group flex flex-col items-center gap-2 rounded-card border border-ink-100 bg-white px-3 py-4 text-center shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
+          className="group flex flex-col items-center gap-2 rounded-card border border-ink-100 bg-surface px-3 py-4 text-center shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-colors group-hover:bg-brand-blue-700 group-hover:text-white">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-colors group-hover:bg-brand-blue-700 group-hover:text-white">
             <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
           </span>
           <span className="text-xs font-medium text-ink-700">{label}</span>

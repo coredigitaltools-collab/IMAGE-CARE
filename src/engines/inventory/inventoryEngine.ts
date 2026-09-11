@@ -105,9 +105,12 @@ export class InventoryEngine {
       return engineFail(makeError('VALIDATION_ERROR', 'Inventory movement quantity must be positive.', undefined, 'quantity'));
     }
 
-    // For sale movements, verify stock availability first
+    // For sale movements, verify stock availability first - unless the
+    // caller already just verified it for this exact line a moment ago
+    // (see skipAvailabilityCheck on InventoryMovementCommand in
+    // engines/types.ts; only deductForSale() sets this).
     const outTypes = ['sale','adjustment_out','transfer_out','return_out','damage','expiry'];
-    if (outTypes.includes(cmd.movement_type)) {
+    if (!cmd.skipAvailabilityCheck && outTypes.includes(cmd.movement_type)) {
       const check = await this.checkAvailable(ctx, cmd.product_id, cmd.branch_id, cmd.quantity);
       if (!check.ok) return engineFail(check.error!);
     }
@@ -148,9 +151,14 @@ export class InventoryEngine {
     ctx: EngineContext,
     purchaseId: UUID,
   ): Promise<EngineResult<{ movements: UUID[] }>> {
+    // 2026-09-01: 'purchase_items' has two FKs into 'products' (the
+    // real one, purchase_items_product_id_fkey, plus a legacy composite
+    // fk_s2_purchase_items_biz_product) - an unqualified `products(...)`
+    // embed is ambiguous between them and PostgREST rejects it
+    // (PGRST201). See the identical fix + full explanation on the sale
+    // side in businessEngine.ts's postSale().
     const { data: items, error } = await db.purchase_items()
-      
-      .select('*, products(is_stockable)')
+      .select('*, products!purchase_items_product_id_fkey(is_stockable)')
       .eq('purchase_id', purchaseId)
       .eq('business_id', ctx.business_id);
 
@@ -168,25 +176,37 @@ export class InventoryEngine {
       return engineFail(makeError('RECORD_NOT_FOUND', 'Purchase not found.'));
     }
 
-    const movementIds: UUID[] = [];
-
-    for (const item of items ?? []) {
+    // Perf fix (2026-09-06, "the system is slow"): each line's movement
+    // insert is independent (its own product, no shared state, no
+    // availability check for a stock-IN movement type) - a sequential
+    // for-loop was paying for one full network round trip per line, one
+    // after another, so a 5-item purchase order took 5x as long to
+    // receive stock as a 1-item one. Running them together cuts that to
+    // about one round trip's worth of wait regardless of how many lines
+    // the order has.
+    const stockableItems = (items ?? []).filter((item) => {
       type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
+      return (item as ItemWithProduct).products?.is_stockable;
+    });
 
-      const result = await this.recordMovement(ctx, {
-        branch_id:      purchase.branch_id,
-        product_id:     item.product_id,
-        movement_type:  'purchase',
-        quantity:       Number(item.quantity),
-        unit_cost:      Number(item.unit_cost),
-        reference_type: 'purchase',
-        reference_id:   purchaseId,
-        expiry_date:    item.expiry_date ?? undefined,
-        batch_number:   item.batch_number ?? undefined,
-      });
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:      purchase.branch_id,
+          product_id:     item.product_id,
+          movement_type:  'purchase',
+          quantity:       Number(item.quantity),
+          unit_cost:      Number(item.unit_cost),
+          reference_type: 'purchase',
+          reference_id:   purchaseId,
+          expiry_date:    item.expiry_date ?? undefined,
+          batch_number:   item.batch_number ?? undefined,
+        })
+      )
+    );
 
+    const movementIds: UUID[] = [];
+    for (const result of results) {
       if (!result.ok) return engineFail(result.error!);
       movementIds.push(result.data!.movement_id);
     }
@@ -200,47 +220,234 @@ export class InventoryEngine {
   async deductForSale(
     ctx: EngineContext,
     saleId: UUID,
+    // 2026-09-01: postSale() in businessEngine.ts already loads this
+    // sale's items (with each product's is_stockable flag) and the
+    // sale's branch_id before calling here - this used to re-fetch both
+    // from scratch every time regardless, adding two full extra round
+    // trips to every single sale. When the caller already has them,
+    // passing them through skips both re-fetches entirely; any other
+    // caller that doesn't have them yet still gets them fetched here,
+    // same as before.
+    preloaded?: { items: Record<string, unknown>[]; branchId: UUID },
   ): Promise<EngineResult<{ movements: UUID[] }>> {
-    const { data: items, error } = await db.sale_items()
-      
-      .select('*, products(is_stockable)')
-      .eq('sale_id', saleId)
-      .eq('business_id', ctx.business_id);
+    let items = preloaded?.items;
+    let branchId = preloaded?.branchId;
 
-    if (error) {
-      return engineFail(makeError('DATABASE_ERROR', 'Failed to load sale items.', error.message));
+    if (!items) {
+      // 2026-09-01: same ambiguous-embed issue as receiveFromPurchase()
+      // above and postSale() in businessEngine.ts - 'sale_items' has two
+      // FKs into 'products', so the embed needs an explicit hint.
+      const { data, error } = await db.sale_items()
+        .select('*, products!sale_items_product_id_fkey(is_stockable)')
+        .eq('sale_id', saleId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) {
+        return engineFail(makeError('DATABASE_ERROR', 'Failed to load sale items.', error.message));
+      }
+      items = data ?? [];
     }
 
-    const { data: sale } = await db.sales()
-      
-      .select('branch_id')
-      .eq('id', saleId)
-      .single();
+    if (!branchId) {
+      const { data: sale } = await db.sales()
+        .select('branch_id')
+        .eq('id', saleId)
+        .single();
 
-    if (!sale) return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+      if (!sale) return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+      branchId = sale.branch_id;
+    }
+
+    type ItemWithProduct = Record<string, unknown> & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+    const stockableItems = (items ?? [])
+      .map((item) => item as ItemWithProduct)
+      .filter((item) => item.products?.is_stockable);
+
+    // Perf fix (2026-09-06, "the system is slow"): this used to check
+    // availability AND insert the movement for one cart line at a time,
+    // sequentially - up to two full network round trips per line before
+    // the next line even started. postSale() in businessEngine.ts
+    // already verified every line's availability together, in one
+    // batched Promise.all, immediately before calling here (see
+    // skipAvailabilityCheck above), so this now only needs to insert -
+    // and every line's insert is independent of every other line's, so
+    // they run together instead of one after another. A 3-item sale
+    // that used to take 6 sequential round trips to deduct stock now
+    // takes about 1.
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:     branchId as UUID,
+          product_id:    item.product_id,
+          movement_type: 'sale',
+          quantity:      Number(item.quantity),
+          unit_cost:     Number(item.unit_cost),
+          reference_type:'sale',
+          reference_id:  saleId,
+          skipAvailabilityCheck: true,
+        })
+      )
+    );
 
     const movementIds: UUID[] = [];
-
-    for (const item of items ?? []) {
-      type ItemWithProduct = typeof item & { products: { is_stockable: boolean } | null };
-      const typedItem = item as ItemWithProduct;
-      if (!typedItem.products?.is_stockable) continue;
-
-      const result = await this.recordMovement(ctx, {
-        branch_id:     sale.branch_id,
-        product_id:    item.product_id,
-        movement_type: 'sale',
-        quantity:      Number(item.quantity),
-        unit_cost:     Number(item.unit_cost),
-        reference_type:'sale',
-        reference_id:  saleId,
-      });
-
+    for (const result of results) {
       if (!result.ok) return engineFail(result.error!);
       movementIds.push(result.data!.movement_id);
     }
 
     return engineOk({ movements: movementIds });
+  }
+
+  // ---- reverseForSale ---------------------------------------
+  // Records stock-IN movements reversing every item on a previously
+  // CONFIRMED sale - the opposite of deductForSale(), used when a
+  // completed sale is deleted so the stock it took out comes back.
+  // 'return_in' is not in recordMovement()'s outTypes list, so no
+  // availability check applies here - putting stock back can't ever be
+  // blocked by "not enough of it," unlike taking it out.
+
+  async reverseForSale(
+    ctx: EngineContext,
+    saleId: UUID,
+    preloaded?: { items: Record<string, unknown>[]; branchId: UUID },
+  ): Promise<EngineResult<{ movements: UUID[] }>> {
+    let items = preloaded?.items;
+    let branchId = preloaded?.branchId;
+
+    if (!items) {
+      const { data, error } = await db.sale_items()
+        .select('*, products!sale_items_product_id_fkey(is_stockable)')
+        .eq('sale_id', saleId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) {
+        return engineFail(makeError('DATABASE_ERROR', 'Failed to load sale items.', error.message));
+      }
+      items = data ?? [];
+    }
+
+    if (!branchId) {
+      const { data: sale } = await db.sales()
+        .select('branch_id')
+        .eq('id', saleId)
+        .single();
+
+      if (!sale) return engineFail(makeError('RECORD_NOT_FOUND', 'Sale not found.'));
+      branchId = sale.branch_id;
+    }
+
+    // Perf fix (2026-09-06, "the system is slow"): same fix as
+    // deductForSale() above - each line's reversal insert is
+    // independent (no availability check applies to a stock-IN
+    // movement), so a sequential for-loop was paying for one full
+    // round trip per line for no reason. Running them together cuts a
+    // multi-item sale's deletion time roughly in half or more.
+    type ItemWithProduct = Record<string, unknown> & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+    const stockableItems = (items ?? [])
+      .map((item) => item as ItemWithProduct)
+      .filter((item) => item.products?.is_stockable);
+
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:     branchId as UUID,
+          product_id:    item.product_id,
+          movement_type: 'return_in',
+          quantity:      Number(item.quantity),
+          unit_cost:     Number(item.unit_cost),
+          reference_type:'sale',
+          reference_id:  saleId,
+        })
+      )
+    );
+
+    const reverseMovementIds: UUID[] = [];
+    for (const result of results) {
+      if (!result.ok) return engineFail(result.error!);
+      reverseMovementIds.push(result.data!.movement_id);
+    }
+
+    return engineOk({ movements: reverseMovementIds });
+  }
+
+  // ---- reverseForPurchase ------------------------------------
+  // Records stock-OUT movements reversing every item on a previously
+  // CONFIRMED purchase order - the opposite of receiveFromPurchase(),
+  // used when a confirmed purchase order is voided (2026-09-03, the
+  // "edit/delete a purchase order" correction flow - see voidPurchase()
+  // in engines/business/businessEngine.ts). 'return_out' IS in
+  // recordMovement()'s outTypes list (same movement_type Purchase
+  // Returns already uses to send stock back to a supplier), so this
+  // goes through the normal availability check - voiding an order
+  // can't remove more of a product than is still actually on hand,
+  // which is correct: if some of the received stock has since been
+  // sold or transferred out, voiding fails with a clear "not enough
+  // stock" error rather than silently going negative.
+
+  async reverseForPurchase(
+    ctx: EngineContext,
+    purchaseId: UUID,
+    preloaded?: { items: Record<string, unknown>[]; branchId: UUID },
+  ): Promise<EngineResult<{ movements: UUID[] }>> {
+    let items = preloaded?.items;
+    let branchId = preloaded?.branchId;
+
+    if (!items) {
+      const { data, error } = await db.purchase_items()
+        .select('*, products!purchase_items_product_id_fkey(is_stockable)')
+        .eq('purchase_id', purchaseId)
+        .eq('business_id', ctx.business_id);
+
+      if (error) {
+        return engineFail(makeError('DATABASE_ERROR', 'Failed to load purchase items.', error.message));
+      }
+      items = data ?? [];
+    }
+
+    if (!branchId) {
+      const { data: purchase } = await db.purchases()
+        .select('branch_id')
+        .eq('id', purchaseId)
+        .single();
+
+      if (!purchase) return engineFail(makeError('RECORD_NOT_FOUND', 'Purchase not found.'));
+      branchId = purchase.branch_id;
+    }
+
+    // Perf fix (2026-09-06, "the system is slow"): each line here is a
+    // different product (each still gets its own real availability
+    // check inside recordMovement, unchanged - unlike deductForSale/
+    // reverseForSale above, there's no prior bulk check for this path
+    // to reuse), but the lines don't depend on each other, so running
+    // them together instead of one after another still cuts the wait
+    // for a multi-item purchase order's void roughly in half or more.
+    type ItemWithProduct = Record<string, unknown> & { products: { is_stockable: boolean } | null; product_id: UUID; quantity: number; unit_cost: number };
+    const stockableItems = (items ?? [])
+      .map((item) => item as ItemWithProduct)
+      .filter((item) => item.products?.is_stockable);
+
+    const results = await Promise.all(
+      stockableItems.map((item) =>
+        this.recordMovement(ctx, {
+          branch_id:     branchId as UUID,
+          product_id:    item.product_id,
+          movement_type: 'return_out',
+          quantity:      Number(item.quantity),
+          unit_cost:     Number(item.unit_cost),
+          reference_type:'purchase',
+          reference_id:  purchaseId,
+          notes:         'Voided purchase order - stock reversed',
+        })
+      )
+    );
+
+    const reverseMovementIds: UUID[] = [];
+    for (const result of results) {
+      if (!result.ok) return engineFail(result.error!);
+      reverseMovementIds.push(result.data!.movement_id);
+    }
+
+    return engineOk({ movements: reverseMovementIds });
   }
 
   // ---- transferStock --------------------------------------

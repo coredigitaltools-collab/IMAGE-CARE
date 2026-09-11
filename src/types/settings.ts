@@ -25,9 +25,33 @@ export interface StaffMember extends AuditFields {
   email: string
   role: StaffRole
   branchIds: string[]
+  // Real column from imagecare.users (mapStaffRow spreads the raw row in,
+  // this just gives it a declared type). Authoritative owner signal - see
+  // hooks/usePermission.ts. Used as a display fallback in PeopleAccessPage
+  // so the Owner's role label can never regress to "Unknown role" again,
+  // even if the `role` text value ever drifts from the role catalogue's id.
+  is_owner?: boolean
+  // PIN-only staff fields (2026-09-05 - see fn_set_staff_pin/fn_verify_staff_pin).
+  // A staff member added this way has no email/login account at all -
+  // jobTitle/phone/monthlySalary are optional display info, and hasPin
+  // reflects whether a PIN has ever been set (pin_set_at IS NOT NULL) -
+  // never the PIN or its hash, which the API never returns.
+  jobTitle?: string
+  phone?: string
+  monthlySalary?: number
+  hasPin?: boolean
 }
 
-export type StaffInput = Pick<StaffMember, 'fullName' | 'username' | 'email' | 'role' | 'branchIds'>
+export type StaffInput = Pick<StaffMember, 'fullName' | 'role' | 'branchIds'> & {
+  // Optional/PIN-only staff creation fields. username/email are kept out
+  // of StaffInput entirely now - PIN-only staff have neither.
+  jobTitle?: string
+  phone?: string
+  monthlySalary?: number
+  // Required when creating a new staff member (StaffFormModal enforces
+  // this); ignored on edit, where the PIN is changed via "Reset PIN" instead.
+  pin?: string
+}
 
 // Permission Matrix, Owners are always fully permitted (IMP-002 business
 // rule: "Only Owners have unrestricted access") and that row is not
@@ -151,6 +175,11 @@ export interface NotificationSettings extends AuditFields {
 // ---------- Appearance Settings (singleton) ----------
 
 export interface AppearanceSettings extends AuditFields {
+  // Added 2026-09-07 ("appearance should be dark/light/standard mode") -
+  // the underlying settings store already had an inert `theme: 'light'`
+  // default in useSettingsData.ts that nothing read or wrote; this wires
+  // it up for real. 'system' follows the OS/browser's light-dark setting.
+  theme: 'light' | 'dark' | 'system'
   density: 'comfortable' | 'compact'
   dateFormat: 'DD/MM/YYYY' | 'MM/DD/YYYY'
 }

@@ -4,7 +4,9 @@ const TABS = [
   { to: '/expenses', label: 'Dashboard', exact: true },
   { to: '/expenses/register', label: 'Register' },
   { to: '/expenses/categories', label: 'Categories' },
+  { to: '/expenses/recurring', label: 'Recurring' },
   { to: '/expenses/reports', label: 'Reports' },
+  { to: '/expenses/settings', label: 'Settings' },
 ]
 
 export function ExpenseTabs() {
@@ -21,8 +23,8 @@ export function ExpenseTabs() {
                 aria-current={isActive ? 'page' : undefined}
                 className={
                   isActive
-                    ? 'block whitespace-nowrap rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-brand-blue-700'
-                    : 'block whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-ink-50 hover:text-ink-900'
+                    ? 'block whitespace-nowrap rounded-md bg-brand-blue-50 px-3 py-1.5 text-sm font-medium text-accent'
+                    : 'block whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-ink-500 hover:bg-surface-2 hover:text-ink-900'
                 }
               >
                 {tab.label}

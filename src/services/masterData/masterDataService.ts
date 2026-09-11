@@ -31,7 +31,18 @@ export async function listProducts(
   ctx: UserContext,
   options: ProductListOptions = {}
 ): Promise<ApiResult<Product[]>> {
-  if (!canDo(ctx, 'inventory', 'view')) {
+  // Bug fix (2026-09-06): this used to gate on 'inventory' view alone, so a
+  // staff member granted ONLY Sales access (the new default baseline - see
+  // claude/pos-staff-permission-enforcement-2026-09-05.md) got a hard
+  // PERMISSION_DENIED here the moment the till tried to load the product
+  // catalog to sell from - the Record Sale modal then silently showed "No
+  // products yet, add one from Inventory first" even though the business
+  // has real stock, because nothing surfaced the actual error. Selling
+  // necessarily requires being able to SEE the catalog, even for staff who
+  // have no rights to create/edit/delete products, so 'sales' view/create
+  // is now an accepted alternative to 'inventory' view for this read-only
+  // list. This does not grant any inventory management rights.
+  if (!canDo(ctx, 'inventory', 'view') && !canDo(ctx, 'sales', 'view') && !canDo(ctx, 'sales', 'create')) {
     return fail({ code: 'PERMISSION_DENIED', message: 'You do not have permission to view products.' });
   }
 
@@ -108,6 +119,21 @@ export async function createProduct(
   }
 }
 
+// Bug fix (2026-09-08), "barcode save fails / Could not save changes.": this
+// used to spread the caller's `updates` object straight into `.update()`
+// ({ ...updates }). Every caller (ProductDetailPage.tsx's General/Pricing/
+// Notes tabs) builds that object in the app's camelCase shape - categoryId,
+// unitId, buyingPrice, sellingPrice, reorderLevel, brandId, supplierId - none
+// of which are real columns on imagecare.products (see toProductRow() below
+// for the real ones); brandId/supplierId/notes have no columns of their own
+// at all and only ever lived inside the jsonb `metadata` column. PostgREST
+// rejects an update containing unknown columns outright, so ANY save from
+// the product edit page failed 100% of the time - it just went unnoticed
+// until the barcode field was added and someone actually tried to save a
+// change here (confirmed live: "Blazers" barcode stayed null through a save
+// attempt). This is the exact same class of bug already fixed for customers/
+// suppliers via toCustomerRow()/toSupplierRow() above - toProductRow() is
+// the same whitelist-translator pattern applied to products.
 export async function updateProduct(
   ctx: UserContext,
   productId: UUID,
@@ -121,7 +147,7 @@ export async function updateProduct(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('products')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...toProductRow(updates as WriteInput), updated_at: new Date().toISOString() })
       .eq('id', productId)
       .eq('business_id', ctx.business_id)
       .select()
@@ -151,6 +177,98 @@ export async function softDeleteProduct(
       .eq('business_id', ctx.business_id);
 
     if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+// ---- Product-branch assignment (2026-09-06) -----------------
+// Backs the "branch product visibility" fix: products stay one shared,
+// business-wide catalog (unchanged, never duplicated per branch) - this is
+// a many-to-many join (imagecare.product_branches) recording which
+// branches actually carry which product, so an operational product list
+// (the POS/Record Sale product picker) can show only what the active
+// branch carries instead of every business product as a disabled tile.
+// Product-management screens (Inventory's product list, Purchasing, Stock
+// Adjustments) deliberately keep listing every product regardless of this -
+// only listBranchProductIds()'s caller (useProducts(branchId) in
+// useInventoryData.ts) applies it.
+
+export async function listProductBranchIds(
+  ctx: UserContext,
+  productId: UUID
+): Promise<ApiResult<UUID[]>> {
+  try {
+    const { data, error } = await supabase
+      .schema('imagecare')
+      .from('product_branches')
+      .select('branch_id')
+      .eq('product_id', productId)
+      .eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok((data ?? []).map((r) => r.branch_id as UUID));
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+export async function listBranchProductIds(
+  ctx: UserContext,
+  branchId: UUID
+): Promise<ApiResult<UUID[]>> {
+  try {
+    const { data, error } = await supabase
+      .schema('imagecare')
+      .from('product_branches')
+      .select('product_id')
+      .eq('branch_id', branchId)
+      .eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok((data ?? []).map((r) => r.product_id as UUID));
+  } catch (err) {
+    return fail(parseError(err));
+  }
+}
+
+// Replace-all: deletes this product's existing branch assignments and
+// writes the new set. Same permission as editing any other product field
+// (canDo 'inventory' 'edit') - branch assignment is a product attribute,
+// not a separate permission. An empty branchIds array is accepted (the
+// product simply becomes unassigned everywhere, same as never having been
+// assigned) rather than blocked, per the standing rule that this kind of
+// field must never block a save.
+export async function setProductBranches(
+  ctx: UserContext,
+  productId: UUID,
+  branchIds: UUID[]
+): Promise<ApiResult<void>> {
+  if (!canDo(ctx, 'inventory', 'edit')) {
+    return fail({ code: 'PERMISSION_DENIED', message: 'You do not have permission to edit products.' });
+  }
+
+  try {
+    const { error: delError } = await supabase
+      .schema('imagecare')
+      .from('product_branches')
+      .delete()
+      .eq('product_id', productId)
+      .eq('business_id', ctx.business_id);
+    if (delError) return fail(parseError(delError));
+
+    if (branchIds.length > 0) {
+      const { error: insError } = await supabase
+        .schema('imagecare')
+        .from('product_branches')
+        .insert(branchIds.map((branch_id) => ({
+          business_id: ctx.business_id,
+          product_id: productId,
+          branch_id,
+          created_by: ctx.user_id,
+        })));
+      if (insError) return fail(parseError(insError));
+    }
+
     return ok(undefined);
   } catch (err) {
     return fail(parseError(err));
@@ -197,6 +315,56 @@ export async function listUnits(
   } catch (err) {
     return fail(parseError(err));
   }
+}
+
+// 2026-09-01: listUnits() above was already real, but nothing ever created a
+// unit for it to return - useCreateUnit/useUpdateUnit/useArchiveUnit (see
+// useInventoryData.ts) were entirely fake client-side stubs that never
+// touched the database, and useUnits() didn't call listUnits() at all - it
+// returned a hardcoded single fake "Piece" option with id: 'piece' (a
+// literal string, not a uuid). Product forms took that id at face value,
+// so every single Add/Edit Product save sent unit_id: 'piece' to a uuid
+// column and failed with "invalid input syntax for type uuid: 'piece'" -
+// confirmed live via Supabase logs. Real CRUD, mirroring createCategory/
+// updateCategory/archiveCategory just above.
+export async function createUnit(
+  ctx: UserContext,
+  input: { name: string; abbreviation: string }
+): Promise<ApiResult<Unit>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('units')
+      .insert({ name: input.name, abbreviation: input.abbreviation, business_id: ctx.business_id, is_active: true })
+      .select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as Unit);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function updateUnit(
+  ctx: UserContext,
+  unitId: UUID,
+  input: { name?: string; abbreviation?: string }
+): Promise<ApiResult<Unit>> {
+  try {
+    const { data, error } = await supabase.schema('imagecare').from('units')
+      .update({ ...input, updated_at: new Date().toISOString() })
+      .eq('id', unitId).eq('business_id', ctx.business_id).select().single();
+    if (error) return fail(parseError(error));
+    return ok(data as Unit);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+export async function archiveUnit(
+  ctx: UserContext,
+  unitId: UUID
+): Promise<ApiResult<void>> {
+  try {
+    const { error } = await supabase.schema('imagecare').from('units')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', unitId).eq('business_id', ctx.business_id);
+    if (error) return fail(parseError(error));
+    return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
 }
 
 // ---- Customers ---------------------------------------------
@@ -263,6 +431,133 @@ export async function getCustomer(
   }
 }
 
+// 2026-09-03: customer and supplier writes used to spread the caller's form
+// object straight into the insert/update ({ ...input }). The forms are
+// camelCase app-shape objects (creditLimit, contactName, status,
+// dateOfBirth, ...) and react-hook-form also carries every default value it
+// was seeded with (id, created_at, sync_status, ...), so PostgREST was
+// handed keys that are not columns on imagecare.customers /
+// imagecare.suppliers and rejected the whole statement - creating a
+// customer or a supplier failed 100% of the time. These two whitelists are
+// the translation layer: only real columns are ever sent, anything without
+// a column is dropped rather than passed through, and an absent optional
+// key is simply left out so no optional field can block a save.
+type WriteInput = Record<string, unknown>;
+
+function firstDefined(...values: unknown[]): unknown {
+  for (const value of values) if (value !== undefined) return value;
+  return undefined;
+}
+
+// Real columns on imagecare.customers (see 0005_stage2_parties.sql).
+// Deliberately dropped, because no column exists to hold them:
+//   status ('active' | 'vip' | 'blacklisted' - is_active is only a boolean,
+//     it cannot represent vip/blacklisted, so this stays UI-only),
+//   dateOfBirth, preferredBranchId, preferredPaymentMethod.
+// Also dropped: credit_balance / loyaltyPoints / lifetimePurchases, which
+// are derived server-side and must never be written from a form.
+function toCustomerRow(input: WriteInput | undefined): WriteInput {
+  const src = input ?? {};
+  const row: WriteInput = {};
+  const set = (column: string, value: unknown) => { if (value !== undefined) row[column] = value; };
+
+  set('name', src.name);
+  set('code', src.code);
+  set('phone', src.phone);
+  set('email', src.email);
+  set('address', src.address);
+  set('tin', src.tin);
+  set('notes', src.notes);
+  set('tags', src.tags);
+  set('metadata', src.metadata);
+  set('branch_id', firstDefined(src.branch_id, src.branchId));
+  set('credit_limit', firstDefined(src.credit_limit, src.creditLimit));
+  set('is_active', firstDefined(src.is_active, src.isActive));
+
+  return row;
+}
+
+// Real columns on imagecare.suppliers (see 0005_stage2_parties.sql).
+// contactName -> contact_person. The supplier form's Active/Inactive select
+// has no `status` column to land in, but is_active is exactly that toggle
+// with exactly those two states, so it is translated rather than dropped -
+// otherwise the control in the form would silently do nothing. Archive /
+// reactivate keep writing is_active directly, unchanged.
+function toSupplierRow(input: WriteInput | undefined): WriteInput {
+  const src = input ?? {};
+  const row: WriteInput = {};
+  const set = (column: string, value: unknown) => { if (value !== undefined) row[column] = value; };
+
+  set('name', src.name);
+  set('code', src.code);
+  set('contact_person', firstDefined(src.contact_person, src.contactName));
+  set('phone', src.phone);
+  set('email', src.email);
+  set('address', src.address);
+  set('tin', src.tin);
+  set('notes', src.notes);
+  set('tags', src.tags);
+  set('metadata', src.metadata);
+  set('branch_id', firstDefined(src.branch_id, src.branchId));
+  set('payment_terms', firstDefined(src.payment_terms, src.paymentTerms));
+  set('credit_limit', firstDefined(src.credit_limit, src.creditLimit));
+  set('is_active', firstDefined(
+    src.is_active,
+    src.status === 'active' ? true : src.status === 'inactive' ? false : undefined,
+  ));
+
+  return row;
+}
+
+// Real columns on imagecare.products (see information_schema, confirmed
+// live): category_id, unit_id, name, sku, barcode, description, image_url,
+// selling_price, cost_price, reorder_level, is_stockable/is_sellable/
+// is_purchasable, track_expiry, tax_rate, metadata (jsonb), is_active.
+// categoryId/unitId/buyingPrice/sellingPrice/reorderLevel are just the
+// camelCase forms of real columns. brandId/supplierId/notes have no columns
+// of their own - useCreateProduct already stores them inside `metadata`
+// ({ brand_id, supplier_id }) at creation time, so updates keep writing them
+// there too, now including notes (the product detail page's Notes tab saves
+// through this same path). openingStock/imageDataUrl are deliberately
+// dropped here: stock is never a column on products (it's derived from
+// inventory_movements - see the inventory engine's own rule) and image
+// persistence isn't implemented at all yet, a separate, pre-existing gap
+// this fix doesn't expand scope to cover.
+function toProductRow(input: WriteInput | undefined): WriteInput {
+  const src = input ?? {};
+  const row: WriteInput = {};
+  const set = (column: string, value: unknown) => { if (value !== undefined) row[column] = value; };
+
+  set('name', src.name);
+  const sku = typeof src.sku === 'string' ? src.sku.trim() : src.sku;
+  if (sku !== undefined) row.sku = sku === '' ? null : sku;
+  // Same empty-string-vs-null fix as useCreateProduct's inline mapping: the
+  // partial unique index on (business_id, barcode) excludes NULL rows but
+  // not '', so an untouched/cleared field must be saved as null, not ''.
+  const barcode = typeof src.barcode === 'string' ? src.barcode.trim() : src.barcode;
+  if (barcode !== undefined) row.barcode = barcode === '' ? null : barcode;
+  set('description', src.description);
+  set('category_id', firstDefined(src.category_id, src.categoryId));
+  set('unit_id', firstDefined(src.unit_id, src.unitId));
+  set('selling_price', firstDefined(src.selling_price, src.sellingPrice));
+  set('cost_price', firstDefined(src.cost_price, src.buyingPrice));
+  set('reorder_level', firstDefined(src.reorder_level, src.reorderLevel));
+  set('is_active', firstDefined(src.is_active, src.isActive));
+
+  const brandId = firstDefined(src.brand_id, src.brandId);
+  const supplierId = firstDefined(src.supplier_id, src.supplierId);
+  const notes = src.notes;
+  if (brandId !== undefined || supplierId !== undefined || notes !== undefined) {
+    row.metadata = {
+      ...(brandId !== undefined ? { brand_id: brandId || null } : {}),
+      ...(supplierId !== undefined ? { supplier_id: supplierId || null } : {}),
+      ...(notes !== undefined ? { notes } : {}),
+    };
+  }
+
+  return row;
+}
+
 export async function createCustomer(
   ctx: UserContext,
   input: Omit<Customer, 'id' | 'business_id' | 'credit_balance' | 'created_at' | 'updated_at' | 'deleted_at'>
@@ -275,7 +570,7 @@ export async function createCustomer(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('customers')
-      .insert({ ...input, business_id: ctx.business_id, credit_balance: 0 })
+      .insert({ ...toCustomerRow(input as WriteInput), business_id: ctx.business_id, credit_balance: 0 })
       .select()
       .single();
 
@@ -299,7 +594,7 @@ export async function updateCustomer(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('customers')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...toCustomerRow(updates as WriteInput), updated_at: new Date().toISOString() })
       .eq('id', customerId)
       .eq('business_id', ctx.business_id)
       .select()
@@ -377,7 +672,7 @@ export async function createSupplier(
     const { data, error } = await supabase
       .schema('imagecare')
       .from('suppliers')
-      .insert({ ...input, business_id: ctx.business_id, outstanding: 0 })
+      .insert({ ...toSupplierRow(input as WriteInput), business_id: ctx.business_id, outstanding: 0 })
       .select()
       .single();
 
@@ -404,7 +699,7 @@ export async function updateSupplier(
   if (!canDo(ctx, 'suppliers', 'edit')) return fail({ code: 'PERMISSION_DENIED', message: 'Permission denied.' });
   try {
     const { data, error } = await supabase.schema('imagecare').from('suppliers')
-      .update({ ...input, updated_at: new Date().toISOString() })
+      .update({ ...toSupplierRow(input as WriteInput), updated_at: new Date().toISOString() })
       .eq('id', supplierId).eq('business_id', ctx.business_id).select().single();
     if (error) return fail(parseError(error));
     return ok(data as Supplier);
@@ -496,11 +791,43 @@ export async function listBranches(ctx: UserContext): Promise<ApiResult<BranchRe
 
 export async function createBranch(
   ctx: UserContext,
-  input: { name: string; address?: string; phone?: string }
+  input: { name: string; code?: string; address?: string; phone?: string }
 ): Promise<ApiResult<BranchRecord>> {
   try {
+    // Bug fix (Phase 6, item 2): the column is `is_main_branch`, not
+    // `is_main` - the previous insert silently dropped that field
+    // (PostgREST ignores unknown columns) so every branch was created as
+    // a non-main branch. fn_register_business() creates the business and
+    // owner user but never a branch, so the first branch a business
+    // creates through this path becomes its main branch.
+    // `code` is NOT NULL + UNIQUE per business in the schema
+    // (0001_stage1_foundation.sql) but was previously not even part of
+    // this function's declared input type - the value happened to reach
+    // the database anyway when called from BranchFormModal (which does
+    // collect it), but any caller relying on the type signature had no
+    // compile-time indication it was required. Default to a generated
+    // code so this function is safe to call without one too.
+    const { count, error: countError } = await supabase
+      .schema('imagecare')
+      .from('branches')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', ctx.business_id)
+      .is('deleted_at', null);
+    if (countError) return fail(parseError(countError));
+
+    const code = input.code?.trim()
+      || input.name.trim().slice(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, '') + '-' + ((count ?? 0) + 1).toString().padStart(2, '0');
+
     const { data, error } = await supabase.schema('imagecare').from('branches')
-      .insert({ ...input, business_id: ctx.business_id, is_active: true, is_main: false })
+      .insert({
+        name:           input.name,
+        code,
+        address:        input.address ?? null,
+        phone:          input.phone ?? null,
+        business_id:    ctx.business_id,
+        is_active:      true,
+        is_main_branch: (count ?? 0) === 0,
+      })
       .select().single();
     if (error) return fail(parseError(error));
     return ok(data as unknown as BranchRecord);
@@ -562,6 +889,30 @@ export async function archiveCategory(
       .eq('id', categoryId).eq('business_id', ctx.business_id);
     if (error) return fail(parseError(error));
     return ok(undefined);
+  } catch (err) { return fail(parseError(err)); }
+}
+
+// 2026-09-02: useMergeCategories used to be a complete no-op
+// (`mutationFn: async ({ sourceId: _s, targetId: _t }) => ({})`) that
+// discarded both ids and did nothing, while CategoriesPage still showed
+// "Merged into X." regardless - a fabricated success on every call. Real
+// merge: reassign every product pointing at the source category to the
+// target, then archive the now-empty source (same real archiveCategory
+// used everywhere else). If reassignment fails, the source is deliberately
+// left un-archived rather than archived-with-orphaned-products.
+export async function mergeCategories(
+  ctx: UserContext,
+  sourceId: UUID,
+  targetId: UUID
+): Promise<ApiResult<void>> {
+  try {
+    const { error: reassignError } = await supabase.schema('imagecare').from('products')
+      .update({ category_id: targetId, updated_at: new Date().toISOString() })
+      .eq('category_id', sourceId)
+      .eq('business_id', ctx.business_id);
+    if (reassignError) return fail(parseError(reassignError));
+
+    return archiveCategory(ctx, sourceId);
   } catch (err) { return fail(parseError(err)); }
 }
 

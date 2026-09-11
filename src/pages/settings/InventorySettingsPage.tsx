@@ -4,6 +4,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { ToggleRow } from '../../components/settings/ToggleRow'
 import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
@@ -39,13 +40,12 @@ export function InventorySettingsPage() {
           <Skeleton className="h-40 w-full" />
         ) : (
           <div className="space-y-4">
-            <FormField
+            <NumberField
               id="inv-reorder-level"
               label="Default reorder level"
-              type="number"
               min={0}
               value={defaultReorderLevel}
-              onChange={(e) => setDefaultReorderLevel(Number(e.target.value))}
+              onChange={setDefaultReorderLevel}
               hint="New items default to this low-stock threshold."
             />
             <FormField id="inv-sku-prefix" label="SKU prefix" value={skuPrefix} onChange={(e) => setSkuPrefix(e.target.value)} />

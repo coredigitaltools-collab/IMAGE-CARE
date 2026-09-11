@@ -25,7 +25,7 @@ export function BankDashboardPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Bank Reconciliation</h1>
-        <p className="mt-0.5 text-sm text-ink-500">Matching ERP cash records against real bank statements.</p>
+        <p className="mt-0.5 text-sm text-ink-500">Matching your cash records against real bank statements.</p>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -33,9 +33,9 @@ export function BankDashboardPage() {
           <button
             key={label}
             onClick={() => navigate(to)}
-            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
+            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-surface px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
               <Icon size={16} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>

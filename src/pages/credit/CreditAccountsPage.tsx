@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { CreditCard, Sliders, Wallet, XCircle } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { CreditCard, Download, Sliders, UserPlus, Wallet, XCircle } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { CreditTabs } from '../../components/credit/CreditTabs'
 import { Card } from '../../components/ui/Card'
@@ -14,6 +14,7 @@ import { CreditLimitModal } from '../../components/credit/CreditLimitModal'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
+import { toCsv, downloadCsv } from '../../lib/csv'
 import { useApproveCreditLimit, useCreditAccounts, useRecordPayment, useWriteOffBalance } from '../../features/credit/hooks/useCreditData'
 import { PaymentExceedsBalanceError, WriteOffExceedsBalanceError } from '../../services/creditService'
 import type { CreditAccountRow } from '../../services/creditService'
@@ -21,6 +22,7 @@ import type { CreditAccountRow } from '../../services/creditService'
 export function CreditAccountsPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const accountsQuery = useCreditAccounts()
   const recordPayment = useRecordPayment(user.id)
@@ -39,6 +41,34 @@ export function CreditAccountsPage() {
     return overdueOnly ? sorted.filter((a) => a.isOverdue) : sorted
   }, [accountsQuery.data, overdueOnly])
 
+  // Bug fix (2026-09-07): "Export customer credit data" - there was no
+  // export control at all on this page (the Credit dashboard's own
+  // "Export" quick action already works and exports the same shape of
+  // data - see CreditDashboardPage.tsx - but this fuller, filterable list
+  // is a different page with none). Builds the CSV from the data already
+  // loaded on screen (respecting the current "Overdue only" filter) - no
+  // extra request - and triggers a real download via the same toCsv/
+  // downloadCsv helpers already used elsewhere (e.g. ExpenseRegisterPage.tsx).
+  const handleExport = () => {
+    if (accounts.length === 0) {
+      showToast('No credit accounts to export.')
+      return
+    }
+    const rows: Array<Array<string | number>> = [
+      ['Customer', 'Credit Limit (UGX)', 'Balance (UGX)', 'Available (UGX)', 'Days Outstanding', 'Overdue'],
+      ...accounts.map((a) => [
+        a.customer.name,
+        a.limit,
+        a.balance,
+        a.available,
+        a.daysOutstanding ?? '',
+        a.isOverdue ? 'Yes' : 'No',
+      ]),
+    ]
+    downloadCsv(`credit-accounts${overdueOnly ? '-overdue' : ''}-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows))
+    showToast('Credit accounts exported.', 'success')
+  }
+
   return (
     <div className="mx-auto max-w-5xl">
       <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Credit' }]} />
@@ -47,20 +77,34 @@ export function CreditAccountsPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Credit Accounts</h1>
-          <p className="mt-0.5 text-sm text-ink-500">Every customer with an approved limit or a balance owed.</p>
+          <p className="mt-0.5 text-sm text-ink-500">Every customer with a credit limit or a balance owed.</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-ink-700">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => {
-              if (e.target.checked) setSearchParams({ overdue: '1' })
-              else setSearchParams({})
-            }}
-            className="h-4 w-4 rounded border-ink-300 text-brand-blue-700 focus:ring-brand-blue-500"
-          />
-          Overdue only
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-ink-700">
+            <input
+              type="checkbox"
+              checked={overdueOnly}
+              onChange={(e) => {
+                if (e.target.checked) setSearchParams({ overdue: '1' })
+                else setSearchParams({})
+              }}
+              className="h-4 w-4 rounded border-ink-300 text-accent focus:ring-brand-blue-500"
+            />
+            Overdue only
+          </label>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1.5 rounded-md border border-ink-100 bg-surface px-3.5 py-2 text-sm font-medium text-ink-700 shadow-card transition-colors hover:bg-surface-2"
+          >
+            <Download size={15} /> Export
+          </button>
+          <button
+            onClick={() => navigate('/customers/directory')}
+            className="flex items-center gap-1.5 rounded-md bg-brand-blue-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-blue-900"
+          >
+            <UserPlus size={15} /> Give a customer credit
+          </button>
+        </div>
       </div>
 
       <Card className="p-5">
@@ -77,8 +121,9 @@ export function CreditAccountsPage() {
             description={
               overdueOnly
                 ? 'No account is currently past its payment terms.'
-                : 'Accounts appear here once a customer has an approved credit limit or an outstanding balance.'
+                : 'Accounts appear here once a customer has a credit limit set or an outstanding balance. Open a customer’s profile and use "Set credit limit" on their Credit tab to get started.'
             }
+            action={overdueOnly ? undefined : { label: 'Go to Customers', onClick: () => navigate('/customers/directory') }}
           />
         ) : (
           <ul className="divide-y divide-ink-100">
@@ -86,7 +131,7 @@ export function CreditAccountsPage() {
               <li key={account.customer.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <Link to={`/customers/${account.customer.id}`} className="text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                    <Link to={`/customers/${account.customer.id}`} className="text-sm font-medium text-ink-900 hover:text-accent">
                       {account.customer.name}
                     </Link>
                     {account.isOverdue && <Badge tone="danger">{account.daysOutstanding}d overdue</Badge>}
@@ -111,7 +156,7 @@ export function CreditAccountsPage() {
                     />
                     <RowActionButton
                       icon={Sliders}
-                      label="Approve limit"
+                      label="Set credit limit"
                       onClick={() => setModalState({ mode: 'limit', account })}
                     />
                     <RowActionButton

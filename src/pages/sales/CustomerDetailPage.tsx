@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Archive, ArchiveRestore, Award, CreditCard, FileText, Quote, Receipt as ReceiptIcon, Sliders, Wallet, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { Card } from '../../components/ui/Card'
@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { CustomerFormModal } from '../../components/sales/CustomerFormModal'
 import { CustomerHealthWidget } from '../../components/sales/CustomerHealthWidget'
 import { CustomerTimeline } from '../../components/sales/CustomerTimeline'
@@ -23,7 +24,7 @@ import {
   useCustomer,
   useCustomerNotes,
   useReactivateCustomer,
-  useRefundSale,
+  useDeleteSale,
   useSales,
   useUpdateCustomer,
 } from '../../features/sales/hooks/useSalesData'
@@ -31,10 +32,10 @@ import { useApproveCreditLimit, useCreditPayments, useCreditWriteOffs, useRecord
 import { useLoyaltyTransactions } from '../../features/loyalty/hooks/useLoyaltyData'
 import { useGenerateInvoice, useInvoices } from '../../features/invoices/hooks/useInvoicesData'
 import { PaymentExceedsBalanceError, WriteOffExceedsBalanceError } from '../../services/creditService'
-import { SaleNotRefundableError } from '../../services/salesService'
 import { AlreadyInvoicedError, effectiveStatus as effectiveInvoiceStatus } from '../../services/invoiceService'
 import { LOYALTY_TRANSACTION_LABELS } from '../../types/loyalty'
 import { INVOICE_STATUS_LABELS } from '../../types/invoices'
+import type { UUID } from '../../types/database'
 
 const LOYALTY_TX_TONE = { earn: 'success', redeem: 'info', reverse: 'danger', expire: 'warning', adjust: 'neutral' } as const
 const INVOICE_STATUS_TONE = { unpaid: 'warning', partially_paid: 'warning', paid: 'success', overdue: 'danger', cancelled: 'neutral' } as const
@@ -46,7 +47,17 @@ export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const { showToast } = useToast()
-  const [tab, setTab] = useState<Tab>('Overview')
+  // Bug fix (2026-09-09), "Review customer credit from invoices": there was
+  // no way to land directly on a customer's Credit tab from anywhere else
+  // in the app - not even a link from an invoice to its own customer, so
+  // "reviewing customer credit from invoices" had no path at all regardless
+  // of what that customer's balance actually was. Reading an initial tab
+  // from ?tab= (matched case-insensitively against the real tab names)
+  // lets InvoiceDetailPage.tsx's new customer link below land here already
+  // on Credit, same pattern as CreditAccountsPage's own ?overdue=1.
+  const [searchParams] = useSearchParams()
+  const initialTab = TABS.find((t) => t.toLowerCase() === searchParams.get('tab')?.toLowerCase()) ?? 'Overview'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [noteText, setNoteText] = useState('')
 
   const customerQuery = useCustomer(id)
@@ -54,7 +65,7 @@ export function CustomerDetailPage() {
   const notesQuery = useCustomerNotes(id)
   const paymentsQuery = useCreditPayments(id)
   const loyaltyTxQuery = useLoyaltyTransactions(id)
-  const refundSale = useRefundSale(user.id)
+  const deleteSale = useDeleteSale(user.id)
   const invoicesQuery = useInvoices()
   const generateInvoice = useGenerateInvoice(user.id)
   const writeOffsQuery = useCreditWriteOffs(id)
@@ -69,6 +80,9 @@ export function CustomerDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [creditModal, setCreditModal] = useState<'payment' | 'writeoff' | 'limit' | null>(null)
   const [creditFormError, setCreditFormError] = useState<string | undefined>()
+  // Sale awaiting a Delete confirmation - see ConfirmDialog.tsx for why
+  // this replaces window.prompt() here.
+  const [deleteSaleTarget, setDeleteSaleTarget] = useState<{ id: UUID; reference: string } | null>(null)
 
   const customer = customerQuery.data
   const purchases = (salesQuery.data ?? []).filter((s) => s.customerId === id && s.status === 'completed')
@@ -148,7 +162,7 @@ export function CustomerDetailPage() {
             onClick={() => setTab(t)}
             className={
               tab === t
-                ? 'border-b-2 border-brand-blue-700 px-3 py-2 text-sm font-medium text-brand-blue-700'
+                ? 'border-b-2 border-accent px-3 py-2 text-sm font-medium text-accent'
                 : 'border-b-2 border-transparent px-3 py-2 text-sm text-ink-500 hover:text-ink-900'
             }
           >
@@ -243,19 +257,10 @@ export function CustomerDetailPage() {
                       </Button>
                     )}
                     <Button
-                      variant="secondary"
-                      onClick={async () => {
-                        const reason = window.prompt('Reason for this refund?')
-                        if (!reason) return
-                        try {
-                          await refundSale.mutateAsync({ saleId: sale.id, reason })
-                          showToast('Sale refunded, stock and points reversed.', 'success')
-                        } catch (err) {
-                          showToast(err instanceof SaleNotRefundableError ? err.message : 'Could not refund this sale.')
-                        }
-                      }}
+                      variant="danger"
+                      onClick={() => setDeleteSaleTarget({ id: sale.id, reference: sale.reference })}
                     >
-                      Refund
+                      Delete
                     </Button>
                   </div>
                 </li>
@@ -297,7 +302,7 @@ export function CustomerDetailPage() {
                   <Wallet size={14} /> Record payment
                 </Button>
                 <Button variant="secondary" onClick={() => setCreditModal('limit')}>
-                  <Sliders size={14} /> Approve limit
+                  <Sliders size={14} /> Set credit limit
                 </Button>
                 <Button
                   variant="danger"
@@ -313,7 +318,7 @@ export function CustomerDetailPage() {
             </div>
             {customer.creditLimit === 0 && (
               <p className="rounded-md bg-warning-100/40 px-3 py-2 text-xs text-warning-700">
-                No credit limit has been approved for this customer yet, credit sales are blocked until one is.
+                No credit limit is set for this customer yet, credit sales are blocked until you set one using "Set credit limit" above.
               </p>
             )}
           </Card>
@@ -474,7 +479,7 @@ export function CustomerDetailPage() {
             <ul className="divide-y divide-ink-100">
               {customerInvoices.map((inv) => (
                 <li key={inv.id} className="flex items-center justify-between py-2.5 text-sm">
-                  <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-brand-blue-700">
+                  <Link to={`/invoices/${inv.id}`} className="text-ink-900 hover:text-accent">
                     {inv.invoiceNumber}
                   </Link>
                   <div className="flex items-center gap-2">
@@ -495,7 +500,7 @@ export function CustomerDetailPage() {
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               placeholder="Log a note about this customer..."
-              className="flex-1 rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="flex-1 rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
             <Button
               disabled={!noteText.trim() || addNote.isPending}
@@ -514,7 +519,7 @@ export function CustomerDetailPage() {
           ) : (
             <ul className="space-y-3">
               {(notesQuery.data ?? []).map((note) => (
-                <li key={note.id} className="rounded-md bg-ink-50 p-3">
+                <li key={note.id} className="rounded-md bg-surface-2 p-3">
                   <p className="text-sm text-ink-900">{note.text}</p>
                   <p className="mt-1 text-xs text-ink-500">{formatRelativeTime(note.createdAt)}</p>
                 </li>
@@ -558,6 +563,27 @@ export function CustomerDetailPage() {
             showToast('Customer updated.', 'success')
             setIsEditOpen(false)
           }}
+        />
+      )}
+
+      {deleteSaleTarget && (
+        <ConfirmDialog
+          title={`Delete sale ${deleteSaleTarget.reference}?`}
+          message="This puts the stock back, reverses the accounting entry, and reverses the cash or credit it recorded. This cannot be undone."
+          confirmLabel="Delete sale"
+          tone="danger"
+          reasonLabel="Reason for deleting this sale"
+          reasonPlaceholder="e.g. wrong item, wrong customer, duplicate entry"
+          onConfirm={async (reason) => {
+            try {
+              await deleteSale.mutateAsync({ saleId: deleteSaleTarget.id, reason: reason ?? '' })
+              showToast('Sale deleted, stock and books reversed.', 'success')
+              setDeleteSaleTarget(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not delete this sale.')
+            }
+          }}
+          onCancel={() => setDeleteSaleTarget(null)}
         />
       )}
     </div>

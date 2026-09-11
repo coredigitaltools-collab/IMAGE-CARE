@@ -5,6 +5,7 @@ import { LoyaltyTabs } from '../../components/loyalty/LoyaltyTabs'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
@@ -38,37 +39,34 @@ export function LoyaltySettingsPage() {
 
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Loyalty Settings</h1>
-        <p className="mt-0.5 text-sm text-ink-500">The Points Engine, how points are earned, redeemed, and expired.</p>
+        <p className="mt-0.5 text-sm text-ink-500">How customers earn points on a sale, and how those points can be redeemed later.</p>
       </div>
 
       {settingsQuery.isLoading ? (
         <Skeleton className="h-80 w-full" />
       ) : (
         <Card className="space-y-4 p-5">
-          <FormField
+          <NumberField
             id="ls-earn-rate"
             label="UGX spent per point earned"
-            type="number"
             min={1}
             value={ugxPerPoint}
-            onChange={(e) => setUgxPerPoint(Number(e.target.value))}
+            onChange={setUgxPerPoint}
             hint="e.g. 1000 means a customer earns 1 point for every 1,000 UGX spent."
           />
-          <FormField
+          <NumberField
             id="ls-redeem-value"
             label="Cash value per point when redeemed (UGX)"
-            type="number"
             min={0}
             value={redemptionValuePerPointUgx}
-            onChange={(e) => setRedemptionValuePerPointUgx(Number(e.target.value))}
+            onChange={setRedemptionValuePerPointUgx}
           />
-          <FormField
+          <NumberField
             id="ls-min-redeem"
             label="Minimum points required to redeem"
-            type="number"
             min={0}
             value={minPointsToRedeem}
-            onChange={(e) => setMinPointsToRedeem(Number(e.target.value))}
+            onChange={setMinPointsToRedeem}
           />
           <FormField
             id="ls-expiry"
@@ -93,10 +91,10 @@ export function LoyaltySettingsPage() {
       )}
 
       <Card className="mt-4 p-5">
-        <h2 className="mb-2 text-sm font-semibold text-ink-900">Process expirations</h2>
+        <h2 className="mb-2 text-sm font-semibold text-ink-900">Expire old points</h2>
         <p className="mb-3 text-xs text-ink-500">
-          There's no background job in this offline-first app, expiring points is a deliberate, logged action you run when you want it, never
-          silent.
+          Points don't expire automatically in the background. Run this whenever you want to apply the expiry rule above, it's logged so you can
+          always see what changed and when.
         </p>
         <Button
           variant="secondary"

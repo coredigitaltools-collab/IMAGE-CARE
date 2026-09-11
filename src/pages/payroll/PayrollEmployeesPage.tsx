@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Archive, Plus, Users } from 'lucide-react'
+import { Archive, Plus, Users, X } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PayrollTabs } from '../../components/payroll/PayrollTabs'
 import { AddEmployeeToPayrollModal } from '../../components/payroll/AddEmployeeToPayrollModal'
@@ -12,7 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { RowActionButton } from '../../components/ui/RowActionButton'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
-import { useStaff } from '../../features/settings/hooks/useSettingsData'
+import { useRoles, useStaff } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'
 import {
   useAddEmployeeToPayroll,
@@ -29,6 +29,7 @@ export function PayrollEmployeesPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const staffQuery = useStaff()
+  const rolesQuery = useRoles()
   const employeesQuery = usePayrollEmployees()
   const allowanceTypesQuery = useComponentTypes('allowance')
   const deductionTypesQuery = useComponentTypes('deduction')
@@ -74,7 +75,18 @@ export function PayrollEmployeesPage() {
             ))}
           </div>
         ) : activeEmployees.length === 0 ? (
-          <EmptyState icon={Users} title="No employees on payroll yet" description="Add staff from your Staff Master to start running payroll." />
+          <EmptyState
+            icon={Users}
+            title="No employees on payroll yet"
+            description="Add staff from your Staff Master to start running payroll."
+            action={{
+              label: '+ Add to payroll',
+              onClick: () => {
+                setAddError(undefined)
+                setIsAddOpen(true)
+              },
+            }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {activeEmployees.map((emp) => {
@@ -108,20 +120,20 @@ export function PayrollEmployeesPage() {
                             className="flex items-center gap-1"
                             title="Click to remove"
                           >
-                            {type?.name ?? 'Unknown'} ✕
+                            {type?.name ?? 'Unknown'} <X size={11} />
                           </button>
                         </Badge>
                       )
                     })}
                     <button
                       onClick={() => setAssigningFor({ employee: emp, kind: 'allowance' })}
-                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-ink-50"
+                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-surface-2"
                     >
                       + Allowance
                     </button>
                     <button
                       onClick={() => setAssigningFor({ employee: emp, kind: 'deduction' })}
-                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-ink-50"
+                      className="rounded-full border border-dashed border-ink-300 px-2 py-0.5 text-xs text-ink-500 hover:bg-surface-2"
                     >
                       + Deduction
                     </button>
@@ -136,6 +148,7 @@ export function PayrollEmployeesPage() {
       {isAddOpen && (
         <AddEmployeeToPayrollModal
           eligibleStaff={eligibleStaff}
+          roles={rolesQuery.data ?? []}
           submitError={addError}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (staffId, baseSalaryUgx) => {
@@ -154,6 +167,7 @@ export function PayrollEmployeesPage() {
         <AssignComponentModal
           kind={assigningFor.kind}
           availableTypes={(assigningFor.kind === 'allowance' ? allowanceTypesQuery.data : deductionTypesQuery.data) ?? []}
+          userId={user.id}
           onClose={() => setAssigningFor(null)}
           onSubmit={async (componentTypeId, amountOverride) => {
             await assignComponent.mutateAsync({ employeeRecordId: assigningFor.employee.id, componentTypeId, kind: assigningFor.kind, amountOverride })

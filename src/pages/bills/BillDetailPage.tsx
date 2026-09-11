@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { FileText, Lock, Wallet, XCircle } from 'lucide-react'
 import { SettingsPageHeader } from '../../components/settings/SettingsPageHeader'
 import { InvoicePaymentModal } from '../../components/purchasing/InvoicePaymentModal'
@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency, formatRelativeTime } from '../../lib/format'
@@ -35,6 +36,7 @@ export function BillDetailPage() {
 
   const [isPayOpen, setIsPayOpen] = useState(false)
   const [actionError, setActionError] = useState<string | undefined>()
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
 
   const bill = billQuery.data
 
@@ -64,7 +66,27 @@ export function BillDetailPage() {
     <div className="mx-auto max-w-2xl">
       <SettingsPageHeader
         title={bill.reference}
-        description={`${supplier?.name ?? 'Unknown supplier'}${bill.supplierInvoiceNumber ? ` · #${bill.supplierInvoiceNumber}` : ''}${order ? ` · from ${order.reference}` : ''}`}
+        description={
+          // Bug fix (2026-09-10), "Record Supplier Invoice": a bill has no
+          // line items of its own (imagecare.bills carries an amount, not
+          // itemized rows - that's the schema, not an oversight), but a
+          // bill linked to a purchase order inherits that order's real,
+          // already-priced line items. The order's reference here used to
+          // be plain text with no way to actually open it and see those
+          // items - linking it gives a real path to verify what was billed.
+          order ? (
+            <>
+              {supplier?.name ?? 'Unknown supplier'}
+              {bill.supplierInvoiceNumber ? ` · #${bill.supplierInvoiceNumber}` : ''}
+              {' · from '}
+              <Link to={`/purchasing/orders/${order.id}`} className="text-accent hover:underline">
+                {order.reference}
+              </Link>
+            </>
+          ) : (
+            `${supplier?.name ?? 'Unknown supplier'}${bill.supplierInvoiceNumber ? ` · #${bill.supplierInvoiceNumber}` : ''}`
+          )
+        }
         action={
           <div className="flex flex-wrap gap-2">
             {canPay && (
@@ -92,19 +114,7 @@ export function BillDetailPage() {
               </Button>
             )}
             {canPay && (
-              <Button
-                variant="danger"
-                onClick={async () => {
-                  const reason = window.prompt('Reason for cancelling this bill?')
-                  if (!reason) return
-                  try {
-                    await cancelBill.mutateAsync({ id: bill.id, reason })
-                    showToast('Bill cancelled.', 'success')
-                  } catch (err) {
-                    setActionError(err instanceof InvalidBillTransitionError ? err.message : 'Could not cancel this bill.')
-                  }
-                }}
-              >
+              <Button variant="danger" onClick={() => setIsCancelOpen(true)}>
                 <XCircle size={14} /> Cancel
               </Button>
             )}
@@ -170,6 +180,27 @@ export function BillDetailPage() {
               setActionError(err instanceof PaymentExceedsInvoiceError ? err.message : 'Could not record this payment.')
             }
           }}
+        />
+      )}
+
+      {isCancelOpen && (
+        <ConfirmDialog
+          title="Cancel this bill?"
+          message={`Cancel bill ${bill.reference}.`}
+          confirmLabel="Cancel bill"
+          tone="danger"
+          reasonLabel="Reason for cancelling this bill"
+          onConfirm={async (reason) => {
+            try {
+              await cancelBill.mutateAsync({ id: bill.id, reason: reason ?? '' })
+              showToast('Bill cancelled.', 'success')
+              setIsCancelOpen(false)
+            } catch (err) {
+              setActionError(err instanceof InvalidBillTransitionError ? err.message : 'Could not cancel this bill.')
+              setIsCancelOpen(false)
+            }
+          }}
+          onCancel={() => setIsCancelOpen(false)}
         />
       )}
     </div>

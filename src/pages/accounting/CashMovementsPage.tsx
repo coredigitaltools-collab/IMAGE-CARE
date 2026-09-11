@@ -6,7 +6,7 @@ import { RecordCashMovementModal } from '../../components/accounting/RecordCashM
 import { useBankAccounts } from '../../features/bankReconciliation/hooks/useBankReconciliationData'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { FormField } from '../../components/settings/FormField'
+import { NumberField } from '../../components/ui/NumberField'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { useToast } from '../../components/ui/toastContext'
@@ -45,7 +45,7 @@ export function CashMovementsPage() {
     <div className="mx-auto max-w-3xl">
       <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Cash Movements' }]} />
 
-      <div className="mb-4 rounded-md bg-brand-blue-50 px-3 py-2.5 text-xs text-brand-blue-700">
+      <div className="mb-4 rounded-md bg-brand-blue-50 px-3 py-2.5 text-xs text-accent">
         Looking for forecasting, reconciliation, or the full cash ledger? See{' '}
         <Link to="/cash-flow" className="font-medium underline">
           Cash Flow
@@ -73,7 +73,7 @@ export function CashMovementsPage() {
       ) : b ? (
         <Card className="mb-4 p-5">
           <div className="mb-4 flex items-center gap-2">
-            <Wallet size={16} className="text-brand-blue-700" />
+            <Wallet size={16} className="text-accent" />
             <p className="text-xs text-ink-500">Cash in hand right now</p>
           </div>
           <p className="mb-4 text-2xl font-semibold text-ink-900">{formatCurrency(b.cashInHandUgx, 'UGX')}</p>
@@ -118,14 +118,7 @@ export function CashMovementsPage() {
         <h2 className="mb-3 text-sm font-semibold text-ink-900">Opening cash</h2>
         <div className="flex items-end gap-3">
           <div className="flex-1">
-            <FormField
-              id="opening-cash"
-              label="Opening cash balance (UGX)"
-              type="number"
-              min={0}
-              value={openingCash}
-              onChange={(e) => setOpeningCash(Number(e.target.value))}
-            />
+            <NumberField id="opening-cash" label="Opening cash balance (UGX)" min={0} value={openingCash} onChange={setOpeningCash} />
           </div>
           <Button
             variant="secondary"

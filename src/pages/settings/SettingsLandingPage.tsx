@@ -152,7 +152,7 @@ export function SettingsLandingPage() {
       <div>
         <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Settings</h1>
         <p className="mt-0.5 text-sm text-ink-500">
-          Administration centre for {businessProfileQuery.data?.businessName ?? 'your business'}
+          Administration centre for {businessProfileQuery.data?.name ?? 'your business'}
         </p>
       </div>
 
@@ -164,13 +164,13 @@ export function SettingsLandingPage() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search settings..."
           aria-label="Search settings"
-          className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-9 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-300 hover:border-ink-300 focus:border-brand-blue-500"
+          className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-9 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-300 hover:border-ink-300 focus:border-brand-blue-500"
         />
         {query && (
           <button
             onClick={() => setQuery('')}
             aria-label="Clear search"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-400 hover:bg-ink-50 hover:text-ink-700"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-400 hover:bg-surface-2 hover:text-ink-700"
           >
             <X size={15} />
           </button>

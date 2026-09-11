@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { FormField } from '../settings/FormField'
+import { NumberField } from '../ui/NumberField'
 import { RECURRING_FREQUENCY_LABELS } from '../../types/expenses'
 import type { ExpenseCategory, RecurringExpenseInput, RecurringFrequency } from '../../types/expenses'
 
@@ -45,7 +46,7 @@ export function RecurringTemplateFormModal({ categories, onClose, onSubmit }: Re
               id="rt-category"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -56,7 +57,7 @@ export function RecurringTemplateFormModal({ categories, onClose, onSubmit }: Re
           </div>
           <FormField id="rt-desc" label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
-            <FormField id="rt-amount" label="Amount (UGX)" type="number" min={0} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+            <NumberField id="rt-amount" label="Amount (UGX)" min={0} value={amount} onChange={setAmount} />
             <div>
               <label htmlFor="rt-freq" className="mb-1.5 block text-sm font-medium text-ink-700">
                 Frequency
@@ -65,7 +66,7 @@ export function RecurringTemplateFormModal({ categories, onClose, onSubmit }: Re
                 id="rt-freq"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value as RecurringFrequency)}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+                className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
               >
                 {FREQUENCIES.map((f) => (
                   <option key={f} value={f}>
@@ -84,7 +85,7 @@ export function RecurringTemplateFormModal({ categories, onClose, onSubmit }: Re
               type="date"
               value={nextDueDate}
               onChange={(e) => setNextDueDate(e.target.value)}
-              className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
+              className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card focus:border-brand-blue-500"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">

@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Wallet, PackageX, Receipt, BadgeDollarSign, PiggyBank, CreditCard } from 'lucide-react'
+import { TrendingUp, TrendingDown, Wallet, PackageX, Receipt, BadgeDollarSign, Banknote, CreditCard } from 'lucide-react'
 import { KpiCard } from './KpiCard'
 import { formatCurrency } from '../../lib/format'
 import type { DashboardSummary, LowStockItem } from '../../types/domain'
@@ -14,7 +14,7 @@ interface KpiGridProps {
 // Engine Correction v1.0), every figure here reads from that one
 // engine, never a locally re-derived number.
 export function KpiGrid({ summary, lowStock, isSummaryLoading, isLowStockLoading }: KpiGridProps) {
-  const currency = summary?.currency ?? 'KES'
+  const currency = summary?.currency ?? 'UGX'
   const lowStockCount = lowStock?.length ?? 0
 
   return (
@@ -53,7 +53,7 @@ export function KpiGrid({ summary, lowStock, isSummaryLoading, isLowStockLoading
         label="Net profit"
         value={summary ? formatCurrency(summary.netProfit, currency) : '-'}
         hint="Gross profit − expenses"
-        icon={PiggyBank}
+        icon={Banknote}
         tone={summary && summary.netProfit >= 0 ? 'success' : 'red'}
         isLoading={isSummaryLoading}
       />

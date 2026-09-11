@@ -71,7 +71,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 z-30 bg-ink-900/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -87,7 +87,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               IMC
             </div>
             <span className="truncate text-sm font-semibold text-white">
-              {businessProfileQuery.data?.businessName ?? 'ImageCare'}
+              {businessProfileQuery.data?.name ?? 'ImageCare'}
             </span>
           </div>
           <button

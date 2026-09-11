@@ -137,25 +137,19 @@ export async function pushQueuedOperations(
   deviceId: string
 ): Promise<ApiResult<SyncBatchResult>> {
   try {
-    // Create a batch record
+    // Phase 8 audit: `sync_batches` does not exist live or in any tracked
+    // migration - only `sync_queue` (individual queued operations, used
+    // by enqueueOperation below) exists. Writing a batch-header row into
+    // a nonexistent table is the "invent fake persistence" pattern the
+    // implementation pass explicitly prohibits, so that insert has been
+    // removed rather than papered over. fn_process_sync_batch also does
+    // not exist live, so this still fails with a real RPC error - full
+    // multi-device sync batching is out of the core-9 priority list and
+    // the 22-step E2E test, and is left as a documented remaining
+    // blocker rather than built in this pass (it would need a new
+    // sync_batches migration plus the batch-processing RPC itself).
     const batchId = uuidv4();
-    const batchNumber = Date.now(); // simple sequential identifier
 
-    const { error: batchError } = await supabase
-      .schema('imagecare')
-      .from('sync_batches')
-      .insert({
-        id:           batchId,
-        business_id:  ctx.business_id,
-        device_id:    deviceId,
-        user_id:      ctx.user_id,
-        batch_number: batchNumber,
-        status:       'processing',
-      });
-
-    if (batchError) return fail(parseError(batchError));
-
-    // Process the batch
     const { data, error } = await rpc('fn_process_sync_batch', {
       p_business_id: ctx.business_id,
       p_user_id:     ctx.user_id,

@@ -42,25 +42,41 @@ export function CrmDashboardPage() {
       showToast('No customers to export yet.')
       return
     }
-    const header = ['Name', 'Phone', 'Email', 'Tags', 'Lifetime Purchases (UGX)', 'Loyalty Points', 'Credit Balance (UGX)']
-    const rows = activeCustomers.map((c) => [c.name, c.phone, c.email, c.tags.join('; '), c.lifetimePurchases, c.loyaltyPoints, c.creditBalance])
-    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    showToast('Customers exported.', 'success')
+    // Bug fix (2026-09-10), "Export the customer directory": this whole
+    // block used to run with nothing catching a failure - if Blob/anchor
+    // construction ever threw (e.g. a browser blocking the download), the
+    // button just looked permanently stuck with no toast at all. Wrapped so
+    // a real failure is always visible instead of silent.
+    try {
+      const header = ['Name', 'Phone', 'Email', 'Tags', 'Lifetime Purchases (UGX)', 'Loyalty Points', 'Credit Balance (UGX)']
+      const rows = activeCustomers.map((c) => [c.name, c.phone, c.email, c.tags.join('; '), c.lifetimePurchases, c.loyaltyPoints, c.creditBalance])
+      const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      // Bug fix (2026-09-09), "Export customer data" timing out: revoking
+      // the object URL in the same tick as click() can race the browser
+      // actually starting the download, especially under an automated
+      // browser driving the click - deferred to the next tick instead (same
+      // fix applied to lib/csv.ts's shared downloadCsv()).
+      setTimeout(() => {
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }, 0)
+      showToast('Customers exported.', 'success')
+    } catch {
+      showToast('Could not export customers. Please try again.')
+    }
   }
 
-  const quickActions = [
+  const quickActions: { label: string; icon: typeof Search; onClick: () => void; comingSoon?: boolean }[] = [
     { label: 'Search', icon: Search, onClick: () => navigate('/customers/directory') },
     { label: 'Add', icon: UserPlus, onClick: () => setIsAddOpen(true) },
-    { label: 'Import', icon: Upload, onClick: () => showToast('CSV import is coming in a future update.') },
+    { label: 'Import', icon: Upload, onClick: () => showToast('CSV import is coming in a future update.'), comingSoon: true },
     { label: 'Export', icon: Download, onClick: exportCsv },
   ]
 
@@ -79,13 +95,28 @@ export function CrmDashboardPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {quickActions.map(({ label, icon: Icon, onClick }) => (
+        {quickActions.map(({ label, icon: Icon, onClick, comingSoon }) => (
           <button
             key={label}
             onClick={onClick}
-            className="group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-white px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]"
+            className={
+              comingSoon
+                ? 'group relative flex flex-col items-center gap-1.5 rounded-card border border-dashed border-ink-100 bg-surface px-3 py-3 text-center opacity-70 transition-all duration-200 hover:opacity-100'
+                : 'group flex flex-col items-center gap-1.5 rounded-card border border-ink-100 bg-surface px-3 py-3 text-center shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-blue-500 hover:shadow-card-hover active:translate-y-0 active:scale-[0.97]'
+            }
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white">
+            {comingSoon && (
+              <span className="absolute -top-2 right-1.5 rounded-full bg-ink-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-ink-500">
+                Soon
+              </span>
+            )}
+            <span
+              className={
+                comingSoon
+                  ? 'flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-ink-400'
+                  : 'flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue-50 text-accent transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-700 group-hover:text-white'
+              }
+            >
               <Icon size={16} strokeWidth={1.75} />
             </span>
             <span className="text-xs font-medium text-ink-700">{label}</span>
@@ -94,8 +125,8 @@ export function CrmDashboardPage() {
       </div>
 
       {isEmptyInstall ? (
-        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-white px-6 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-brand-blue-700">
+        <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-surface px-6 py-16 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue-50 text-accent">
             <Users size={26} strokeWidth={1.75} />
           </span>
           <div>
@@ -162,7 +193,7 @@ export function CrmDashboardPage() {
           <div id="reports" className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Card className="p-5">
               <div className="mb-4 flex items-center gap-2">
-                <BarChart3 size={16} className="text-brand-blue-700" />
+                <BarChart3 size={16} className="text-accent" />
                 <h2 className="text-sm font-semibold text-ink-900">Top customers by spend</h2>
               </div>
               {customersQuery.isLoading ? (
@@ -173,10 +204,10 @@ export function CrmDashboardPage() {
                 <ul className="divide-y divide-ink-100">
                   {topCustomers.map((c, i) => (
                     <li key={c.id} className="flex items-center gap-3 py-2.5">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink-50 text-xs font-medium text-ink-500">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-ink-500">
                         {i + 1}
                       </span>
-                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-accent">
                         {c.name}
                       </Link>
                       <span className="shrink-0 text-sm font-semibold text-ink-900">{formatCurrency(c.lifetimePurchases, 'UGX')}</span>
@@ -199,7 +230,7 @@ export function CrmDashboardPage() {
                 <ul className="divide-y divide-ink-100">
                   {customersWithCredit.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
-                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-brand-blue-700">
+                      <Link to={`/customers/${c.id}`} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-accent">
                         {c.name}
                       </Link>
                       <span className="shrink-0 text-sm font-semibold text-brand-red-700">{formatCurrency(c.creditBalance, 'UGX')}</span>
@@ -216,9 +247,15 @@ export function CrmDashboardPage() {
         <CustomerFormModal
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createCustomer.mutateAsync(input)
-            showToast('Customer added.', 'success')
-            setIsAddOpen(false)
+            // Without this a rejected save was an unhandled promise
+            // rejection: the modal stayed open and said nothing.
+            try {
+              await createCustomer.mutateAsync(input)
+              showToast('Customer added.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not save this customer.')
+            }
           }}
         />
       )}

@@ -44,20 +44,20 @@ export function InventorySearchBar({ products, categories, value, onChange }: In
         onBlur={() => setTimeout(() => setIsFocused(false), 150)}
         placeholder="Search by name, SKU, barcode, or category..."
         aria-label="Search products"
-        className="w-full rounded-md border border-ink-100 bg-white py-2 pl-9 pr-9 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-300 hover:border-ink-300 focus:border-brand-blue-500"
+        className="w-full rounded-md border border-ink-100 bg-surface py-2 pl-9 pr-9 text-sm text-ink-900 shadow-card transition-colors placeholder:text-ink-300 hover:border-ink-300 focus:border-brand-blue-500"
       />
       {value && (
         <button
           onClick={() => onChange('')}
           aria-label="Clear search"
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-400 hover:bg-ink-50 hover:text-ink-700"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-ink-400 hover:bg-surface-2 hover:text-ink-700"
         >
           <X size={15} />
         </button>
       )}
 
       {showDropdown && (
-        <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-md border border-ink-100 bg-white shadow-card-hover">
+        <div className="absolute z-20 mt-1.5 w-full overflow-hidden rounded-md border border-ink-100 bg-surface shadow-card-hover">
           {matches.length === 0 ? (
             <p className="px-3 py-3 text-xs text-ink-500">No products match "{value}".</p>
           ) : (
@@ -66,7 +66,7 @@ export function InventorySearchBar({ products, categories, value, onChange }: In
                 <li key={product.id}>
                   <button
                     onMouseDown={() => navigate(`/inventory/products/${product.id}`)}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-ink-50"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-2"
                   >
                     <Package size={14} className="shrink-0 text-ink-300" />
                     <span className="min-w-0 flex-1 truncate text-ink-900">{product.name}</span>
@@ -77,7 +77,7 @@ export function InventorySearchBar({ products, categories, value, onChange }: In
               <li>
                 <button
                   onMouseDown={() => navigate(`/inventory/products?q=${encodeURIComponent(value)}`)}
-                  className="w-full border-t border-ink-100 px-3 py-2 text-left text-xs font-medium text-brand-blue-700 hover:bg-brand-blue-50"
+                  className="w-full border-t border-ink-100 px-3 py-2 text-left text-xs font-medium text-accent hover:bg-brand-blue-50"
                 >
                   View all results in Products →
                 </button>

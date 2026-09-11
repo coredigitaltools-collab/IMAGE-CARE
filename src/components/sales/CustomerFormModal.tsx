@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { AlertTriangle } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { FormField } from '../settings/FormField'
+import { FormRow } from '../settings/FormRow'
+import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
 import { useFindDuplicateCustomers } from '../../features/sales/hooks/useSalesData'
 import { useBranches } from '../../features/settings/hooks/useSettingsData'
@@ -47,6 +49,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
 
   const {
     register,
+    control,
     handleSubmit,
     getValues,
     formState: { errors, isSubmitting },
@@ -94,32 +97,38 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
   })
 
   return (
-    <Modal title={title ?? (initial ? 'Edit customer' : 'Add customer')} onClose={onClose}>
-      <form onSubmit={submit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-        <FormField label="Customer name" {...register('name')} error={errors.name?.message} />
-        <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
-        <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
-        <FormField
-          id="cf-tags"
-          label="Tags"
-          value={tagsText}
-          onChange={(e) => setTagsText(e.target.value)}
-          placeholder="Comma-separated, e.g. Wholesale, Priority"
-          hint="Your own labels for grouping customers, nothing preset."
-        />
+    <Modal title={title ?? (initial ? 'Edit customer' : 'Add customer')} onClose={onClose} size="lg">
+      {/* Modal.tsx now provides the scrollable body itself, so this no
+          longer needs its own max-h/overflow wrapper. */}
+      <form onSubmit={submit} className="space-y-5">
+        <FormRow>
+          <FormField label="Customer name" {...register('name')} error={errors.name?.message} />
+          <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
+        </FormRow>
+        <FormRow>
+          <FormField label="Email" type="email" {...register('email')} error={errors.email?.message} />
+          <FormField
+            id="cf-tags"
+            label="Tags"
+            value={tagsText}
+            onChange={(e) => setTagsText(e.target.value)}
+            placeholder="Comma-separated, e.g. Wholesale, Priority"
+            hint="Your own labels for grouping customers, nothing preset."
+          />
+        </FormRow>
 
         {!showMoreDetails ? (
           <button
             type="button"
             onClick={() => setShowMoreDetails(true)}
-            className="text-xs font-medium text-brand-blue-700 hover:underline"
+            className="text-xs font-medium text-accent hover:underline"
           >
             + Add address, status, and preferences
           </button>
         ) : (
           <>
             <FormField label="Address" {...register('address')} error={errors.address?.message} />
-            <div className="grid grid-cols-2 gap-3">
+            <FormRow>
               <div>
                 <label htmlFor="cf-status" className="mb-1.5 block text-sm font-medium text-ink-700">
                   Status
@@ -127,7 +136,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 <select
                   id="cf-status"
                   {...register('status')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
                 >
                   {CUSTOMER_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -137,8 +146,8 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 </select>
               </div>
               <FormField id="cf-dob" label="Date of birth" type="date" {...register('dateOfBirth')} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            </FormRow>
+            <FormRow>
               <div>
                 <label htmlFor="cf-branch" className="mb-1.5 block text-sm font-medium text-ink-700">
                   Preferred branch
@@ -146,7 +155,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 <select
                   id="cf-branch"
                   {...register('preferredBranchId')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
                 >
                   <option value="">None</option>
                   {(branchesQuery.data ?? []).map((b) => (
@@ -163,7 +172,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                 <select
                   id="cf-payment"
                   {...register('preferredPaymentMethod')}
-                  className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
                 >
                   <option value="">None</option>
                   {PAYMENT_METHODS.map((m) => (
@@ -173,15 +182,22 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                   ))}
                 </select>
               </div>
-            </div>
-            <FormField
-              id="cf-credit-limit"
-              label="Credit limit (UGX)"
-              type="number"
-              min={0}
-              hint="0 = no explicit limit set."
-              {...register('creditLimit', { valueAsNumber: true })}
-              error={errors.creditLimit?.message}
+            </FormRow>
+            <Controller
+              name="creditLimit"
+              control={control}
+              render={({ field }) => (
+                <NumberField
+                  id="cf-credit-limit"
+                  label="Credit limit (UGX)"
+                  min={0}
+                  hint="0 = no explicit limit set."
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  error={errors.creditLimit?.message}
+                />
+              )}
             />
             <div>
               <label htmlFor="cf-notes" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -190,8 +206,8 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
               <textarea
                 id="cf-notes"
                 {...register('notes')}
-                rows={2}
-                className="w-full rounded-md border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                rows={3}
+                className="w-full rounded-md border border-ink-100 bg-surface px-3.5 py-2.5 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
               />
             </div>
           </>
@@ -220,7 +236,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
                     setDuplicates([])
                     onSubmit(buildInput(getValues()))
                   }}
-                  className="mt-2 text-xs font-medium text-brand-blue-700 hover:underline"
+                  className="mt-2 text-xs font-medium text-accent hover:underline"
                 >
                   Create as a new customer anyway
                 </button>

@@ -19,7 +19,6 @@ import {
   useRecordInvoicePayment,
   useSupplierInvoices,
 } from '../../features/purchasing/hooks/usePurchasingData'
-import { PaymentExceedsInvoiceError } from '../../services/purchasingService'
 import type { SupplierInvoice } from '../../types/purchasing'
 
 const STATUS_TONE = { unpaid: 'danger', partially_paid: 'warning', paid: 'success', cancelled: 'neutral', closed: 'info' } as const
@@ -34,6 +33,7 @@ export function SupplierInvoicesPage() {
   const recordPayment = useRecordInvoicePayment(user.id)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [addError, setAddError] = useState<string | undefined>()
   const [payingInvoice, setPayingInvoice] = useState<SupplierInvoice | null>(null)
   const [payError, setPayError] = useState<string | undefined>()
 
@@ -50,7 +50,7 @@ export function SupplierInvoicesPage() {
           <h1 className="text-xl font-semibold text-ink-900 sm:text-2xl">Supplier Invoices</h1>
           <p className="mt-0.5 text-sm text-ink-500">What suppliers have billed, and what's still owed.</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}>
+        <Button onClick={() => { setAddError(undefined); setIsAddOpen(true) }}>
           <Plus size={15} /> Record invoice
         </Button>
       </div>
@@ -63,7 +63,12 @@ export function SupplierInvoicesPage() {
             ))}
           </div>
         ) : (invoicesQuery.data ?? []).length === 0 ? (
-          <EmptyState icon={FileText} title="No supplier invoices yet" description="Invoices you record from suppliers will appear here." />
+          <EmptyState
+            icon={FileText}
+            title="No supplier invoices yet"
+            description="Record an invoice a supplier has billed you, so you can track what's owed and pay it."
+            action={{ label: '+ Record invoice', onClick: () => { setAddError(undefined); setIsAddOpen(true) } }}
+          />
         ) : (
           <ul className="divide-y divide-ink-100">
             {(invoicesQuery.data ?? []).map((inv) => {
@@ -104,11 +109,17 @@ export function SupplierInvoicesPage() {
         <SupplierInvoiceModal
           suppliers={activeSuppliers}
           orders={ordersQuery.data ?? []}
+          userId={user.id}
+          submitError={addError}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createInvoice.mutateAsync(input)
-            showToast('Invoice recorded.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createInvoice.mutateAsync(input)
+              showToast('Invoice recorded.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              setAddError(err instanceof Error ? err.message : 'Could not record this invoice.')
+            }
           }}
         />
       )}
@@ -125,7 +136,7 @@ export function SupplierInvoicesPage() {
               showToast('Payment recorded.', 'success')
               setPayingInvoice(null)
             } catch (err) {
-              setPayError(err instanceof PaymentExceedsInvoiceError ? err.message : 'Could not record this payment.')
+              setPayError(err instanceof Error ? err.message : 'Could not record this payment.')
             }
           }}
         />

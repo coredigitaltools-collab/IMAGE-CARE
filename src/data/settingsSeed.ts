@@ -173,6 +173,7 @@ export function seedNotificationSettings(): NotificationSettings {
 export function seedAppearanceSettings(): AppearanceSettings {
   return {
     ...stampNew(SEED_USER),
+    theme: 'system',
     density: 'comfortable',
     dateFormat: 'DD/MM/YYYY',
   }

@@ -37,6 +37,25 @@ export function CashForecastPage() {
             </p>
           </Card>
 
+          {/* Bug fix (2026-09-10), "View cash flow forecast": the net
+              figure above used to be the only number shown; these two
+              cards break it into the projected inflow and outflow sides
+              separately, from the same real per-day averages. */}
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <Card className="p-4">
+              <p className="text-xs text-ink-500">Projected inflow / day</p>
+              <p className="mt-1 text-lg font-semibold text-success-700">
+                +{formatCurrency(forecast.dailyAverageInUgx, 'UGX')}
+              </p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-xs text-ink-500">Projected outflow / day</p>
+              <p className="mt-1 text-lg font-semibold text-brand-red-700">
+                -{formatCurrency(forecast.dailyAverageOutUgx, 'UGX')}
+              </p>
+            </Card>
+          </div>
+
           <Card className="p-5">
             <h2 className="mb-3 text-sm font-semibold text-ink-900">Projected cash in hand</h2>
             <ul className="divide-y divide-ink-100">

@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { Modal } from '../ui/Modal'
 import { FormField } from './FormField'
+import { FormRow } from './FormRow'
 import { Button } from '../ui/Button'
 import type { BranchInput, BranchRecord } from '../../types/settings'
 
@@ -33,17 +34,21 @@ export function BranchFormModal({ initial, onClose, onSubmit, submitError }: Bra
   })
 
   return (
-    <Modal title={initial ? 'Edit branch' : 'Add branch'} onClose={onClose}>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <FormField label="Branch name" {...register('name')} error={errors.name?.message} />
-        <FormField
-          label="Branch code"
-          {...register('code')}
-          error={errors.code?.message}
-          hint="Must be unique, e.g. KLA-01"
-        />
-        <FormField label="Address" {...register('address')} error={errors.address?.message} />
-        <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
+    <Modal title={initial ? 'Edit branch' : 'Add branch'} onClose={onClose} size="lg">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <FormRow>
+          <FormField label="Branch name" {...register('name')} error={errors.name?.message} />
+          <FormField
+            label="Branch code"
+            {...register('code')}
+            error={errors.code?.message}
+            hint="Must be unique, e.g. KLA-01"
+          />
+        </FormRow>
+        <FormRow>
+          <FormField label="Address" {...register('address')} error={errors.address?.message} />
+          <FormField label="Phone" {...register('phone')} error={errors.phone?.message} />
+        </FormRow>
 
         {submitError && <p className="text-sm text-brand-red-700">{submitError}</p>}
 
