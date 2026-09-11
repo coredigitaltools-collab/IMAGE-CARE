@@ -37,13 +37,32 @@ function withLegacyAliases(rows: any[]): any[] {
   }));
 }
 
+// Bug fix (2026-09-11, TestSprite: "Credit Accounts page ... required data
+// is not present"): this used to silently fall back to the header's
+// globally active branch (`useActiveBranch()`) whenever no branchId was
+// explicitly passed - which is every real call site (ReportsPage,
+// CreditDashboardPage, CreditAccountsPage all call these hooks with no
+// arguments, and none of them has a branch selector of their own). Credit
+// limits are set business-wide, not per branch, by explicit prior design
+// (see claude/credit-dashboard-zero-balances-fix-2026-09-04.md - "business-
+// wide, not branch-scoped, by design") - `imagecare.customers.branch_id` is
+// never populated by the app. A real customer's credit_limit only ever gets
+// a matching `credit_accounts` row for a branch once an actual credit SALE
+// happens there, so any customer given a credit limit but never yet charged
+// at whatever branch happens to be active in the header was silently
+// invisible on every one of these three screens - confirmed live: 3 real
+// customers with real limits (10,000 / 50,000 / 100,000 UGX) vanish the
+// instant a specific branch is selected, and reappear only under "all
+// branches" (branchId passed as NULL to the RPC). Since nothing here has a
+// branch control the user can see or change, this was an invisible, unasked
+// -for filter, not a deliberate scoping - now these hooks only scope by
+// branch when a caller explicitly asks for it (no current caller does).
 export function useOutstandingCredit(branchId?: UUID) {
   const ctx = useUserContext();
-  const branch = useActiveBranch();
   return useQuery({
-    queryKey: ['credit', 'outstanding', ctx.business_id, branchId ?? branch],
+    queryKey: ['credit', 'outstanding', ctx.business_id, branchId],
     queryFn: async () => {
-      const rows = await getOutstandingCredit(ctx, (branchId ?? branch) as UUID | undefined).then(unwrap);
+      const rows = await getOutstandingCredit(ctx, branchId).then(unwrap);
       return withLegacyAliases(Array.isArray(rows) ? rows : []);
     },
   });
@@ -83,11 +102,10 @@ export function useRecordInvoicePayment(_userId?: string) {
 
 export function useCreditDashboardKpis(branchId?: UUID) {
   const ctx = useUserContext();
-  const branch = useActiveBranch();
   return useQuery({
-    queryKey: ['credit', 'kpis', ctx.business_id, branchId ?? branch],
+    queryKey: ['credit', 'kpis', ctx.business_id, branchId],
     queryFn: async () => {
-      const outstanding = await getOutstandingCredit(ctx, (branchId ?? branch) as UUID | undefined).then(unwrap);
+      const outstanding = await getOutstandingCredit(ctx, branchId).then(unwrap);
       // Bug fix (2026-09-04): this always computed 0 for every KPI on the
       // Credit dashboard, even with real outstanding credit balances,
       // because it summed `r.outstanding` straight off the raw RPC rows -
@@ -117,11 +135,10 @@ export function useCreditDashboardKpis(branchId?: UUID) {
 // is more honest than inventing a value with no data behind it.
 export function useCreditAccounts(branchId?: UUID) {
   const ctx = useUserContext();
-  const branch = useActiveBranch();
   return useQuery({
-    queryKey: ['credit', 'accounts', ctx.business_id, branchId ?? branch],
+    queryKey: ['credit', 'accounts', ctx.business_id, branchId],
     queryFn: async () => {
-      const rows = await getOutstandingCredit(ctx, (branchId ?? branch) as UUID | undefined).then(unwrap);
+      const rows = await getOutstandingCredit(ctx, branchId).then(unwrap);
       // The RPC only carries id/name for the customer, not every field the
       // (fairly loosely defined) CreditAccountRow['customer'] type declares -
       // CreditAccountsPage.tsx only ever reads .customer.id/.name (confirmed

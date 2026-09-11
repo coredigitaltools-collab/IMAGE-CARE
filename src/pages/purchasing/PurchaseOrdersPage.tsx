@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, ShoppingCart, Pencil, Trash2 } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PurchasingTabs } from '../../components/purchasing/PurchasingTabs'
@@ -54,7 +54,18 @@ export function PurchaseOrdersPage() {
   // 'approved'/'sent'/'partially_received' never occur and are correctly
   // left out here rather than added as unused/misleading options). This
   // does not touch the PO workflow itself - no approval stage is added.
-  const [statusFilter, setStatusFilter] = useState<'all' | PurchaseOrder['status']>('all')
+  // Deep-link support (2026-09-11, "Pending Receipt card doesn't
+  // navigate"): the Purchasing dashboard's "Pending receipt" KPI card now
+  // links here as `?status=draft`, same `?q=`-style pattern already used
+  // for Expense Categories -> Register. Falls back to 'all' for a missing/
+  // unrecognized value, so a bare visit to this page is unaffected.
+  const [searchParams] = useSearchParams()
+  const initialStatus = searchParams.get('status')
+  const [statusFilter, setStatusFilter] = useState<'all' | PurchaseOrder['status']>(
+    initialStatus === 'draft' || initialStatus === 'received' || initialStatus === 'cancelled' || initialStatus === 'voided'
+      ? initialStatus
+      : 'all',
+  )
   const [isAddOpen, setIsAddOpen] = useState(false)
   // Edit/Delete support (2026-09-03, "edit/delete a purchase order"
   // correction flow - see PurchaseOrderFormModal's initialValues prop and

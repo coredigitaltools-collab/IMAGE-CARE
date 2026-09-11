@@ -25,12 +25,32 @@ interface KpiCardProps {
   icon: LucideIcon
   tone?: KpiTone
   isLoading?: boolean
+  // Optional (2026-09-11, "Pending Receipt card doesn't navigate"): most
+  // KPI cards are purely informational and stay exactly as before (no
+  // onClick passed, nothing changes here). A card can opt in to being a
+  // real navigation target - e.g. Purchasing's "Pending receipt" jumping
+  // to the matching filtered list - without a new component/visual style,
+  // since every KpiCard already has a hover state.
+  onClick?: () => void
 }
 
-export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', isLoading }: KpiCardProps) {
+export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', isLoading, onClick }: KpiCardProps) {
   return (
     <Card
-      className={`relative overflow-hidden py-4 pl-5 pr-4 transition-shadow duration-200 hover:shadow-card-hover before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[''] ${ACCENT_CLASSES[tone]}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
+      className={`relative overflow-hidden py-4 pl-5 pr-4 transition-shadow duration-200 hover:shadow-card-hover before:absolute before:inset-y-0 before:left-0 before:w-1 before:content-[''] ${ACCENT_CLASSES[tone]} ${onClick ? 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500' : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
