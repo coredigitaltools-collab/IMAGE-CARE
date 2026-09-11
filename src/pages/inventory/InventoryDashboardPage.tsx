@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Package,
@@ -34,11 +34,14 @@ import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { useBranches } from '../../features/settings/hooks/useSettingsData'
 import { formatCurrency } from '../../lib/format'
+import { parseCsv } from '../../lib/csv'
 import type { SupportedCurrency } from '../../lib/currency'
 import type { TrendRange } from '../../services/inventoryReportsService'
 import {
   useBrands,
   useCategories,
+  useCreateCategory,
+  useCreateProduct,
   useInventoryKpis,
   useInventoryValueTrend,
   useLowStockReport,
@@ -58,6 +61,10 @@ export function InventoryDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<InventoryFilters>(EMPTY_FILTERS)
   const [trendRange, setTrendRange] = useState<TrendRange>('30d')
+  const [isImporting, setIsImporting] = useState(false)
+  const importFileRef = useRef<HTMLInputElement>(null)
+  const createProduct = useCreateProduct(user.id)
+  const createCategory = useCreateCategory(user.id)
 
   const kpisQuery = useInventoryKpis(currency)
   const productsQuery = useProducts()
@@ -122,8 +129,12 @@ export function InventoryDashboardPage() {
       showToast('No products to export yet.')
       return
     }
-    const header = ['SKU', 'Barcode', 'Name', 'Buying Price (UGX)', 'Selling Price (UGX)', 'Current Stock', 'Reorder Level', 'Status']
-    const rows = products.map((p) => [p.sku, p.barcode, p.name, p.buyingPrice, p.sellingPrice, p.currentStock, p.reorderLevel, p.status])
+    // Category was added (2026-09-11) alongside Import: these are the same
+    // column names Import recognizes, so this Export doubles as a real,
+    // pre-filled template - open it, keep the header row, replace the data
+    // rows with the client's own products, and Import it back in.
+    const header = ['SKU', 'Barcode', 'Name', 'Category', 'Buying Price (UGX)', 'Selling Price (UGX)', 'Current Stock', 'Reorder Level', 'Status']
+    const rows = products.map((p) => [p.sku, p.barcode, p.name, categoryName(p.categoryId), p.buyingPrice, p.sellingPrice, p.currentStock, p.reorderLevel, p.status])
     const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -144,8 +155,126 @@ export function InventoryDashboardPage() {
     showToast('Products exported.', 'success')
   }
 
+  // Column recognition is name-based, not position-based (2026-09-11):
+  // a business bringing in a product list from a different system won't
+  // necessarily have columns in this exact order, or named exactly the
+  // same thing (e.g. "Cost Price" instead of "Buying Price"). Matching by
+  // a normalized header name (lowercased, punctuation/spacing stripped)
+  // against a list of accepted synonyms per field means the same real
+  // columns are found either way, without requiring a full column-mapping
+  // UI - that remains a possible future upgrade if a stricter match ever
+  // turns out not to be enough. Unrecognized columns are simply ignored.
+  const normalizeHeader = (h: string) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+  const HEADER_SYNONYMS: Record<string, string[]> = {
+    name: ['name', 'productname', 'itemname', 'item', 'product'],
+    sku: ['sku', 'productcode', 'code', 'itemcode'],
+    barcode: ['barcode', 'barcodenumber', 'upc'],
+    category: ['category', 'productcategory', 'type'],
+    buyingPrice: ['buyingpriceugx', 'buyingprice', 'costprice', 'cost', 'purchaseprice'],
+    sellingPrice: ['sellingpriceugx', 'sellingprice', 'price', 'retailprice', 'saleprice'],
+    stock: ['currentstock', 'stock', 'openingstock', 'quantity', 'qty', 'quantityonhand'],
+    reorderLevel: ['reorderlevel', 'reorderpoint', 'reorder', 'minimumstock', 'minstock'],
+  }
+  const findColumn = (headerCells: string[], field: keyof typeof HEADER_SYNONYMS): number => {
+    const normalized = headerCells.map(normalizeHeader)
+    return normalized.findIndex((h) => HEADER_SYNONYMS[field].includes(h))
+  }
+  const parseImportNumber = (raw: string | undefined): number => {
+    const n = Number(String(raw ?? '').replace(/[^0-9.-]/g, ''))
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
+
+  const handleImportFile = async (file: File) => {
+    setIsImporting(true)
+    try {
+      const text = await file.text()
+      const rows = parseCsv(text)
+      if (rows.length === 0) { showToast('That file has no rows.', 'info'); return }
+
+      const nameCol = findColumn(rows[0], 'name')
+      if (nameCol === -1) {
+        showToast('Could not find a product name column. Download Export first to see the expected column names.', 'info')
+        return
+      }
+      const skuCol = findColumn(rows[0], 'sku')
+      const barcodeCol = findColumn(rows[0], 'barcode')
+      const categoryCol = findColumn(rows[0], 'category')
+      const buyingCol = findColumn(rows[0], 'buyingPrice')
+      const sellingCol = findColumn(rows[0], 'sellingPrice')
+      const stockCol = findColumn(rows[0], 'stock')
+      const reorderCol = findColumn(rows[0], 'reorderLevel')
+      const dataRows = rows.slice(1)
+
+      // Seed from the categories already loaded, then extend locally as
+      // new ones are created - rows are processed one at a time (not in
+      // parallel), so a category name repeated across many rows in the
+      // same file is only ever created once, real and for good, the same
+      // way typing a new category into CategoryQuickSelect on the Add
+      // Product form does.
+      const categoryIdByName = new Map<string, string>()
+      for (const c of categoriesQuery.data ?? []) categoryIdByName.set(c.name.trim().toLowerCase(), c.id)
+
+      let ok = 0
+      let failed = 0
+      const warnings: string[] = []
+      for (const r of dataRows) {
+        const name = r[nameCol]?.trim()
+        if (!name) { failed++; continue }
+
+        let categoryId: string | null = null
+        const categoryRaw = categoryCol !== -1 ? r[categoryCol]?.trim() : ''
+        if (categoryRaw) {
+          const key = categoryRaw.toLowerCase()
+          categoryId = categoryIdByName.get(key) ?? null
+          if (!categoryId) {
+            try {
+              const created = await createCategory.mutateAsync({ name: categoryRaw })
+              categoryId = created.id
+              categoryIdByName.set(key, created.id)
+            } catch {
+              // Product can still be created without a category - it just
+              // lands uncategorized, same as leaving Category blank; this
+              // must never block the whole row over a non-essential field.
+              categoryId = null
+            }
+          }
+        }
+
+        try {
+          const result = await createProduct.mutateAsync({
+            name,
+            sku: skuCol !== -1 ? r[skuCol]?.trim() : '',
+            barcode: barcodeCol !== -1 ? r[barcodeCol]?.trim() : '',
+            categoryId,
+            buyingPrice: buyingCol !== -1 ? parseImportNumber(r[buyingCol]) : 0,
+            sellingPrice: sellingCol !== -1 ? parseImportNumber(r[sellingCol]) : 0,
+            reorderLevel: reorderCol !== -1 ? parseImportNumber(r[reorderCol]) : 0,
+            openingStock: stockCol !== -1 ? parseImportNumber(r[stockCol]) : 0,
+          })
+          ok++
+          if (result.warnings?.length) warnings.push(...result.warnings)
+        } catch {
+          failed++
+        }
+      }
+
+      showToast(
+        failed === 0 ? `Imported ${ok} product${ok === 1 ? '' : 's'}.` : `Imported ${ok}, skipped ${failed} invalid row${failed === 1 ? '' : 's'}.`,
+        ok > 0 ? 'success' : 'info',
+      )
+      if (warnings.length > 0) {
+        showToast(`${warnings.length} product${warnings.length === 1 ? '' : 's'} saved with a follow-up needed - check Stock Adjustments.`, 'info')
+      }
+    } catch {
+      showToast('Could not read that file.', 'info')
+    } finally {
+      setIsImporting(false)
+      if (importFileRef.current) importFileRef.current.value = ''
+    }
+  }
+
   const secondaryActions = [
-    { label: 'Import', icon: Upload, onClick: () => showToast('CSV import is coming in a future update.') },
+    { label: isImporting ? 'Importing…' : 'Import', icon: Upload, onClick: () => importFileRef.current?.click() },
     { label: 'Export', icon: Download, onClick: exportCsv },
     { label: 'Print', icon: Printer, onClick: () => window.print() },
     { label: 'Stock adjustment', icon: ClipboardList, onClick: () => navigate('/inventory/adjustments?new=1') },
@@ -220,6 +349,14 @@ export function InventoryDashboardPage() {
           </button>
         ))}
       </div>
+
+      <input
+        ref={importFileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => e.target.files?.[0] && handleImportFile(e.target.files[0])}
+      />
 
       {isEmptyInstall ? (
         <div className="flex flex-col items-center gap-4 rounded-card border border-dashed border-ink-200 bg-surface px-6 py-16 text-center">
