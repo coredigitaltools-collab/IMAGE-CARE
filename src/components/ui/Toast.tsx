@@ -23,7 +23,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4">
+      {/*
+        Bug fix (2026-09-12): "the add brand button does not work" (round 2)
+        - the 2026-09-12 fix that added showToast() to BrandQuickSelect's
+        error path was real, but the toast itself was invisible whenever a
+        modal was open, which is exactly when this fires (Add Product is a
+        modal). This container used a hardcoded Tailwind `z-50`, while
+        Modal.tsx (src/components/ui/Modal.tsx) paints every dialog at
+        `var(--z-modal)` = 400 (see globals.css's z-index scale) - so any
+        toast fired while a modal was open rendered underneath the modal's
+        backdrop, completely hidden. The design system already defines
+        `--z-toast: 500` for exactly this layer (and
+        src/components/ui/index.tsx's separate, unused toast implementation
+        already uses it correctly) - this container just was never wired to
+        it. This affects every toast fired from inside any modal in the app,
+        not just this one field.
+      */}
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-4 flex flex-col items-center gap-2 px-4"
+        style={{ zIndex: 'var(--z-toast)' }}
+      >
         {toasts.map((toast) => (
           <div
             key={toast.id}
