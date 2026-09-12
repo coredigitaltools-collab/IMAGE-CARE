@@ -188,10 +188,20 @@ export function PointOfSalePage() {
   const productPickerRef = useRef<ProductPickerHandle>(null)
 
   const [isRecordSaleOpen, setIsRecordSaleOpen] = useState(false)
+  // Moved up from further down this component (2026-09-12) so it's
+  // available to the `enabled:` gating on staffQuery/receiptSettingsQuery/
+  // businessProfileQuery just below - purely a declaration-order change,
+  // the state itself is unchanged.
+  const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [salesPersonId, setSalesPersonId] = useState<string | null>(null)
-  const staffQuery = useStaff()
+  // Perf fix (2026-09-12): staff is only rendered inside the Record Sale
+  // modal's "Sold by" picker and the Receipt modal's cashier name - not
+  // by anything on the always-visible Sales table - so it doesn't need
+  // to load just because this page was opened. `receiptSale` is declared
+  // just above for the same reason (moved up from further down the file).
+  const staffQuery = useStaff(undefined, { enabled: isRecordSaleOpen || Boolean(receiptSale) })
   const branchesQuery = useBranches()
   const [branchId, setBranchId] = useState<string | null>(null)
 
@@ -317,9 +327,15 @@ export function PointOfSalePage() {
   // globalActiveBranch above) instead of always showing every branch's
   // sales together - see claude/pos-staff-permission-enforcement-2026-09-05.md.
   const salesQuery = useSales({ branchId: globalActiveBranch })
-  const salesSettingsQuery = useSalesSettings()
-  const receiptSettingsQuery = useReceiptSettings()
-  const businessProfileQuery = useBusinessProfile()
+  // Perf fix (2026-09-12): sales settings (max discount %) is only read
+  // while the Record Sale modal's discount field is in play - deferred
+  // until that modal is open instead of fetching on every page mount.
+  const salesSettingsQuery = useSalesSettings(undefined, { enabled: isRecordSaleOpen })
+  // Perf fix (2026-09-12): receipt settings/business profile are only
+  // rendered inside the Receipt modal - deferred until a receipt is
+  // actually being shown.
+  const receiptSettingsQuery = useReceiptSettings(undefined, { enabled: Boolean(receiptSale) })
+  const businessProfileQuery = useBusinessProfile(undefined, { enabled: Boolean(receiptSale) })
   const parkedSalesQuery = useParkedSales({ branchId: globalActiveBranch })
 
   const checkout = useCheckout(user.id)
@@ -342,7 +358,6 @@ export function PointOfSalePage() {
   const [amountTendered, setAmountTendered] = useState(0)
   const [paymentReference, setPaymentReference] = useState('')
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
-  const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
   // Completed sale awaiting a Delete confirmation. window.confirm()/
   // window.prompt() can't be relabeled with the business's own name (see
   // ConfirmDialog.tsx) - this branded dialog collects the required

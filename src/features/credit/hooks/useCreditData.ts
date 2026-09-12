@@ -57,12 +57,33 @@ function withLegacyAliases(rows: any[]): any[] {
 // branch control the user can see or change, this was an invisible, unasked
 // -for filter, not a deliberate scoping - now these hooks only scope by
 // branch when a caller explicitly asks for it (no current caller does).
+// Perf fix (2026-09-12): useOutstandingCredit, useCreditDashboardKpis and
+// useCreditAccounts all call getOutstandingCredit(ctx, branchId) with
+// identical args - CreditDashboardPage mounts useCreditDashboardKpis +
+// useCreditAccounts together, and ReportsPage mounts useCreditDashboardKpis
+// + useOutstandingCredit together, so this RPC used to fire 2x on every
+// visit to either page. A shared `qc.fetchQuery` key means the second
+// caller reuses the first's cached result. Lazy (returns a function, not a
+// Promise) so it only runs when a caller's own queryFn actually invokes it -
+// same pattern as the daily/monthly/annual summary KPI fetchers.
+function useOutstandingCreditFetcher(branchId?: UUID) {
+  const ctx = useUserContext();
+  const qc = useQueryClient();
+  return () =>
+    qc.fetchQuery({
+      queryKey: ['credit', 'outstanding-raw', ctx.business_id, branchId],
+      queryFn: () => getOutstandingCredit(ctx, branchId).then(unwrap),
+      staleTime: 30_000,
+    });
+}
+
 export function useOutstandingCredit(branchId?: UUID) {
   const ctx = useUserContext();
+  const fetchOutstanding = useOutstandingCreditFetcher(branchId);
   return useQuery({
     queryKey: ['credit', 'outstanding', ctx.business_id, branchId],
     queryFn: async () => {
-      const rows = await getOutstandingCredit(ctx, branchId).then(unwrap);
+      const rows = await fetchOutstanding();
       return withLegacyAliases(Array.isArray(rows) ? rows : []);
     },
   });
@@ -102,10 +123,11 @@ export function useRecordInvoicePayment(_userId?: string) {
 
 export function useCreditDashboardKpis(branchId?: UUID) {
   const ctx = useUserContext();
+  const fetchOutstanding = useOutstandingCreditFetcher(branchId);
   return useQuery({
     queryKey: ['credit', 'kpis', ctx.business_id, branchId],
     queryFn: async () => {
-      const outstanding = await getOutstandingCredit(ctx, branchId).then(unwrap);
+      const outstanding = await fetchOutstanding();
       // Bug fix (2026-09-04): this always computed 0 for every KPI on the
       // Credit dashboard, even with real outstanding credit balances,
       // because it summed `r.outstanding` straight off the raw RPC rows -
@@ -135,10 +157,11 @@ export function useCreditDashboardKpis(branchId?: UUID) {
 // is more honest than inventing a value with no data behind it.
 export function useCreditAccounts(branchId?: UUID) {
   const ctx = useUserContext();
+  const fetchOutstanding = useOutstandingCreditFetcher(branchId);
   return useQuery({
     queryKey: ['credit', 'accounts', ctx.business_id, branchId],
     queryFn: async () => {
-      const rows = await getOutstandingCredit(ctx, branchId).then(unwrap);
+      const rows = await fetchOutstanding();
       // The RPC only carries id/name for the customer, not every field the
       // (fairly loosely defined) CreditAccountRow['customer'] type declares -
       // CreditAccountsPage.tsx only ever reads .customer.id/.name (confirmed

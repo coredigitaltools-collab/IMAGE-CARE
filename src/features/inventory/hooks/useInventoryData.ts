@@ -90,10 +90,17 @@ export function useBrands() {
 // products not carried at the active branch used to still appear there as
 // permanently-disabled "out of stock" tiles instead of not appearing at
 // all.
-export function useProducts(branchId?: UUID) {
+// Perf fix (2026-09-12): `options.enabled` lets a caller that only needs
+// this to populate a picker inside a conditionally-rendered modal (e.g.
+// PurchaseOrderDetailPage's Edit modal) defer this fairly expensive fetch
+// (full product catalog + a 500-row stock join) until that modal is
+// actually opened, instead of on every page mount. Defaults to enabled
+// (unchanged behavior) for every other caller.
+export function useProducts(branchId?: UUID, options?: { enabled?: boolean }) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['inventory', 'products', ctx.business_id, branchId],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const [products, stockRows, allowedProductIds] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -439,7 +446,15 @@ export function useInventoryKpis(_currency?: SupportedCurrency) {
   return useQuery({
     queryKey: ['inventory', 'kpis', ctx.business_id, branch],
     queryFn: async () => {
-      const inv = await listInventory(ctx, { branch_id: branch ?? undefined }).then(unwrap);
+      // Perf fix (2026-09-12): these two reads are independent (neither
+      // needs the other's result) but were being awaited one after
+      // another, adding a full extra network round trip to every KPI
+      // load (this hook backs both the Inventory dashboard and the
+      // Reports page). Running them together halves the wait.
+      const [inv, prods] = await Promise.all([
+        listInventory(ctx, { branch_id: branch ?? undefined }).then(unwrap),
+        listProducts(ctx).then(unwrap),
+      ]);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(inv) ? inv as any[] : [];
       // Bug fix (Inventory save-button audit 2026-09-03): vw_stock_summary
@@ -452,7 +467,6 @@ export function useInventoryKpis(_currency?: SupportedCurrency) {
       const oos = items.filter((i: any) => (i.quantity_on_hand ?? 0) <= 0).length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const val = items.reduce((s: number, i: any) => s + (i.stock_value ?? 0), 0);
-      const prods = await listProducts(ctx).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const prodItems = Array.isArray(prods) ? prods as any[] : [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -620,6 +634,25 @@ async function fetchActiveProducts(ctx: ReturnType<typeof useUserContext>): Prom
     .filter((p) => p.status === 'active');
 }
 
+// Perf fix (2026-09-12): the 7 report hooks below (valuation, stock
+// levels, low-stock, out-of-stock, dead-stock, fast/slow-moving,
+// profitability) each independently called fetchActiveProducts() with no
+// shared cache - visiting the Inventory Reports tab, which mounts several
+// of these at once, fired that same "full product catalog + 500-row
+// stock join" fetch 4-7 times in parallel instead of once. Routing it
+// through `qc.fetchQuery` under one shared key means React Query dedupes
+// concurrent calls and reuses the result for `staleTime` (30s, matching
+// the app's global default) instead of every report re-fetching it.
+function useActiveProductsFetcher() {
+  const qc = useQueryClient();
+  const ctx = useUserContext();
+  return () => qc.fetchQuery({
+    queryKey: ['inventory', 'active-products-with-stock', ctx.business_id],
+    queryFn: () => fetchActiveProducts(ctx),
+    staleTime: 30_000,
+  });
+}
+
 async function fetchAllMovements(ctx: ReturnType<typeof useUserContext>, branchId: UUID) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await getInventoryMovements(ctx, { branch_id: branchId }, { page_size: 500 }).then(unwrap) as any[];
@@ -628,10 +661,11 @@ async function fetchAllMovements(ctx: ReturnType<typeof useUserContext>, branchI
 
 export function useValuationReport(currency: SupportedCurrency = 'UGX') {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'valuation', ctx.business_id, currency],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products
         .map((product) => ({
           product,
@@ -645,10 +679,11 @@ export function useValuationReport(currency: SupportedCurrency = 'UGX') {
 
 export function useStockLevelsReport() {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'stock-levels', ctx.business_id],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return [...products].sort((a, b) => a.name.localeCompare(b.name));
     },
   });
@@ -656,10 +691,11 @@ export function useStockLevelsReport() {
 
 export function useLowStockReport() {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'low-stock', ctx.business_id],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products
         .filter((p) => p.currentStock > 0 && p.currentStock <= p.reorderLevel)
         .sort((a, b) => a.currentStock - b.currentStock);
@@ -669,10 +705,11 @@ export function useLowStockReport() {
 
 export function useOutOfStockReport() {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'out-of-stock', ctx.business_id],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products.filter((p) => p.currentStock <= 0);
     },
   });
@@ -680,13 +717,14 @@ export function useOutOfStockReport() {
 
 export function useDeadStockReport(windowDays = 30) {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   const branch = useActiveBranch();
   const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
     queryKey: ['inventory', 'reports', 'dead-stock', ctx.business_id, branchId, windowDays],
     queryFn: async () => {
       const [products, movements] = await Promise.all([
-        fetchActiveProducts(ctx),
+        fetchProducts(),
         branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
       ]);
       return products
@@ -709,13 +747,14 @@ export function useDeadStockReport(windowDays = 30) {
 
 export function useFastSlowMovingReport(windowDays = 30) {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   const branch = useActiveBranch();
   const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
     queryKey: ['inventory', 'reports', 'fast-slow', ctx.business_id, branchId, windowDays],
     queryFn: async () => {
       const [products, movements] = await Promise.all([
-        fetchActiveProducts(ctx),
+        fetchProducts(),
         branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
       ]);
       const cutoff = Date.now() - windowDays * 86_400_000;
@@ -733,10 +772,11 @@ export function useFastSlowMovingReport(windowDays = 30) {
 
 export function useProfitabilityReport(currency: SupportedCurrency = 'UGX') {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'profitability', ctx.business_id, currency],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products
         .map((product) => {
           const margin = product.sellingPrice > 0

@@ -29,10 +29,13 @@ export function PurchaseDashboardPage() {
   const kpisQuery = usePurchaseDashboardKpis()
   const ordersQuery = usePurchaseOrders()
   const suppliersQuery = useSuppliers()
-  const productsQuery = useProducts()
-  const createOrder = useCreatePurchaseOrder(user.id)
-
   const [isPoOpen, setIsPoOpen] = useState(false)
+  // Perf fix (2026-09-12): the product catalog (full products list + a
+  // 500-row stock join, see useProducts()) is only used to populate the
+  // "Record purchase order" modal's product picker - deferred until that
+  // modal is actually open instead of fetching on every dashboard visit.
+  const productsQuery = useProducts(undefined, { enabled: isPoOpen })
+  const createOrder = useCreatePurchaseOrder(user.id)
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
