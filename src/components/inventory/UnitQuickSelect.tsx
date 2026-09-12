@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCreateUnit } from '../../features/inventory/hooks/useInventoryData'
+import { useToast } from '../ui/toastContext'
 import type { UnitOfMeasure } from '../../types/inventory'
 
 const CREATE_NEW_VALUE = '__create_new__'
@@ -23,6 +24,7 @@ interface UnitQuickSelectProps {
 // hasn't visited Units first.
 export function UnitQuickSelect({ id, units, value, onChange, userId, error }: UnitQuickSelectProps) {
   const createUnit = useCreateUnit(userId)
+  const { showToast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newAbbreviation, setNewAbbreviation] = useState('')
@@ -39,11 +41,19 @@ export function UnitQuickSelect({ id, units, value, onChange, userId, error }: U
 
   const canCreate = newName.trim().length > 0 && newAbbreviation.trim().length > 0
 
+  // Bug fix (2026-09-12), same class of issue as BrandQuickSelect.tsx's
+  // "add brand button does not work" report: no try/catch meant a failed
+  // create here was a silent unhandled rejection - the "Add" button would
+  // appear to do nothing at all instead of showing what went wrong.
   const confirmCreate = async () => {
     if (!canCreate) return
-    const unit = await createUnit.mutateAsync({ name: newName.trim(), abbreviation: newAbbreviation.trim() })
-    setIsCreating(false)
-    onChange(unit.id)
+    try {
+      const unit = await createUnit.mutateAsync({ name: newName.trim(), abbreviation: newAbbreviation.trim() })
+      setIsCreating(false)
+      onChange(unit.id)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this unit.')
+    }
   }
 
   if (isCreating) {

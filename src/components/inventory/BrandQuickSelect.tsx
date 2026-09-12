@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCreateBrand } from '../../features/inventory/hooks/useInventoryData'
+import { useToast } from '../ui/toastContext'
 import type { Brand } from '../../types/inventory'
 
 const CREATE_NEW_VALUE = '__create_new__'
@@ -29,6 +30,7 @@ interface BrandQuickSelectProps {
 // Category - is optional.
 export function BrandQuickSelect({ id, brands, value, onChange, userId, error }: BrandQuickSelectProps) {
   const createBrand = useCreateBrand(userId)
+  const { showToast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -41,12 +43,25 @@ export function BrandQuickSelect({ id, brands, value, onChange, userId, error }:
     }
   }
 
+  // Bug fix (2026-09-12): "the add brand button does not work" - this had
+  // no try/catch at all, so if createBrand.mutateAsync ever rejected (e.g.
+  // local storage quota, a corrupted encryption key - brand creation is
+  // pure client-side IndexedDB, see brandService.ts), the click on "Add"
+  // did nothing visible whatsoever: no error, no state change, the field
+  // just sat there as if the button wasn't wired up. Same fix already
+  // applied to other quick-add flows in this codebase (e.g. the inline
+  // "add supplier" flow in SupplierInvoiceModal.tsx) - surface the real
+  // error via the existing toast system instead of failing silently.
   const confirmCreate = async () => {
     const name = newName.trim()
     if (!name) return
-    const brand = await createBrand.mutateAsync({ name })
-    setIsCreating(false)
-    onChange(brand.id)
+    try {
+      const brand = await createBrand.mutateAsync({ name })
+      setIsCreating(false)
+      onChange(brand.id)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this brand.')
+    }
   }
 
   if (isCreating) {
