@@ -12,12 +12,18 @@ import './styles/globals.css';
 // app compiled to nothing and rendered as unstyled default HTML.
 import './index.css';
 import { initThemeFromCache } from './lib/theme';
+import { registerServiceWorker } from './lib/registerServiceWorker';
 
 // Apply the cached Light/Dark/System preference before the first paint
 // (see src/lib/theme.ts) - AppShell.tsx re-syncs this from the real
 // saved setting once the user is authenticated and it's finished
 // loading, this just avoids a flash of the wrong theme before then.
 initThemeFromCache();
+
+// PWA installability (2026-09-12, "set the app up as a PWA") - see
+// registerServiceWorker.ts and public/sw.js for what this does and,
+// importantly, what it deliberately does not do (no offline caching).
+registerServiceWorker();
 
 // 2026-09-01: safety net alongside RouteErrorBoundary (see that file for
 // the full story) - Vite fires this event on `window` whenever a

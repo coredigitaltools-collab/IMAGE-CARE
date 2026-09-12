@@ -2,7 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Bug fix (2026-09-12, "set the app up as a PWA"): these used to be
+      hardcoded root-absolute paths (e.g. "/favicon.svg"). Vite does NOT
+      rewrite plain "/..." paths in index.html to include the deploy base
+      path - only the script/stylesheet tags it manages itself get that
+      treatment (see vite.config.mts's `base: '/IMAGE-CARE/'`, needed
+      because this app is served from a GitHub Pages project subpath, not
+      the domain root). A hardcoded "/favicon.svg" therefore silently
+      404s in production (it would only be found at the domain root, a
+      different, unrelated site) while still looking correct locally,
+      where the app happens to be served from "/" anyway. "%BASE_URL%" is
+      Vite's own placeholder for exactly this - it always resolves to the
+      real base path in both dev and production.
+    -->
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/icon-192.png" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <meta name="theme-color" content="#0F172A" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ImageCare" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="ImageCare - Business management system" />
     <title>ImageCare</title>
