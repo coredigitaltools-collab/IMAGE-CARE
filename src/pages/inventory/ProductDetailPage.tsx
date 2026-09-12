@@ -141,6 +141,22 @@ export function ProductDetailPage() {
     if (product) setNotes(product.notes)
   })
 
+  // Feature (2026-09-12, requested): the Supplier tab used to be read-only -
+  // its own empty state said "Edit this product to link a supplier," but no
+  // working edit path for supplierId actually existed anywhere (the General
+  // tab's form here never included it, and the standalone edit-product
+  // modal that did isn't wired up/used anywhere in the app), so a product
+  // added without a supplier could never get one afterwards. This lets the
+  // supplier be set (or changed later) directly from this tab, going
+  // through the same updateProduct() + buildInput() path every other field
+  // on this page already saves through - no new service/engine code, no
+  // change to how supplier_id is stored (still inside products.metadata,
+  // per masterDataService.ts's toProductRow). Declared here, above the
+  // early returns below, since hooks must run in the same order on every
+  // render.
+  const [isEditingSupplier, setIsEditingSupplier] = useState(false)
+  const [supplierSelection, setSupplierSelection] = useState('')
+
   if (productQuery.isLoading) {
     return (
       <div className="mx-auto max-w-4xl">
@@ -198,6 +214,21 @@ export function ProductDetailPage() {
   }
 
   const supplier = suppliersQuery.data?.find((s) => s.id === product.supplierId)
+
+  const startEditingSupplier = () => {
+    setSupplierSelection(product.supplierId ?? '')
+    setIsEditingSupplier(true)
+  }
+
+  const saveSupplier = async () => {
+    try {
+      await updateProduct.mutateAsync({ id: product.id, input: buildInput({ supplierId: supplierSelection || null }) })
+      showToast('Supplier updated.', 'success')
+      setIsEditingSupplier(false)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update supplier.')
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -478,18 +509,57 @@ export function ProductDetailPage() {
 
       {tab === 'Supplier' && (
         <Card className="p-5">
-          {supplier ? (
+          {isEditingSupplier ? (
             <div>
-              <p className="text-sm font-medium text-ink-900">{supplier.name}</p>
-              <p className="mt-1 text-xs text-ink-500">
-                {supplier.contactName} · {supplier.phone} · {supplier.email}
-              </p>
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
-                <TruckIcon size={12} /> {supplier.address}
-              </p>
+              <label htmlFor="pd-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
+                Supplier
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id="pd-supplier"
+                  value={supplierSelection}
+                  onChange={(e) => setSupplierSelection(e.target.value)}
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                >
+                  <option value="">None</option>
+                  {(suppliersQuery.data ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <Button onClick={saveSupplier} disabled={updateProduct.isPending}>
+                  {updateProduct.isPending ? 'Saving…' : 'Save'}
+                </Button>
+                <Button variant="secondary" onClick={() => setIsEditingSupplier(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : supplier ? (
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-ink-900">{supplier.name}</p>
+                  <p className="mt-1 text-xs text-ink-500">
+                    {supplier.contactName} · {supplier.phone} · {supplier.email}
+                  </p>
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
+                    <TruckIcon size={12} /> {supplier.address}
+                  </p>
+                </div>
+                <Button variant="secondary" onClick={startEditingSupplier}>
+                  Change
+                </Button>
+              </div>
             </div>
           ) : (
-            <EmptyState icon={TruckIcon} title="No supplier linked" description="Edit this product to link a supplier." />
+            <EmptyState
+              icon={TruckIcon}
+              title="No supplier linked"
+              description="Choose a supplier for this product."
+              action={{ label: 'Link a supplier', onClick: startEditingSupplier }}
+            />
           )}
         </Card>
       )}
