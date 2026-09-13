@@ -17,10 +17,15 @@
 // (e.g. InventoryTabs, PurchasingTabs) and internal <Link>/navigate()
 // calls already expected. No new pages were created.
 //
-// `basename` is now set to '/IMAGE-CARE/' to match the GitHub
-// Pages project-site deployment path, so client-side navigation,
-// direct URL entry, and browser refresh all resolve correctly
-// instead of 404ing or silently dropping the prefix.
+// Bug fix (2026-09-13): `basename` used to be '/IMAGE-CARE/' to match
+// the old coredigitaltools-collab.github.io/IMAGE-CARE/ GitHub Pages
+// project-site address. The app now lives at its own custom domain
+// (imc.coredigitaltools.com), served from that domain's root - that
+// old github.io link is retired. Left at '/IMAGE-CARE/', every route
+// match and generated link would still expect that prefix in the URL,
+// which no longer exists, breaking navigation under the new domain.
+// '/' (the default - basename omitted) matches how the site is
+// actually served now.
 // ============================================================
 
 import React, { lazy, Suspense } from 'react';
@@ -606,12 +611,11 @@ export const router = createBrowserRouter([
       },
     ],
   },
-], {
-  // GitHub Pages serves this repo as a project site under
-  // /IMAGE-CARE/. Without this, React Router's client-side
-  // navigation silently drops that prefix from the address bar,
-  // so any refresh or direct link/bookmark to an in-app URL
-  // 404s at the GitHub Pages static layer. This makes the
-  // browser's URL match what's actually deployed.
-  basename: '/IMAGE-CARE/',
-});
+]);
+// Bug fix (2026-09-13): the second createBrowserRouter argument used to
+// set `basename: '/IMAGE-CARE/'` here, matching the old GitHub Pages
+// project-site address (coredigitaltools-collab.github.io/IMAGE-CARE/).
+// The app is now served from the root of its own custom domain
+// (imc.coredigitaltools.com) - that old link is retired - so no
+// basename is needed; React Router defaults to '/', which matches how
+// the site is actually deployed now.

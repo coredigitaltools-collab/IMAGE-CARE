@@ -2,13 +2,15 @@
 // app installable as a PWA - see that file's own header comment for why it
 // deliberately does no caching. Added 2026-09-12.
 //
-// `import.meta.env.BASE_URL` (not a hardcoded '/sw.js') matters here: the
-// app is deployed to GitHub Pages under a project subpath
-// (`/IMAGE-CARE/`, see vite.config.mts's `base`), so the real, served
-// location of this file is `/IMAGE-CARE/sw.js`, not `/sw.js`. Registering
-// at the wrong path would 404 in production while still appearing to work
-// in local dev (served from `/`), exactly like the pre-existing favicon
-// link this same fix corrected in index.html.
+// `import.meta.env.BASE_URL` (not a hardcoded '/sw.js') matters here: it
+// always resolves to whatever `base` is set to in vite.config.mts, so
+// this keeps working no matter where the app is deployed - a hardcoded
+// path would 404 in production while still appearing to work in local
+// dev, exactly like the pre-existing favicon link this same fix
+// corrected in index.html. (2026-09-13: `base` moved from
+// '/IMAGE-CARE/', the old GitHub Pages project-site subpath, to '/',
+// since the app is now served from the root of its own custom domain -
+// that old github.io link is retired.)
 export function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   // Installability is a nice-to-have, not core functionality. Register

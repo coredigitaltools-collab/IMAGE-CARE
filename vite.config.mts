@@ -4,11 +4,18 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
 export default defineConfig({
-  // GitHub Pages serves this repo as a project site under /IMAGE-CARE/,
-  // not at the domain root. Without an explicit base, Vite emits
-  // root-relative asset paths (/assets/...) which 404/503 in production
-  // even though `vite preview`/`vite dev` work fine locally.
-  base: '/IMAGE-CARE/',
+  // Bug fix (2026-09-13): this used to be '/IMAGE-CARE/' for the old
+  // coredigitaltools-collab.github.io/IMAGE-CARE/ project-site address.
+  // The app is now reached at its own custom domain
+  // (imc.coredigitaltools.com), served from that domain's root, not a
+  // GitHub Pages project subpath - that old link is retired. With base
+  // still set to '/IMAGE-CARE/', every asset URL Vite emits would be
+  // prefixed with a path segment that doesn't exist under the custom
+  // domain, so the browser 404s on every script/stylesheet and the page
+  // renders blank (only the <title> shows, since that's inline HTML,
+  // not a fetched asset). '/' matches how the site is actually served
+  // now.
+  base: '/',
   // src/index.css already uses Tailwind v4's CSS-first config
   // (`@import "tailwindcss"` + an `@theme` block defining the ink-*/
   // brand-blue-*/brand-red-* design tokens), but tailwindcss itself was
