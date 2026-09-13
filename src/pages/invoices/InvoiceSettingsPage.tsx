@@ -68,8 +68,12 @@ export function InvoiceSettingsPage() {
           <div className="flex justify-end pt-3">
             <Button
               onClick={async () => {
-                await saveSettings.mutateAsync({ defaultDueDays, footerText, showTaxBreakdown, showLogo })
-                showToast('Invoice settings saved.', 'success')
+                try {
+                  await saveSettings.mutateAsync({ defaultDueDays, footerText, showTaxBreakdown, showLogo })
+                  showToast('Invoice settings saved.', 'success')
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not save invoice settings.')
+                }
               }}
             >
               Save settings

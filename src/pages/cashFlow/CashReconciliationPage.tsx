@@ -71,15 +71,19 @@ export function CashReconciliationPage() {
 
         <Button
           onClick={async () => {
-            await recordReconciliation.mutateAsync({ countedAmountUgx: countedAmount, notes })
-            showToast(
-              variance === 0
-                ? 'Count logged - it matches the system exactly.'
-                : 'Count logged - the difference has been recorded as a cash adjustment.',
-              'success',
-            )
-            setCountedAmount(0)
-            setNotes('')
+            try {
+              await recordReconciliation.mutateAsync({ countedAmountUgx: countedAmount, notes })
+              showToast(
+                variance === 0
+                  ? 'Count logged - it matches the system exactly.'
+                  : 'Count logged - the difference has been recorded as a cash adjustment.',
+                'success',
+              )
+              setCountedAmount(0)
+              setNotes('')
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not record this reconciliation.')
+            }
           }}
           disabled={countedAmount <= 0}
         >

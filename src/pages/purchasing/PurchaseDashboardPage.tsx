@@ -29,10 +29,13 @@ export function PurchaseDashboardPage() {
   const kpisQuery = usePurchaseDashboardKpis()
   const ordersQuery = usePurchaseOrders()
   const suppliersQuery = useSuppliers()
-  const productsQuery = useProducts()
-  const createOrder = useCreatePurchaseOrder(user.id)
-
   const [isPoOpen, setIsPoOpen] = useState(false)
+  // Perf fix (2026-09-12): the product catalog (full products list + a
+  // 500-row stock join, see useProducts()) is only used to populate the
+  // "Record purchase order" modal's product picker - deferred until that
+  // modal is actually open instead of fetching on every dashboard visit.
+  const productsQuery = useProducts(undefined, { enabled: isPoOpen })
+  const createOrder = useCreatePurchaseOrder(user.id)
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')
@@ -97,7 +100,22 @@ export function PurchaseDashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Open orders" value={kpisQuery.data ? String(kpisQuery.data.openOrders) : '-'} icon={ShoppingCart} tone="blue" isLoading={kpisQuery.isLoading} />
-        <KpiCard label="Pending receipt" value={kpisQuery.data ? String(kpisQuery.data.pendingReceipt) : '-'} icon={Package} tone="neutral" isLoading={kpisQuery.isLoading} />
+        {/* Bug fix (2026-09-11, "Pending Receipt card doesn't navigate"):
+            this card used to be purely informational - clicking it did
+            nothing. "Pending receipt" is, in the current (post-2026-09-03)
+            workflow, exactly the same set of orders as the Orders list's
+            own "draft" filter (see the matching comment in
+            purchasingService.ts) - so it now jumps straight to that
+            already-existing, already-working filtered view instead of a
+            new page being built for it. */}
+        <KpiCard
+          label="Pending receipt"
+          value={kpisQuery.data ? String(kpisQuery.data.pendingReceipt) : '-'}
+          icon={Package}
+          tone="neutral"
+          isLoading={kpisQuery.isLoading}
+          onClick={() => navigate('/purchasing/orders?status=draft')}
+        />
         <KpiCard
           label="Spend this month"
           value={kpisQuery.data ? formatCurrency(kpisQuery.data.spendThisMonthUgx, 'UGX') : '-'}
@@ -143,9 +161,13 @@ export function PurchaseDashboardPage() {
           products={activeProducts}
           onClose={() => setIsPoOpen(false)}
           onSubmit={async (input) => {
-            await createOrder.mutateAsync(input)
-            showToast('Purchase order recorded and confirmed.', 'success')
-            setIsPoOpen(false)
+            try {
+              await createOrder.mutateAsync(input)
+              showToast('Purchase order recorded and confirmed.', 'success')
+              setIsPoOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not record this purchase order.')
+            }
           }}
         />
       )}

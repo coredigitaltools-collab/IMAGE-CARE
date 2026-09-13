@@ -14,8 +14,34 @@ const ALGORITHM = 'AES-GCM'
 
 let cachedKey: CryptoKey | null = null
 
+// Bug fix (2026-09-13): "Cannot read properties of undefined (reading
+// 'generateKey')" surfaced to the user as the actual error text on Add
+// Brand (visible for the first time after the 2026-09-12 toast z-index
+// fix - it was always failing, just silently/invisibly before that).
+// Root cause: `crypto.subtle` (the Web Crypto SubtleCrypto interface) is
+// only exposed by the browser in a "secure context" - served over https://,
+// or from localhost. `crypto` itself is always present (it also provides
+// getRandomValues), so when the page is opened over a plain http:// origin
+// that isn't localhost, `crypto.subtle` is `undefined` and
+// `crypto.subtle.generateKey(...)` throws exactly this raw TypeError - not
+// a bug in this encryption code itself, but a real environment
+// precondition every caller of encryptValue/decryptValue depends on
+// (brands, categories, units, and every other locally-encrypted feature
+// that flows through getOrCreateKey). Every one of those callers already
+// just surfaces `err.message` in a toast (see BrandQuickSelect.tsx and
+// siblings), so fixing this once, here, gives all of them a real,
+// actionable message instead of a raw JS TypeError.
+function assertSecureContext(): void {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    throw new Error(
+      'This action needs a secure connection to work. Please make sure ImageCare is open at its normal https:// web address (not a plain http:// link), then try again.'
+    )
+  }
+}
+
 async function getOrCreateKey(): Promise<CryptoKey> {
   if (cachedKey) return cachedKey
+  assertSecureContext()
 
   const stored = localStorage.getItem(KEY_STORAGE_KEY)
   if (stored) {

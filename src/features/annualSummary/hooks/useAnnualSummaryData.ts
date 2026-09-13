@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useUserContext } from '../../../context/AppContext'
 import { getDashboardKPIs, getTopProducts, type TopProductRow as RealTopProductRow } from '../../../services/reporting/reportingService'
 import { listCashTransactions } from '../../../services/financial/financialServices'
@@ -49,15 +49,45 @@ function yearRangeIso(year: number): { from: string; to: string } {
   }
 }
 
-async function fetchAnnualFinancials(ctx: UserContext, year: number): Promise<FinancialSummary> {
-  const { from, to } = yearRangeIso(year)
-  const kpis = (await getDashboardKPIs(ctx, undefined, { from, to }).then(unwrap)) as DashboardKPIs
+function mapAnnualFinancials(kpis: DashboardKPIs): FinancialSummary {
   return {
     salesUgx: kpis.revenue,
     cogsUgx: kpis.cogs,
     grossProfitUgx: kpis.gross_profit,
     expensesUgx: kpis.expenses,
     netProfitUgx: kpis.net_profit,
+  }
+}
+
+// Used by useYearOverYearComparison below, which genuinely needs two
+// DIFFERENT years' KPIs (not a duplicate of the same data) - left as a
+// plain, uncached fetch. See useDashboardKpisForYearFetcher just below
+// for the single-year case that useAnnualFinancials/useAnnualSalesSummary
+// share instead.
+async function fetchAnnualFinancials(ctx: UserContext, year: number): Promise<FinancialSummary> {
+  const { from, to } = yearRangeIso(year)
+  const kpis = (await getDashboardKPIs(ctx, undefined, { from, to }).then(unwrap)) as DashboardKPIs
+  return mapAnnualFinancials(kpis)
+}
+
+// Perf fix (2026-09-12): useAnnualFinancials and useAnnualSalesSummary both
+// call getDashboardKPIs() with identical (ctx, undefined, {from,to}) args for
+// the same year - AnnualReportPage mounts both together, so this fairly
+// expensive KPI computation used to fire twice on every visit. A shared
+// `qc.fetchQuery` key means the second caller reuses the first's cached
+// result. Lazy (returns a function, not a Promise) so it only runs when a
+// caller's own queryFn actually invokes it - matching the daily/monthly
+// fetchers above in useDailySummaryData.ts / useMonthlySummaryData.ts.
+function useDashboardKpisForYearFetcher(year: number) {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  return () => {
+    const { from, to } = yearRangeIso(year)
+    return qc.fetchQuery({
+      queryKey: ['annual-summary', 'kpis', year, ctx.business_id],
+      queryFn: () => getDashboardKPIs(ctx, undefined, { from, to }).then(unwrap) as Promise<DashboardKPIs>,
+      staleTime: 30_000,
+    })
   }
 }
 
@@ -88,14 +118,16 @@ interface DbBranchRow {
 
 export function useAnnualFinancials(year: number) {
   const ctx = useUserContext()
+  const fetchKpis = useDashboardKpisForYearFetcher(year)
   return useQuery({
     queryKey: ['annual-summary', 'financials', year, ctx.business_id],
-    queryFn: () => fetchAnnualFinancials(ctx, year),
+    queryFn: async (): Promise<FinancialSummary> => mapAnnualFinancials(await fetchKpis()),
   })
 }
 
 export function useAnnualSalesSummary(year: number) {
   const ctx = useUserContext()
+  const fetchKpis = useDashboardKpisForYearFetcher(year)
   return useQuery({
     queryKey: ['annual-summary', 'sales', year, ctx.business_id],
     queryFn: async (): Promise<AnnualSalesSummary> => {
@@ -105,7 +137,7 @@ export function useAnnualSalesSummary(year: number) {
       // (also real, but its monthly buckets aren't consumed by this page's
       // shape - see comment block above).
       const [kpis, topProducts] = await Promise.all([
-        getDashboardKPIs(ctx, undefined, { from, to }).then(unwrap) as Promise<DashboardKPIs>,
+        fetchKpis(),
         getTopProducts(ctx, { from_date: from, to_date: to, limit: 10, branch_id: undefined }).then(unwrap) as Promise<RealTopProductRow[]>,
       ])
 

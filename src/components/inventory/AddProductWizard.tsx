@@ -5,18 +5,16 @@ import { z } from 'zod'
 import { Upload } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { CategoryQuickSelect } from './CategoryQuickSelect'
-import { BrandQuickSelect } from './BrandQuickSelect'
 import { FormField } from '../settings/FormField'
 import { NumberField } from '../ui/NumberField'
 import { Button } from '../ui/Button'
-import type { Brand, Category, ProductInput, Supplier, UnitOfMeasure } from '../../types/inventory'
+import type { Category, ProductInput, Supplier, UnitOfMeasure } from '../../types/inventory'
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Product name is required.'),
   sku: z.string().trim().min(1, 'SKU is required.'),
   barcode: z.string().trim(),
   categoryId: z.string().min(1, 'Select a category.'),
-  brandId: z.string(),
   unitId: z.string().min(1, 'Still setting up - please wait a moment and try again.'),
   buyingPrice: z.number().min(0, 'Must be 0 or higher.'),
   sellingPrice: z.number().min(0, 'Must be 0 or higher.'),
@@ -31,7 +29,6 @@ type FormValues = z.infer<typeof schema>
 
 interface AddProductWizardProps {
   categories: Category[]
-  brands: Brand[]
   units: UnitOfMeasure[]
   suppliers: Supplier[]
   generatedSku?: string
@@ -66,12 +63,14 @@ function generateSku(): string {
 // -> Supplier & Details -> Review, with Next/Back navigation) into one
 // scrollable form, at the user's explicit direction that adding a single
 // product shouldn't require understanding the app's internal step
-// structure first. All 13 fields are unchanged - only the navigation is
-// gone. Fields stay grouped under plain section labels (Product info /
-// Pricing & stock / Supplier & details) so the form is still easy to scan,
-// and the modal keeps its existing size (`size="lg"`, unchanged) with the
-// same scrollable-body pattern ProductFormModal already uses.
-export function AddProductWizard({ categories, brands, units, suppliers, generatedSku, userId, onClose, onSubmit, submitError }: AddProductWizardProps) {
+// structure first. Fields stay grouped under plain section labels (Product
+// info / Pricing & stock / Supplier & details) so the form is still easy to
+// scan, and the modal keeps its existing size (`size="lg"`, unchanged) with
+// a scrollable body. (Brand quick-add removed 2026-09-13 at the user's
+// explicit request - it was a local-only, per-device field that never
+// synced across staff/branches and was the source of a real encryption
+// bug - see claude/brand-add-button-silent-failure-fix-2026-09-12.md.)
+export function AddProductWizard({ categories, units, suppliers, generatedSku, userId, onClose, onSubmit, submitError }: AddProductWizardProps) {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
   // 2026-08-31: when Save silently did nothing, the actual cause was this -
   // categoryId/unitId defaulted from `categories`/`units` props at the
@@ -105,7 +104,6 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
       sku: autoSku,
       barcode: '',
       categoryId: categories[0]?.id ?? '',
-      brandId: '',
       unitId: units[0]?.id ?? '',
       buyingPrice: 0,
       sellingPrice: 0,
@@ -208,35 +206,20 @@ export function AddProductWizard({ categories, brands, units, suppliers, generat
                 hint="For scanning at checkout."
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Controller
-                name="categoryId"
-                control={control}
-                render={({ field }) => (
-                  <CategoryQuickSelect
-                    id="w-category"
-                    categories={categories}
-                    value={field.value}
-                    onChange={field.onChange}
-                    userId={userId}
-                    error={errors.categoryId?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="brandId"
-                control={control}
-                render={({ field }) => (
-                  <BrandQuickSelect
-                    id="w-brand"
-                    brands={brands}
-                    value={field.value}
-                    onChange={field.onChange}
-                    userId={userId}
-                  />
-                )}
-              />
-            </div>
+            <Controller
+              name="categoryId"
+              control={control}
+              render={({ field }) => (
+                <CategoryQuickSelect
+                  id="w-category"
+                  categories={categories}
+                  value={field.value}
+                  onChange={field.onChange}
+                  userId={userId}
+                  error={errors.categoryId?.message}
+                />
+              )}
+            />
           </div>
         </div>
 

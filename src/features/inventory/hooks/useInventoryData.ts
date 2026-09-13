@@ -10,7 +10,6 @@ import {
   listProductBranchIds, listBranchProductIds, setProductBranches,
 } from '../../../services/masterData/masterDataService';
 import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
-import { listBrands, createBrand, updateBrand, archiveBrand } from '../../../services/brandService';
 import type { UUID } from '../../../types/database';
 import type { Product as InventoryProduct, Supplier as InventorySupplier, StockMovementType } from '../../../types/inventory';
 import { convertFromUgx } from '../../../lib/currency';
@@ -36,7 +35,6 @@ function mapProduct(p: any): InventoryProduct {
     name: p.name ?? '', sku: p.sku ?? '', barcode: p.barcode ?? '',
     imageDataUrl: p.image_url ?? p.imageDataUrl ?? null,
     categoryId: p.category_id ?? p.categoryId ?? '',
-    brandId: p.metadata?.brand_id ?? p.brandId ?? null,
     unitId: p.unit_id ?? p.unitId ?? '',
     supplierId: p.metadata?.supplier_id ?? p.supplierId ?? null,
     description: p.description ?? '', notes: p.metadata?.notes ?? p.notes ?? '',
@@ -53,21 +51,6 @@ function mapProduct(p: any): InventoryProduct {
 export function useCategories() {
   const ctx = useUserContext();
   return useQuery({ queryKey: ['inventory', 'categories', ctx.business_id], queryFn: () => listCategories(ctx).then(unwrap) });
-}
-
-// 2026-09-02: this used to always return [] (staleTime: Infinity, so it
-// never even refetched), while useCreateBrand/useUpdateBrand/useArchiveBrand
-// fabricated in-memory-only objects that touched no storage at all - not
-// even IndexedDB - so a saved brand vanished on refresh, on top of never
-// showing up in this list. There is no imagecare.brands table (Stage 4
-// note in masterDataService.ts), so this can't go through Supabase without
-// a schema change, which is out of scope here. brandService.ts already has
-// a genuine IndexedDB-backed CRUD implementation (same getCollection/
-// setCollection pattern as expenseService.ts) that nothing was calling -
-// wiring these hooks to it is an honest local persistence fix: it won't
-// sync across devices, but it survives a browser refresh, unlike before.
-export function useBrands() {
-  return useQuery({ queryKey: ['inventory', 'brands'], queryFn: () => listBrands() });
 }
 
 // 2026-09-01: listProducts() only ever selected from the products table
@@ -90,10 +73,17 @@ export function useBrands() {
 // products not carried at the active branch used to still appear there as
 // permanently-disabled "out of stock" tiles instead of not appearing at
 // all.
-export function useProducts(branchId?: UUID) {
+// Perf fix (2026-09-12): `options.enabled` lets a caller that only needs
+// this to populate a picker inside a conditionally-rendered modal (e.g.
+// PurchaseOrderDetailPage's Edit modal) defer this fairly expensive fetch
+// (full product catalog + a 500-row stock join) until that modal is
+// actually opened, instead of on every page mount. Defaults to enabled
+// (unchanged behavior) for every other caller.
+export function useProducts(branchId?: UUID, options?: { enabled?: boolean }) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['inventory', 'products', ctx.business_id, branchId],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const [products, stockRows, allowedProductIds] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,7 +188,7 @@ export function useCreateProduct(_userId?: string) {
         reorder_level: input.reorderLevel ?? input.reorder_level ?? 0,
         is_stockable: true, is_sellable: true, is_purchasable: true,
         is_active: true, track_expiry: false, tax_rate: 0,
-        metadata: { brand_id: input.brandId ?? null, supplier_id: input.supplierId ?? null },
+        metadata: { supplier_id: input.supplierId ?? null },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).then(unwrap);
 
@@ -439,7 +429,15 @@ export function useInventoryKpis(_currency?: SupportedCurrency) {
   return useQuery({
     queryKey: ['inventory', 'kpis', ctx.business_id, branch],
     queryFn: async () => {
-      const inv = await listInventory(ctx, { branch_id: branch ?? undefined }).then(unwrap);
+      // Perf fix (2026-09-12): these two reads are independent (neither
+      // needs the other's result) but were being awaited one after
+      // another, adding a full extra network round trip to every KPI
+      // load (this hook backs both the Inventory dashboard and the
+      // Reports page). Running them together halves the wait.
+      const [inv, prods] = await Promise.all([
+        listInventory(ctx, { branch_id: branch ?? undefined }).then(unwrap),
+        listProducts(ctx).then(unwrap),
+      ]);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(inv) ? inv as any[] : [];
       // Bug fix (Inventory save-button audit 2026-09-03): vw_stock_summary
@@ -452,7 +450,6 @@ export function useInventoryKpis(_currency?: SupportedCurrency) {
       const oos = items.filter((i: any) => (i.quantity_on_hand ?? 0) <= 0).length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const val = items.reduce((s: number, i: any) => s + (i.stock_value ?? 0), 0);
-      const prods = await listProducts(ctx).then(unwrap);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const prodItems = Array.isArray(prods) ? prods as any[] : [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -620,6 +617,25 @@ async function fetchActiveProducts(ctx: ReturnType<typeof useUserContext>): Prom
     .filter((p) => p.status === 'active');
 }
 
+// Perf fix (2026-09-12): the 7 report hooks below (valuation, stock
+// levels, low-stock, out-of-stock, dead-stock, fast/slow-moving,
+// profitability) each independently called fetchActiveProducts() with no
+// shared cache - visiting the Inventory Reports tab, which mounts several
+// of these at once, fired that same "full product catalog + 500-row
+// stock join" fetch 4-7 times in parallel instead of once. Routing it
+// through `qc.fetchQuery` under one shared key means React Query dedupes
+// concurrent calls and reuses the result for `staleTime` (30s, matching
+// the app's global default) instead of every report re-fetching it.
+function useActiveProductsFetcher() {
+  const qc = useQueryClient();
+  const ctx = useUserContext();
+  return () => qc.fetchQuery({
+    queryKey: ['inventory', 'active-products-with-stock', ctx.business_id],
+    queryFn: () => fetchActiveProducts(ctx),
+    staleTime: 30_000,
+  });
+}
+
 async function fetchAllMovements(ctx: ReturnType<typeof useUserContext>, branchId: UUID) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await getInventoryMovements(ctx, { branch_id: branchId }, { page_size: 500 }).then(unwrap) as any[];
@@ -628,10 +644,11 @@ async function fetchAllMovements(ctx: ReturnType<typeof useUserContext>, branchI
 
 export function useValuationReport(currency: SupportedCurrency = 'UGX') {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'valuation', ctx.business_id, currency],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products
         .map((product) => ({
           product,
@@ -645,10 +662,11 @@ export function useValuationReport(currency: SupportedCurrency = 'UGX') {
 
 export function useStockLevelsReport() {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'stock-levels', ctx.business_id],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return [...products].sort((a, b) => a.name.localeCompare(b.name));
     },
   });
@@ -656,10 +674,11 @@ export function useStockLevelsReport() {
 
 export function useLowStockReport() {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'low-stock', ctx.business_id],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products
         .filter((p) => p.currentStock > 0 && p.currentStock <= p.reorderLevel)
         .sort((a, b) => a.currentStock - b.currentStock);
@@ -669,10 +688,11 @@ export function useLowStockReport() {
 
 export function useOutOfStockReport() {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'out-of-stock', ctx.business_id],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products.filter((p) => p.currentStock <= 0);
     },
   });
@@ -680,13 +700,14 @@ export function useOutOfStockReport() {
 
 export function useDeadStockReport(windowDays = 30) {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   const branch = useActiveBranch();
   const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
     queryKey: ['inventory', 'reports', 'dead-stock', ctx.business_id, branchId, windowDays],
     queryFn: async () => {
       const [products, movements] = await Promise.all([
-        fetchActiveProducts(ctx),
+        fetchProducts(),
         branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
       ]);
       return products
@@ -709,13 +730,14 @@ export function useDeadStockReport(windowDays = 30) {
 
 export function useFastSlowMovingReport(windowDays = 30) {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   const branch = useActiveBranch();
   const branchId = (branch ?? ctx.branch_id) as UUID | undefined;
   return useQuery({
     queryKey: ['inventory', 'reports', 'fast-slow', ctx.business_id, branchId, windowDays],
     queryFn: async () => {
       const [products, movements] = await Promise.all([
-        fetchActiveProducts(ctx),
+        fetchProducts(),
         branchId ? fetchAllMovements(ctx, branchId) : Promise.resolve([] as any[]), // eslint-disable-line @typescript-eslint/no-explicit-any
       ]);
       const cutoff = Date.now() - windowDays * 86_400_000;
@@ -733,10 +755,11 @@ export function useFastSlowMovingReport(windowDays = 30) {
 
 export function useProfitabilityReport(currency: SupportedCurrency = 'UGX') {
   const ctx = useUserContext();
+  const fetchProducts = useActiveProductsFetcher();
   return useQuery({
     queryKey: ['inventory', 'reports', 'profitability', ctx.business_id, currency],
     queryFn: async () => {
-      const products = await fetchActiveProducts(ctx);
+      const products = await fetchProducts();
       return products
         .map((product) => {
           const margin = product.sellingPrice > 0
@@ -782,7 +805,7 @@ export function useDuplicateProduct(_userId?: string) {
         is_active: true,
         track_expiry: source.track_expiry ?? false,
         tax_rate: source.tax_rate ?? 0,
-        metadata: { brand_id: source.metadata?.brand_id ?? null, supplier_id: source.metadata?.supplier_id ?? null },
+        metadata: { supplier_id: source.metadata?.supplier_id ?? null },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).then(unwrap);
 
@@ -894,27 +917,6 @@ export function useStockAdjustments() {
   });
 }
 export function useGeneratedSku() { return useQuery({ queryKey: ['inventory', 'sku-generator'], queryFn: async () => `SKU-${Date.now().toString(36).toUpperCase()}`, staleTime: 0 }); }
-export function useCreateBrand(userId?: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { name: string }) => createBrand(input, userId ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
-  });
-}
-export function useUpdateBrand(userId?: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: { name: string } }) => updateBrand(id, input, userId ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
-  });
-}
-export function useArchiveBrand(userId?: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => archiveBrand(id, userId ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
-  });
-}
 export function useArchiveCategory(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();

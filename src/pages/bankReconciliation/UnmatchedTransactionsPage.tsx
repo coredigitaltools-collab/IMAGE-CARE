@@ -69,9 +69,16 @@ export function UnmatchedTransactionsPage() {
           confirmLabel="Delete"
           tone="danger"
           onConfirm={async () => {
-            await deleteLine.mutateAsync(deletingLineId)
-            showToast('Statement line deleted.', 'success')
-            setDeletingLineId(null)
+            // Bug fix (2026-09-13): no try/catch meant a failed delete was a
+            // silent unhandled promise rejection - see
+            // loyalty-buttons-silent-failure-fix-2026-09-13.md.
+            try {
+              await deleteLine.mutateAsync(deletingLineId)
+              showToast('Statement line deleted.', 'success')
+              setDeletingLineId(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not delete this statement line.')
+            }
           }}
           onCancel={() => setDeletingLineId(null)}
         />

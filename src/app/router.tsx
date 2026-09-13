@@ -49,7 +49,6 @@ const InventoryDashboardPage = lazy(() => import('../pages/inventory/InventoryDa
 const ProductsListPage       = lazy(() => import('../pages/inventory/ProductsListPage').then(m => ({ default: m.ProductsListPage })));
 const ProductDetailPage      = lazy(() => import('../pages/inventory/ProductDetailPage').then(m => ({ default: m.ProductDetailPage })));
 const CategoriesPage         = lazy(() => import('../pages/inventory/CategoriesPage').then(m => ({ default: m.CategoriesPage })));
-const BrandsPage             = lazy(() => import('../pages/inventory/BrandsPage').then(m => ({ default: m.BrandsPage })));
 const SuppliersPage          = lazy(() => import('../pages/inventory/SuppliersPage').then(m => ({ default: m.SuppliersPage })));
 const StockMovementsPage     = lazy(() => import('../pages/inventory/StockMovementsPage').then(m => ({ default: m.StockMovementsPage })));
 const StockAdjustmentsPage   = lazy(() => import('../pages/inventory/StockAdjustmentsPage').then(m => ({ default: m.StockAdjustmentsPage })));
@@ -330,7 +329,7 @@ export const router = createBrowserRouter([
           { path: 'sales', element: <PointOfSalePage /> },
 
           // Inventory (Products, Categories, Suppliers, Stock
-          // Adjustments, Stock Movements, Barcode, Brands, Units,
+          // Adjustments, Stock Movements, Barcode, Units,
           // Inventory Reports - all pre-existing pages)
           {
             path: 'inventory',
@@ -339,7 +338,6 @@ export const router = createBrowserRouter([
               { path: 'products', element: <ProductsListPage /> },
               { path: 'products/:id', element: <ProductDetailPage /> },
               { path: 'categories', element: <CategoriesPage /> },
-              { path: 'brands', element: <BrandsPage /> },
               { path: 'suppliers', element: <SuppliersPage /> },
               { path: 'movements', element: <StockMovementsPage /> },
               { path: 'adjustments', element: <StockAdjustmentsPage /> },

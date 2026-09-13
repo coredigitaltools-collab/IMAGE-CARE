@@ -35,8 +35,12 @@ export function AppearanceSettingsPage() {
   }
 
   const handleSave = async () => {
-    await save.mutateAsync({ theme, density, dateFormat })
-    showToast('Appearance settings saved.', 'success')
+    try {
+      await save.mutateAsync({ theme, density, dateFormat })
+      showToast('Appearance settings saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save appearance settings.')
+    }
   }
 
   return (

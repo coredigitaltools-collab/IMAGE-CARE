@@ -14,7 +14,6 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
 import {
   useArchiveProduct,
-  useBrands,
   useCategories,
   useCreateProduct,
   useDuplicateProduct,
@@ -33,7 +32,6 @@ export function ProductsListPage() {
 
   const productsQuery = useProducts()
   const categoriesQuery = useCategories()
-  const brandsQuery = useBrands()
   // Units has no UI of its own here by design (the user's explicit,
   // repeated direction: the system just runs on pieces, no unit picker) -
   // this silently ensures one real "Piece" unit row exists the first time
@@ -125,8 +123,12 @@ export function ProductsListPage() {
   }
 
   const handleDuplicate = async (id: string) => {
-    await duplicateProduct.mutateAsync(id)
-    showToast('Product duplicated, update its SKU and details.', 'success')
+    try {
+      await duplicateProduct.mutateAsync(id)
+      showToast('Product duplicated, update its SKU and details.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not duplicate this product.')
+    }
   }
 
   return (
@@ -240,8 +242,12 @@ export function ProductsListPage() {
                       label="Archive"
                       tone="danger"
                       onClick={async () => {
-                        await archiveProduct.mutateAsync(product.id)
-                        showToast('Product archived.', 'success')
+                        try {
+                          await archiveProduct.mutateAsync(product.id)
+                          showToast('Product archived.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not archive this product.')
+                        }
                       }}
                     />
                   ) : (
@@ -250,8 +256,12 @@ export function ProductsListPage() {
                       label="Reactivate"
                       tone="success"
                       onClick={async () => {
-                        await reactivateProduct.mutateAsync(product.id)
-                        showToast('Product reactivated.', 'success')
+                        try {
+                          await reactivateProduct.mutateAsync(product.id)
+                          showToast('Product reactivated.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not reactivate this product.')
+                        }
                       }}
                     />
                   )}
@@ -265,7 +275,6 @@ export function ProductsListPage() {
       {isAddOpen && (
         <AddProductWizard
           categories={categoriesQuery.data ?? []}
-          brands={brandsQuery.data ?? []}
           units={unitsQuery.data ?? []}
           suppliers={suppliersQuery.data ?? []}
           userId={user.id}

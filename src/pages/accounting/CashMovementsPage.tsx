@@ -123,8 +123,12 @@ export function CashMovementsPage() {
           <Button
             variant="secondary"
             onClick={async () => {
-              await saveSettings.mutateAsync({ openingCashUgx: openingCash, openingBankBalanceUgx: settingsQuery.data?.openingBankBalanceUgx ?? 0 })
-              showToast('Opening cash saved.', 'success')
+              try {
+                await saveSettings.mutateAsync({ openingCashUgx: openingCash, openingBankBalanceUgx: settingsQuery.data?.openingBankBalanceUgx ?? 0 })
+                showToast('Opening cash saved.', 'success')
+              } catch (err) {
+                showToast(err instanceof Error ? err.message : 'Could not save opening cash.')
+              }
             }}
           >
             Save

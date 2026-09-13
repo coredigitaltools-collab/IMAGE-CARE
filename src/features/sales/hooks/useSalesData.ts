@@ -67,13 +67,20 @@ export function useCustomers() {
   return useQuery({
     queryKey: ['sales', 'customers', ctx.business_id],
     queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = (await listCustomers(ctx).then(unwrap)) as any[];
-      // Best-effort: the customer list itself must still render even if
-      // this second, loyalty-specific read fails for any reason.
-      const accounts: Array<{ customer_id: string; points_balance: number }> = await listLoyaltyAccountsReal(ctx, { is_active: true })
-        .then((r) => (r.error ? [] : r.data ?? []))
-        .catch(() => []);
+      // Perf fix (2026-09-12): these two reads don't depend on each other
+      // (the loyalty lookup doesn't need the customer rows first) - they
+      // were being awaited one after another, adding a full extra network
+      // round trip to every customer-list load. Running them together
+      // halves the wait without changing what's returned.
+      const [rows, accounts] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listCustomers(ctx).then(unwrap) as Promise<any[]>,
+        // Best-effort: the customer list itself must still render even if
+        // this second, loyalty-specific read fails for any reason.
+        listLoyaltyAccountsReal(ctx, { is_active: true })
+          .then((r) => (r.error ? [] : r.data ?? []))
+          .catch(() => [] as Array<{ customer_id: string; points_balance: number }>),
+      ]);
       const pointsByCustomer = new Map<string, number>(accounts.map((a): [string, number] => [a.customer_id, a.points_balance]));
       return rows.map((c) => mapCustomer(c, pointsByCustomer.get(c.id) ?? 0));
     },
@@ -252,10 +259,14 @@ export function useParkedSales(options?: { branchId?: UUID | null }) {
   const branchId = options?.branchId ?? null;
   return useQuery({
     queryKey: ['sales', 'parked', ctx.business_id, branchId],
-    queryFn: async () => {
-      const all = await listSales(ctx, branchId ? { branch_id: branchId } : {}).then(unwrap);
-      return (Array.isArray(all) ? all : []).filter((s: { status: string }) => s.status === 'draft');
-    },
+    // Perf fix (2026-09-12): this used to fetch the SAME rows as
+    // useSales() (every sale for this branch, status filter applied only
+    // client-side afterward) - on a page like the till that mounts both
+    // hooks together, that was two separate full network requests for
+    // overlapping data. listSales() already supports a `status` filter
+    // server-side (see SaleFilter.status in salesService.ts) - passing it
+    // here means the parked-sales request only ever asks for draft rows.
+    queryFn: () => listSales(ctx, { ...(branchId ? { branch_id: branchId } : {}), status: 'draft' }).then(unwrap),
   });
 }
 
@@ -315,15 +326,32 @@ export function useCheckout(_userId?: string) {
       // completed sales" / "only registered customers earn points."
       // Best-effort: a loyalty hiccup must never undo or block a sale
       // that has already been recorded and paid for.
+      //
+      // Perf fix (2026-09-12): this used to be `await`ed here, so the
+      // cashier's "sale complete" feedback (the toast + modal close in
+      // PointOfSalePage.handleComplete) waited on a full extra network
+      // round trip (loyalty settings + the award RPC) on top of the sale
+      // itself - even though the comment above already says this must
+      // never block anything. Firing it without awaiting matches that
+      // documented intent: the sale is already durably recorded by this
+      // point, so the cashier sees confirmation immediately, and the
+      // award still happens moments later (with its own cache refresh so
+      // the points show up without a manual reload).
       if (input.status === 'completed' && input.customerId && sale?.sale_id) {
-        try {
-          const settings = await getLoyaltySettings();
-          const amountUgx = typeof sale.total_amount === 'number' && sale.total_amount > 0 ? sale.total_amount : total;
-          await awardLoyaltyPoints(saleCtx, input.customerId as UUID, sale.sale_id as UUID, amountUgx, settings.ugxPerPoint);
-        } catch {
-          // Sale already succeeded; the loyalty award can be retried by
-          // support if needed, it must not surface as a checkout failure.
-        }
+        const customerId = input.customerId as UUID;
+        const saleId = sale.sale_id as UUID;
+        const amountUgx = typeof sale.total_amount === 'number' && sale.total_amount > 0 ? sale.total_amount : total;
+        void (async () => {
+          try {
+            const settings = await getLoyaltySettings();
+            await awardLoyaltyPoints(saleCtx, customerId, saleId, amountUgx, settings.ugxPerPoint);
+            qc.invalidateQueries({ queryKey: ['loyalty'] });
+            qc.invalidateQueries({ queryKey: ['sales', 'customers'] });
+          } catch {
+            // Sale already succeeded; the loyalty award can be retried by
+            // support if needed, it must not surface as a checkout failure.
+          }
+        })();
       }
 
       return sale;
@@ -339,12 +367,14 @@ export function useCheckout(_userId?: string) {
       // not immediately. Needed now that Complete Sale navigates straight
       // to the Dashboard to show the sale that was just recorded.
       qc.invalidateQueries({ queryKey: ['recent-sales'] });
-      // 2026-09-05: a completed sale can now award real loyalty points -
-      // refresh the Loyalty pages and the customer list (loyaltyPoints)
-      // so the award is visible without a manual refresh.
-      qc.invalidateQueries({ queryKey: ['loyalty'] });
-      qc.invalidateQueries({ queryKey: ['sales', 'customers'] });
-      qc.invalidateQueries({ queryKey: ['sales', 'crm-kpis'] });
+      // 2026-09-05: a completed sale can now award real loyalty points.
+      // Perf fix (2026-09-12): the loyalty award itself is now
+      // fire-and-forget (see above) and refreshes ['loyalty']/
+      // ['sales','customers'] itself once it actually completes. The
+      // plain `qc.invalidateQueries({queryKey:['sales']})` above already
+      // matches every key with that prefix (including 'sales','customers'
+      // and 'sales','crm-kpis'), so the two calls that used to be here
+      // were invalidating nothing new - removed as dead weight.
     },
   });
 }

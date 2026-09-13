@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useUserContext, useActiveBranch } from '../../../context/AppContext'
 import { getDashboardKPIs, getCashPosition, getStockSummary } from '../../../services/reporting/reportingService'
 import { listCashTransactions } from '../../../services/financial/financialServices'
@@ -73,27 +73,49 @@ export interface DailyInventorySnapshot {
 // Real, Supabase-backed hooks
 // ---------------------------------------------------------------------------
 
+// Perf fix (2026-09-12): useDailyFinancials and useDailySalesSummary both
+// call getDashboardKPIs() with identical (ctx, branch, {from,to}) args -
+// DailyReportPage mounts both together, so this same fairly expensive
+// KPI computation (several joined Supabase reads) used to fire twice on
+// every visit, under two different query keys React Query had no way to
+// know were the same underlying data. Routing both through one shared
+// `qc.fetchQuery` key means the second caller reuses the first's
+// in-flight/cached result instead of re-running the whole thing.
+// Returns a lazy fetcher (not a Promise) so `qc.fetchQuery` only actually
+// runs when the caller's own `useQuery` queryFn invokes it - not on every
+// render of this hook.
+function useDashboardKpisForDayFetcher(dateStr: string) {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  const branch = useActiveBranch()
+  return () => {
+    const { from, to } = dayRange(dateStr)
+    return qc.fetchQuery({
+      queryKey: ['daily-summary', 'kpis', dateStr, ctx.business_id, branch],
+      queryFn: () => getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap) as Promise<DashboardKPIs>,
+      staleTime: 30_000,
+    })
+  }
+}
+
 export function useDailyFinancials(dateStr: string) {
   const ctx = useUserContext()
   const branch = useActiveBranch()
+  const fetchKpis = useDashboardKpisForDayFetcher(dateStr)
   return useQuery({
     queryKey: ['daily-summary', 'financials', dateStr, ctx.business_id, branch],
-    queryFn: async (): Promise<FinancialSummary> => {
-      const { from, to } = dayRange(dateStr)
-      const kpis = (await getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap)) as DashboardKPIs
-      return mapKpisToFinancials(kpis)
-    },
+    queryFn: async (): Promise<FinancialSummary> => mapKpisToFinancials(await fetchKpis()),
   })
 }
 
 export function useDailySalesSummary(dateStr: string) {
   const ctx = useUserContext()
   const branch = useActiveBranch()
+  const fetchKpis = useDashboardKpisForDayFetcher(dateStr)
   return useQuery({
     queryKey: ['daily-summary', 'sales', dateStr, ctx.business_id, branch],
     queryFn: async (): Promise<DailySalesSummary> => {
-      const { from, to } = dayRange(dateStr)
-      const kpis = (await getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap)) as DashboardKPIs
+      const kpis = await fetchKpis()
       return {
         totalSalesUgx: kpis.revenue,
         transactionCount: kpis.sale_count,

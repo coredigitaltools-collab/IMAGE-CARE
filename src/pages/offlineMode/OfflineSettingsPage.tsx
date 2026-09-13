@@ -70,8 +70,12 @@ export function OfflineSettingsPage() {
           </div>
           <Button
             onClick={async () => {
-              await saveSettings.mutateAsync({ autoSyncEnabled, autoSyncIntervalMinutes: intervalMinutes })
-              showToast('Offline settings saved.', 'success')
+              try {
+                await saveSettings.mutateAsync({ autoSyncEnabled, autoSyncIntervalMinutes: intervalMinutes })
+                showToast('Offline settings saved.', 'success')
+              } catch (err) {
+                showToast(err instanceof Error ? err.message : 'Could not save offline settings.')
+              }
             }}
           >
             Save settings
@@ -105,8 +109,12 @@ export function OfflineSettingsPage() {
               <Button
                 variant="secondary"
                 onClick={async () => {
-                  const count = await encryptRemaining.mutateAsync()
-                  showToast(`Encrypted ${count} record${count === 1 ? '' : 's'}.`, 'success')
+                  try {
+                    const count = await encryptRemaining.mutateAsync()
+                    showToast(`Encrypted ${count} record${count === 1 ? '' : 's'}.`, 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not encrypt existing data.')
+                  }
                 }}
               >
                 Encrypt existing data now

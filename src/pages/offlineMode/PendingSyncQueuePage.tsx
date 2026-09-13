@@ -31,8 +31,15 @@ export function PendingSyncQueuePage() {
         <Button
           disabled={items.length === 0}
           onClick={async () => {
-            const result = await performSync.mutateAsync()
-            showToast(`Synced ${result.itemCount} item${result.itemCount === 1 ? '' : 's'}.`, 'success')
+            // Bug fix (2026-09-13): no try/catch meant a failed sync was a
+            // silent unhandled promise rejection - see
+            // loyalty-buttons-silent-failure-fix-2026-09-13.md.
+            try {
+              const result = await performSync.mutateAsync()
+              showToast(`Synced ${result.itemCount} item${result.itemCount === 1 ? '' : 's'}.`, 'success')
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not sync now.')
+            }
           }}
         >
           <RefreshCw size={14} /> Sync now

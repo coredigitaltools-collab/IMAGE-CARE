@@ -72,8 +72,6 @@ export async function getDashboardKPIs(
       .gte('sale_date', from)
       .lte('sale_date', to);
     if (branchId) saleQuery = saleQuery.eq('branch_id', branchId);
-    const { count: saleCount, error: saleErr } = await saleQuery;
-    if (saleErr) return fail(parseError(saleErr));
 
     // Revenue/COGS/expenses/payroll all come from posted journal entries
     // in the period - the same source of truth getPLSummary() below uses.
@@ -84,8 +82,35 @@ export async function getDashboardKPIs(
       .gte('entry_date', from)
       .lte('entry_date', to);
     if (branchId) jeQuery = jeQuery.eq('branch_id', branchId);
-    const { data: entries, error: jeErr } = await jeQuery;
+
+    let creditQuery = supabase.schema('imagecare').from('credit_accounts')
+      .select('current_balance')
+      .eq('business_id', ctx.business_id)
+      .eq('is_active', true)
+      .is('deleted_at', null);
+    if (branchId) creditQuery = creditQuery.eq('branch_id', branchId);
+
+    // Perf fix (2026-09-12): sale count, journal entries for the period,
+    // credit outstanding, and cash position are four independent reads -
+    // none needs another's result (only `journal_lines` below depends on
+    // `jeQuery`'s ids) - but were being awaited one after another. This
+    // function backs every dashboard/report page's KPI tiles and is
+    // called repeatedly (see the daily/monthly/annual summary hooks), so
+    // the ~3 round trips saved here compound across the app.
+    const [
+      { count: saleCount, error: saleErr },
+      { data: entries, error: jeErr },
+      { data: creditRows, error: creditErr },
+      cashPosResult,
+    ] = await Promise.all([
+      saleQuery,
+      jeQuery,
+      creditQuery,
+      getCashPosition(ctx, branchId),
+    ]);
+    if (saleErr) return fail(parseError(saleErr));
     if (jeErr) return fail(parseError(jeErr));
+    if (creditErr) return fail(parseError(creditErr));
 
     const entryIds = (entries ?? []).map((e) => e.id as string);
     let revenue = 0, cogs = 0, expenses = 0, payroll = 0;
@@ -113,17 +138,8 @@ export async function getDashboardKPIs(
     // Cash in hand and credit outstanding are running balances "as of now",
     // not scoped to the requested date range - see useDailySummaryData.ts's
     // useDailyCashSummary: "Cash in Hand is independent of Profit".
-    const cashPosResult = await getCashPosition(ctx, branchId);
+    // (cashPosResult/creditRows already fetched in parallel above.)
     const cashInHand = cashPosResult.success ? cashPosResult.data!.net_position : 0;
-
-    let creditQuery = supabase.schema('imagecare').from('credit_accounts')
-      .select('current_balance')
-      .eq('business_id', ctx.business_id)
-      .eq('is_active', true)
-      .is('deleted_at', null);
-    if (branchId) creditQuery = creditQuery.eq('branch_id', branchId);
-    const { data: creditRows, error: creditErr } = await creditQuery;
-    if (creditErr) return fail(parseError(creditErr));
     const creditOutstanding = (creditRows ?? []).reduce((s, r) => s + Number((r as { current_balance: number }).current_balance ?? 0), 0);
 
     const kpis: DashboardKPIs = {

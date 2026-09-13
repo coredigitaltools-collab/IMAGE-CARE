@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { NumberField } from '../ui/NumberField'
+import { useToast } from '../ui/toastContext'
 import { formatCurrency } from '../../lib/format'
 import { PayComponentTypeFormModal } from './PayComponentTypeFormModal'
 import { useCreateComponentType } from '../../features/payroll/hooks/usePayrollData'
@@ -17,6 +18,7 @@ interface AssignComponentModalProps {
 
 export function AssignComponentModal({ kind, availableTypes, userId, onClose, onSubmit }: AssignComponentModalProps) {
   const createType = useCreateComponentType(userId)
+  const { showToast } = useToast()
   const [componentTypeId, setComponentTypeId] = useState(availableTypes[0]?.id ?? '')
   const [useOverride, setUseOverride] = useState(false)
   const [overrideAmount, setOverrideAmount] = useState(0)
@@ -51,9 +53,13 @@ export function AssignComponentModal({ kind, availableTypes, userId, onClose, on
           }
         }}
         onSubmit={async (input) => {
-          const created = await createType.mutateAsync({ kind, input })
-          setComponentTypeId(created.id)
-          setIsCreatingType(false)
+          try {
+            const created = await createType.mutateAsync({ kind, input })
+            setComponentTypeId(created.id)
+            setIsCreatingType(false)
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Could not create this pay component.')
+          }
         }}
       />
     )

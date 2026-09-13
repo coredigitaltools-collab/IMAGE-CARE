@@ -25,8 +25,12 @@ export function BackupRestorePage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
 
   const handleCreateBackup = async () => {
-    await createBackup.mutateAsync()
-    showToast('Backup downloaded.', 'success')
+    try {
+      await createBackup.mutateAsync()
+      showToast('Backup downloaded.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not create the backup.')
+    }
   }
 
   const handleFileSelected = (file: File) => {

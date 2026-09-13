@@ -40,10 +40,31 @@ export function useCreateExpenseCategory(_userId?: string) {
   return useMutation({ mutationFn: (input: { name: string }) => createExpenseCategory(ctx, input.name).then(unwrap), onSuccess: () => qc.invalidateQueries({ queryKey: ['expenses', 'categories'] }) });
 }
 
+// Perf fix (2026-09-12): useExpenses and useExpenseDashboardKpis both call
+// listExpenses(ctx, {branch_id}) with identical args - ExpenseDashboardPage
+// mounts both together, so this fired twice on every visit. A shared
+// `qc.fetchQuery` key means the second caller reuses the first's cached
+// result. Lazy (returns a function, not a Promise) so it only runs when a
+// caller's own queryFn actually invokes it - same pattern used elsewhere in
+// this audit (daily/monthly/annual summaries, credit outstanding).
+function useExpensesListFetcher(branchId?: UUID) {
+  const ctx = useUserContext();
+  const branch = useActiveBranch();
+  const qc = useQueryClient();
+  const scopedBranch = (branchId ?? branch) as string | undefined;
+  return () =>
+    qc.fetchQuery({
+      queryKey: ['expenses', 'list-raw', ctx.business_id, scopedBranch],
+      queryFn: () => listExpenses(ctx, { branch_id: scopedBranch }).then(unwrap),
+      staleTime: 15_000,
+    });
+}
+
 export function useExpenses(branchId?: UUID) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
-  return useQuery({ queryKey: ['expenses', 'list', ctx.business_id, branchId ?? branch], queryFn: () => listExpenses(ctx, { branch_id: (branchId ?? branch) as string | undefined }).then(unwrap) });
+  const fetchExpenses = useExpensesListFetcher(branchId);
+  return useQuery({ queryKey: ['expenses', 'list', ctx.business_id, branchId ?? branch], queryFn: () => fetchExpenses() });
 }
 
 export function useCreateExpense(_userId?: string) {
@@ -68,10 +89,11 @@ export function useCreateExpense(_userId?: string) {
 export function useExpenseDashboardKpis(branchId?: UUID) {
   const ctx = useUserContext();
   const branch = useActiveBranch();
+  const fetchExpenses = useExpensesListFetcher(branchId);
   return useQuery({
     queryKey: ['expenses', 'kpis', ctx.business_id, branchId ?? branch],
     queryFn: async () => {
-      const expenses = await listExpenses(ctx, { branch_id: (branchId ?? branch) as string | undefined }).then(unwrap);
+      const expenses = await fetchExpenses();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items = Array.isArray(expenses) ? expenses as any[] : [];
       const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();

@@ -13,13 +13,11 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { BarcodeDisplay } from '../../components/inventory/BarcodeDisplay'
 import { CategoryQuickSelect } from '../../components/inventory/CategoryQuickSelect'
-import { BrandQuickSelect } from '../../components/inventory/BrandQuickSelect'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
 import {
   useArchiveProduct,
-  useBrands,
   useCategories,
   useDuplicateProduct,
   useProduct,
@@ -42,7 +40,6 @@ const generalSchema = z.object({
   sku: z.string().trim().min(1, 'SKU is required.'),
   barcode: z.string().trim(),
   categoryId: z.string().min(1),
-  brandId: z.string(),
   unitId: z.string().min(1),
   description: z.string(),
 })
@@ -62,7 +59,6 @@ export function ProductDetailPage() {
 
   const productQuery = useProduct(id)
   const categoriesQuery = useCategories()
-  const brandsQuery = useBrands()
   const suppliersQuery = useSuppliers()
   const movementsQuery = useStockMovements(id)
   const updateProduct = useUpdateProduct(user.id)
@@ -122,7 +118,6 @@ export function ProductDetailPage() {
           sku: product.sku,
           barcode: product.barcode,
           categoryId: product.categoryId,
-          brandId: product.brandId ?? '',
           unitId: product.unitId,
           description: product.description,
         }
@@ -140,6 +135,22 @@ export function ProductDetailPage() {
   useState(() => {
     if (product) setNotes(product.notes)
   })
+
+  // Feature (2026-09-12, requested): the Supplier tab used to be read-only -
+  // its own empty state said "Edit this product to link a supplier," but no
+  // working edit path for supplierId actually existed anywhere (the General
+  // tab's form here never included it, and the standalone edit-product
+  // modal that did isn't wired up/used anywhere in the app), so a product
+  // added without a supplier could never get one afterwards. This lets the
+  // supplier be set (or changed later) directly from this tab, going
+  // through the same updateProduct() + buildInput() path every other field
+  // on this page already saves through - no new service/engine code, no
+  // change to how supplier_id is stored (still inside products.metadata,
+  // per masterDataService.ts's toProductRow). Declared here, above the
+  // early returns below, since hooks must run in the same order on every
+  // render.
+  const [isEditingSupplier, setIsEditingSupplier] = useState(false)
+  const [supplierSelection, setSupplierSelection] = useState('')
 
   if (productQuery.isLoading) {
     return (
@@ -164,7 +175,6 @@ export function ProductDetailPage() {
     barcode: product.barcode,
     imageDataUrl: product.imageDataUrl,
     categoryId: product.categoryId,
-    brandId: product.brandId,
     unitId: product.unitId,
     supplierId: product.supplierId,
     description: product.description,
@@ -188,16 +198,39 @@ export function ProductDetailPage() {
   })
 
   const savePricing = pricingForm.handleSubmit(async (values) => {
-    await updateProduct.mutateAsync({ id: product.id, input: buildInput(values) })
-    showToast('Pricing saved.', 'success')
+    try {
+      await updateProduct.mutateAsync({ id: product.id, input: buildInput(values) })
+      showToast('Pricing saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save pricing.')
+    }
   })
 
   const saveNotes = async () => {
-    await updateProduct.mutateAsync({ id: product.id, input: buildInput({ notes }) })
-    showToast('Notes saved.', 'success')
+    try {
+      await updateProduct.mutateAsync({ id: product.id, input: buildInput({ notes }) })
+      showToast('Notes saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save notes.')
+    }
   }
 
   const supplier = suppliersQuery.data?.find((s) => s.id === product.supplierId)
+
+  const startEditingSupplier = () => {
+    setSupplierSelection(product.supplierId ?? '')
+    setIsEditingSupplier(true)
+  }
+
+  const saveSupplier = async () => {
+    try {
+      await updateProduct.mutateAsync({ id: product.id, input: buildInput({ supplierId: supplierSelection || null }) })
+      showToast('Supplier updated.', 'success')
+      setIsEditingSupplier(false)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update supplier.')
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -212,9 +245,13 @@ export function ProductDetailPage() {
             <Button
               variant="secondary"
               onClick={async () => {
-                const copy = await duplicateProduct.mutateAsync(product.id)
-                showToast('Product duplicated.', 'success')
-                navigate(`/inventory/products/${copy.id}`)
+                try {
+                  const copy = await duplicateProduct.mutateAsync(product.id)
+                  showToast('Product duplicated.', 'success')
+                  navigate(`/inventory/products/${copy.id}`)
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not duplicate this product.')
+                }
               }}
             >
               <Copy size={14} /> Duplicate
@@ -223,8 +260,12 @@ export function ProductDetailPage() {
               <Button
                 variant="danger"
                 onClick={async () => {
-                  await archiveProduct.mutateAsync(product.id)
-                  showToast('Product archived.', 'success')
+                  try {
+                    await archiveProduct.mutateAsync(product.id)
+                    showToast('Product archived.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not archive this product.')
+                  }
                 }}
               >
                 <Archive size={14} /> Archive
@@ -232,8 +273,12 @@ export function ProductDetailPage() {
             ) : (
               <Button
                 onClick={async () => {
-                  await reactivateProduct.mutateAsync(product.id)
-                  showToast('Product reactivated.', 'success')
+                  try {
+                    await reactivateProduct.mutateAsync(product.id)
+                    showToast('Product reactivated.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not reactivate this product.')
+                  }
                 }}
               >
                 <ArchiveRestore size={14} /> Reactivate
@@ -298,23 +343,14 @@ export function ProductDetailPage() {
               />
               <p className="mt-1 text-xs text-ink-500">For scanning at checkout and printing barcode labels.</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <CategoryQuickSelect
-                id="pd-category"
-                categories={categoriesQuery.data ?? []}
-                value={generalForm.watch('categoryId')}
-                onChange={(id) => generalForm.setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
-                userId={user.id}
-                error={generalForm.formState.errors.categoryId?.message}
-              />
-              <BrandQuickSelect
-                id="pd-brand"
-                brands={brandsQuery.data ?? []}
-                value={generalForm.watch('brandId')}
-                onChange={(id) => generalForm.setValue('brandId', id, { shouldValidate: true, shouldDirty: true })}
-                userId={user.id}
-              />
-            </div>
+            <CategoryQuickSelect
+              id="pd-category"
+              categories={categoriesQuery.data ?? []}
+              value={generalForm.watch('categoryId')}
+              onChange={(id) => generalForm.setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
+              userId={user.id}
+              error={generalForm.formState.errors.categoryId?.message}
+            />
             <div>
               <label htmlFor="pd-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description</label>
               <textarea
@@ -478,18 +514,57 @@ export function ProductDetailPage() {
 
       {tab === 'Supplier' && (
         <Card className="p-5">
-          {supplier ? (
+          {isEditingSupplier ? (
             <div>
-              <p className="text-sm font-medium text-ink-900">{supplier.name}</p>
-              <p className="mt-1 text-xs text-ink-500">
-                {supplier.contactName} · {supplier.phone} · {supplier.email}
-              </p>
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
-                <TruckIcon size={12} /> {supplier.address}
-              </p>
+              <label htmlFor="pd-supplier" className="mb-1.5 block text-sm font-medium text-ink-700">
+                Supplier
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id="pd-supplier"
+                  value={supplierSelection}
+                  onChange={(e) => setSupplierSelection(e.target.value)}
+                  className="w-full rounded-md border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 shadow-card hover:border-ink-300 focus:border-brand-blue-500"
+                >
+                  <option value="">None</option>
+                  {(suppliersQuery.data ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <Button onClick={saveSupplier} disabled={updateProduct.isPending}>
+                  {updateProduct.isPending ? 'Saving…' : 'Save'}
+                </Button>
+                <Button variant="secondary" onClick={() => setIsEditingSupplier(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : supplier ? (
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-ink-900">{supplier.name}</p>
+                  <p className="mt-1 text-xs text-ink-500">
+                    {supplier.contactName} · {supplier.phone} · {supplier.email}
+                  </p>
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-500">
+                    <TruckIcon size={12} /> {supplier.address}
+                  </p>
+                </div>
+                <Button variant="secondary" onClick={startEditingSupplier}>
+                  Change
+                </Button>
+              </div>
             </div>
           ) : (
-            <EmptyState icon={TruckIcon} title="No supplier linked" description="Edit this product to link a supplier." />
+            <EmptyState
+              icon={TruckIcon}
+              title="No supplier linked"
+              description="Choose a supplier for this product."
+              action={{ label: 'Link a supplier', onClick: startEditingSupplier }}
+            />
           )}
         </Card>
       )}

@@ -44,8 +44,12 @@ export function CashFlowSettingsPage() {
           <div className="flex justify-end pt-3">
             <Button
               onClick={async () => {
-                await saveSettings.mutateAsync({ openingCashUgx: openingCash, openingBankBalanceUgx: openingBank })
-                showToast('Cash settings saved.', 'success')
+                try {
+                  await saveSettings.mutateAsync({ openingCashUgx: openingCash, openingBankBalanceUgx: openingBank })
+                  showToast('Cash settings saved.', 'success')
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not save cash settings.')
+                }
               }}
             >
               Save settings

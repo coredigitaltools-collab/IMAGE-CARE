@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, ShoppingCart, Pencil, Trash2 } from 'lucide-react'
 import { Breadcrumb } from '../../components/ui/Breadcrumb'
 import { PurchasingTabs } from '../../components/purchasing/PurchasingTabs'
@@ -37,7 +37,17 @@ export function PurchaseOrdersPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const ordersQuery = usePurchaseOrders()
-  const productsQuery = useProducts()
+  // Moved up from further down this component (2026-09-12) so it's
+  // available to productsQuery's `enabled:` gate just below - purely a
+  // declaration-order change, the state itself is unchanged.
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null)
+  // Perf fix (2026-09-12): the product catalog (full products list + a
+  // 500-row stock join, see useProducts()) is only ever used to populate
+  // the Add/Edit order modal's product picker - not by the always-visible
+  // orders table - so it doesn't need to load until one of those modals
+  // is actually open.
+  const productsQuery = useProducts(undefined, { enabled: isAddOpen || Boolean(editingOrder) })
   const suppliersQuery = useSuppliers()
   const createOrder = useCreatePurchaseOrder(user.id)
   const updateDraftOrder = useUpdatePurchaseOrder(user.id)
@@ -54,15 +64,25 @@ export function PurchaseOrdersPage() {
   // 'approved'/'sent'/'partially_received' never occur and are correctly
   // left out here rather than added as unused/misleading options). This
   // does not touch the PO workflow itself - no approval stage is added.
-  const [statusFilter, setStatusFilter] = useState<'all' | PurchaseOrder['status']>('all')
-  const [isAddOpen, setIsAddOpen] = useState(false)
+  // Deep-link support (2026-09-11, "Pending Receipt card doesn't
+  // navigate"): the Purchasing dashboard's "Pending receipt" KPI card now
+  // links here as `?status=draft`, same `?q=`-style pattern already used
+  // for Expense Categories -> Register. Falls back to 'all' for a missing/
+  // unrecognized value, so a bare visit to this page is unaffected.
+  const [searchParams] = useSearchParams()
+  const initialStatus = searchParams.get('status')
+  const [statusFilter, setStatusFilter] = useState<'all' | PurchaseOrder['status']>(
+    initialStatus === 'draft' || initialStatus === 'received' || initialStatus === 'cancelled' || initialStatus === 'voided'
+      ? initialStatus
+      : 'all',
+  )
+  // (isAddOpen/editingOrder declared earlier, above productsQuery)
   // Edit/Delete support (2026-09-03, "edit/delete a purchase order"
   // correction flow - see PurchaseOrderFormModal's initialValues prop and
   // cancelPurchaseOrder()/voidPurchase() in the service/engine layers).
   // Only a still-Draft or Confirmed order can be edited/deleted - a
   // Cancelled or Voided order is already a terminal, resolved state with
   // nothing left to act on.
-  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null)
   const [deletingOrder, setDeletingOrder] = useState<PurchaseOrder | null>(null)
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
@@ -196,9 +216,13 @@ export function PurchaseOrdersPage() {
           products={activeProducts}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createOrder.mutateAsync(input)
-            showToast('Purchase order recorded and confirmed.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createOrder.mutateAsync(input)
+              showToast('Purchase order recorded and confirmed.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not record this purchase order.')
+            }
           }}
         />
       )}
@@ -222,14 +246,18 @@ export function PurchaseOrdersPage() {
           }}
           onClose={() => setEditingOrder(null)}
           onSubmit={async (input) => {
-            if (editingOrder.status === 'draft') {
-              await updateDraftOrder.mutateAsync({ id: editingOrder.id, input })
-              showToast('Draft order updated.', 'success')
-            } else {
-              await editConfirmedOrder.mutateAsync({ id: editingOrder.id, input })
-              showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+            try {
+              if (editingOrder.status === 'draft') {
+                await updateDraftOrder.mutateAsync({ id: editingOrder.id, input })
+                showToast('Draft order updated.', 'success')
+              } else {
+                await editConfirmedOrder.mutateAsync({ id: editingOrder.id, input })
+                showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+              }
+              setEditingOrder(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this purchase order.')
             }
-            setEditingOrder(null)
           }}
         />
       )}

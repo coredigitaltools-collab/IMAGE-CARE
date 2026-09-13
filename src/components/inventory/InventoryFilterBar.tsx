@@ -1,11 +1,10 @@
-import type { Brand, Category, Supplier } from '../../types/inventory'
+import type { Category, Supplier } from '../../types/inventory'
 import type { Branch } from '../../types/domain'
 import { EMPTY_FILTERS, type InventoryFilters } from './inventoryFilters'
 
 interface InventoryFilterBarProps {
   categories: Category[]
   suppliers: Supplier[]
-  brands: Brand[]
   branches: Branch[]
   filters: InventoryFilters
   onChange: (filters: InventoryFilters) => void
@@ -14,7 +13,7 @@ interface InventoryFilterBarProps {
 const selectClass =
   'rounded-md border border-ink-100 bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-700 shadow-card transition-colors hover:border-ink-300 focus:border-brand-blue-500'
 
-export function InventoryFilterBar({ categories, suppliers, brands, branches, filters, onChange }: InventoryFilterBarProps) {
+export function InventoryFilterBar({ categories, suppliers, branches, filters, onChange }: InventoryFilterBarProps) {
   const set = (key: keyof InventoryFilters) => (e: React.ChangeEvent<HTMLSelectElement>) =>
     onChange({ ...filters, [key]: e.target.value })
 
@@ -36,15 +35,6 @@ export function InventoryFilterBar({ categories, suppliers, brands, branches, fi
         {suppliers.map((s) => (
           <option key={s.id} value={s.id}>
             {s.name}
-          </option>
-        ))}
-      </select>
-
-      <select value={filters.brandId} onChange={set('brandId')} className={selectClass} aria-label="Filter by brand">
-        <option value="all">All brands</option>
-        {brands.filter((b) => b.is_active).map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name}
           </option>
         ))}
       </select>

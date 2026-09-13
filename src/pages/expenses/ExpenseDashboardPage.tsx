@@ -87,14 +87,18 @@ export function ExpenseDashboardPage() {
           categories={activeCategories}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input: ExpenseFormValues) => {
-            await createExpense.mutateAsync({
-              category: input.category,
-              description: input.description,
-              amount: input.amount,
-              expenseDate: input.expenseDate,
-            })
-            showToast('Expense recorded.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createExpense.mutateAsync({
+                category: input.category,
+                description: input.description,
+                amount: input.amount,
+                expenseDate: input.expenseDate,
+              })
+              showToast('Expense recorded.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not add this expense.')
+            }
           }}
         />
       )}

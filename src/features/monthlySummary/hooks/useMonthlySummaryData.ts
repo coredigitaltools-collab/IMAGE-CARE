@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useUserContext, useActiveBranch } from '../../../context/AppContext'
 import {
   getDashboardKPIs,
@@ -79,16 +79,34 @@ function mapFinancialSummary(kpis: DashboardKPIs): FinancialSummary {
 // invoices, nothing here has a real-backend gap.
 // ---------------------------------------------------------------------------
 
+// Perf fix (2026-09-12): useMonthlyFinancials and useMonthlySalesSummary
+// both call getDashboardKPIs() with identical (ctx, branch, {from,to})
+// args - MonthlyReportPage mounts both together, so this fairly
+// expensive KPI computation used to fire twice on every visit. A shared
+// `qc.fetchQuery` key means the second caller reuses the first's cached
+// result. Lazy (returns a function, not a Promise) so it only runs when
+// a caller's own queryFn actually invokes it.
+function useDashboardKpisForMonthFetcher(monthStr: string) {
+  const ctx = useUserContext()
+  const qc = useQueryClient()
+  const branch = useActiveBranch()
+  return () => {
+    const { from, to } = monthRangeIso(monthStr)
+    return qc.fetchQuery({
+      queryKey: ['monthly-summary', 'kpis', monthStr, ctx.business_id, branch],
+      queryFn: () => getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap) as Promise<DashboardKPIs>,
+      staleTime: 30_000,
+    })
+  }
+}
+
 export function useMonthlyFinancials(monthStr: string) {
   const ctx = useUserContext()
   const branch = useActiveBranch()
+  const fetchKpis = useDashboardKpisForMonthFetcher(monthStr)
   return useQuery({
     queryKey: ['monthly-summary', 'financials', monthStr, ctx.business_id, branch],
-    queryFn: async (): Promise<FinancialSummary> => {
-      const { from, to } = monthRangeIso(monthStr)
-      const kpis = (await getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap)) as DashboardKPIs
-      return mapFinancialSummary(kpis)
-    },
+    queryFn: async (): Promise<FinancialSummary> => mapFinancialSummary(await fetchKpis()),
   })
 }
 
@@ -107,12 +125,13 @@ export function useMonthlyFinancials(monthStr: string) {
 export function useMonthlySalesSummary(monthStr: string) {
   const ctx = useUserContext()
   const branch = useActiveBranch()
+  const fetchKpis = useDashboardKpisForMonthFetcher(monthStr)
   return useQuery({
     queryKey: ['monthly-summary', 'sales', monthStr, ctx.business_id, branch],
     queryFn: async (): Promise<MonthlySalesSummary> => {
       const { from, to } = monthRangeIso(monthStr)
       const [kpis, topRows] = await Promise.all([
-        getDashboardKPIs(ctx, branch ?? undefined, { from, to }).then(unwrap) as Promise<DashboardKPIs>,
+        fetchKpis(),
         // Same top-5 cutoff the old local implementation used (slice(0, 5)).
         getTopProducts(ctx, { from_date: from, to_date: to, limit: 5, branch_id: branch ?? undefined }).then(unwrap) as Promise<RealTopProductRow[]>,
       ])

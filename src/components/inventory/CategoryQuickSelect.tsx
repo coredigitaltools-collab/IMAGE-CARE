@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCreateCategory } from '../../features/inventory/hooks/useInventoryData'
+import { useToast } from '../ui/toastContext'
 import type { Category } from '../../types/inventory'
 
 const CREATE_NEW_VALUE = '__create_new__'
@@ -20,6 +21,7 @@ interface CategoryQuickSelectProps {
  *  same service Settings → Categories uses) and selects it immediately. */
 export function CategoryQuickSelect({ id, categories, value, onChange, userId, error }: CategoryQuickSelectProps) {
   const createCategory = useCreateCategory(userId)
+  const { showToast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -32,12 +34,20 @@ export function CategoryQuickSelect({ id, categories, value, onChange, userId, e
     }
   }
 
+  // Bug fix (2026-09-12), same class of issue as BrandQuickSelect.tsx's
+  // "add brand button does not work" report: no try/catch meant a failed
+  // create here was a silent unhandled rejection - the "Add" button would
+  // appear to do nothing at all instead of showing what went wrong.
   const confirmCreate = async () => {
     const name = newName.trim()
     if (!name) return
-    const category = await createCategory.mutateAsync({ name })
-    setIsCreating(false)
-    onChange(category.id)
+    try {
+      const category = await createCategory.mutateAsync({ name })
+      setIsCreating(false)
+      onChange(category.id)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this category.')
+    }
   }
 
   if (isCreating) {

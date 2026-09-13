@@ -147,9 +147,19 @@ export class InventoryEngine {
   // ---- receiveFromPurchase --------------------------------
   // Records stock-in movements for all items on a purchase.
 
+  // Perf fix (2026-09-12): `branchId` is now a required parameter instead
+  // of being re-read from the `purchases` table inside this function.
+  // Its one real caller, purchasingEngine.receiveStock(), already loads
+  // the full purchase row (including branch_id) itself a moment earlier
+  // - to check the purchase is still 'draft' before receiving it, a real
+  // correctness guard that has to stay a live query - so re-querying just
+  // branch_id here was a second, avoidable round trip for a value the
+  // caller already had in hand. See claude/system-wide-performance-
+  // optimization-2026-09-12.md.
   async receiveFromPurchase(
     ctx: EngineContext,
     purchaseId: UUID,
+    branchId: UUID,
   ): Promise<EngineResult<{ movements: UUID[] }>> {
     // 2026-09-01: 'purchase_items' has two FKs into 'products' (the
     // real one, purchase_items_product_id_fkey, plus a legacy composite
@@ -164,16 +174,6 @@ export class InventoryEngine {
 
     if (error) {
       return engineFail(makeError('DATABASE_ERROR', 'Failed to load purchase items.', error.message));
-    }
-
-    const { data: purchase } = await db.purchases()
-      
-      .select('branch_id')
-      .eq('id', purchaseId)
-      .single();
-
-    if (!purchase) {
-      return engineFail(makeError('RECORD_NOT_FOUND', 'Purchase not found.'));
     }
 
     // Perf fix (2026-09-06, "the system is slow"): each line's movement
@@ -192,7 +192,7 @@ export class InventoryEngine {
     const results = await Promise.all(
       stockableItems.map((item) =>
         this.recordMovement(ctx, {
-          branch_id:      purchase.branch_id,
+          branch_id:      branchId,
           product_id:     item.product_id,
           movement_type:  'purchase',
           quantity:       Number(item.quantity),

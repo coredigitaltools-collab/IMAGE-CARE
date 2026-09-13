@@ -35,9 +35,14 @@ function unwrapArr<T>(r: { data?: T | null; error?: any; success?: boolean }): a
   return d;
 }
 
-export function useBusinessProfile(_userId?: string) {
+// Perf fix (2026-09-12): `options.enabled` lets a caller that only needs
+// this for a conditionally-rendered piece of UI (e.g. PointOfSalePage's
+// receipt modal) defer the fetch until that UI actually needs it, instead
+// of firing on every page mount. Defaults to enabled (unchanged behavior)
+// for every other caller.
+export function useBusinessProfile(_userId?: string, options?: { enabled?: boolean }) {
   const ctx = useUserContext();
-  return useQuery({ queryKey: ['settings', 'business-profile', ctx.business_id], queryFn: () => getBusinessProfile(ctx).then(unwrap) });
+  return useQuery({ queryKey: ['settings', 'business-profile', ctx.business_id], queryFn: () => getBusinessProfile(ctx).then(unwrap), enabled: options?.enabled ?? true });
 }
 
 export function useSaveBusinessProfile(_userId?: string) {
@@ -69,9 +74,12 @@ export function useSetBranchActive(_userId?: string) {
   return useMutation({ mutationFn: ({ id, isActive }: { id: UUID; isActive: boolean }) => updateBranch(ctx, id, { is_active: isActive }).then(unwrap), onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'branches'] }) });
 }
 
-export function useStaff(_userId?: string) {
+// Perf fix (2026-09-12): see useBusinessProfile's `options.enabled` note
+// above - same purpose here (PointOfSalePage only needs the staff list
+// while the Record Sale or Receipt modal is actually open).
+export function useStaff(_userId?: string, options?: { enabled?: boolean }) {
   const ctx = useUserContext();
-  return useQuery({ queryKey: ['settings', 'staff', ctx.business_id], queryFn: () => listStaff(ctx).then(unwrapArr) });
+  return useQuery({ queryKey: ['settings', 'staff', ctx.business_id], queryFn: () => listStaff(ctx).then(unwrapArr), enabled: options?.enabled ?? true });
 }
 
 // Bug fix (2026-09-05): Roles and the Permission Matrix used to be
@@ -140,7 +148,10 @@ export function useTaxRates(_userId?: string) {
 
 const RECEIPT_SETTINGS_DEFAULTS = { id: 'default', business_id: '', created_at: new Date(0).toISOString(), updated_at: new Date(0).toISOString(), created_by: '', updated_by: '', branch_id: null as null, is_active: true, sync_status: 'synced' as const, last_synced_at: null as null, showLogo: true, footerText: '', footerMessage: '', receiptPrefix: 'RCP', showTaxBreakdown: false, showCashierName: true, showCustomerName: true, showPaymentMethod: true, printAutomatically: false };
 
-export function useReceiptSettings(_userId?: string) {
+// Perf fix (2026-09-12): see useBusinessProfile's `options.enabled` note
+// above - PointOfSalePage only needs receipt settings while a receipt is
+// actually being shown.
+export function useReceiptSettings(_userId?: string, options?: { enabled?: boolean }) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['settings', 'receipt', ctx.business_id],
@@ -149,12 +160,16 @@ export function useReceiptSettings(_userId?: string) {
       if (r.error) throw new Error((r.error as { message?: string })?.message ?? 'Failed to load receipt settings.');
       return { ...RECEIPT_SETTINGS_DEFAULTS, ...((r.data as object) ?? {}) };
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
 const SALES_SETTINGS_DEFAULTS = { allowDiscounts: true, maxDiscountPercent: 100, requireCustomerForCredit: false };
 
-export function useSalesSettings(_userId?: string) {
+// Perf fix (2026-09-12): see useBusinessProfile's `options.enabled` note
+// above - PointOfSalePage only needs this while the Record Sale modal
+// (the only place a discount is entered) is actually open.
+export function useSalesSettings(_userId?: string, options?: { enabled?: boolean }) {
   const ctx = useUserContext();
   return useQuery({
     queryKey: ['settings', 'sales', ctx.business_id],
@@ -163,6 +178,7 @@ export function useSalesSettings(_userId?: string) {
       if (r.error) throw new Error((r.error as { message?: string })?.message ?? 'Failed to load sales settings.');
       return { ...SALES_SETTINGS_DEFAULTS, ...((r.data as object) ?? {}) };
     },
+    enabled: options?.enabled ?? true,
   });
 }
 

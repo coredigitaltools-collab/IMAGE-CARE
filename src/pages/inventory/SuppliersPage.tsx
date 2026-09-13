@@ -76,8 +76,12 @@ export function SuppliersPage() {
                   </button>
                   <button
                     onClick={async () => {
-                      await archiveSupplier.mutateAsync(supplier.id)
-                      showToast('Supplier marked inactive.', 'success')
+                      try {
+                        await archiveSupplier.mutateAsync(supplier.id)
+                        showToast('Supplier marked inactive.', 'success')
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : 'Could not deactivate this supplier.')
+                      }
                     }}
                     className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-red-700 hover:bg-brand-red-50"
                   >

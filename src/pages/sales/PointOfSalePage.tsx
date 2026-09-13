@@ -188,10 +188,20 @@ export function PointOfSalePage() {
   const productPickerRef = useRef<ProductPickerHandle>(null)
 
   const [isRecordSaleOpen, setIsRecordSaleOpen] = useState(false)
+  // Moved up from further down this component (2026-09-12) so it's
+  // available to the `enabled:` gating on staffQuery/receiptSettingsQuery/
+  // businessProfileQuery just below - purely a declaration-order change,
+  // the state itself is unchanged.
+  const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [salesPersonId, setSalesPersonId] = useState<string | null>(null)
-  const staffQuery = useStaff()
+  // Perf fix (2026-09-12): staff is only rendered inside the Record Sale
+  // modal's "Sold by" picker and the Receipt modal's cashier name - not
+  // by anything on the always-visible Sales table - so it doesn't need
+  // to load just because this page was opened. `receiptSale` is declared
+  // just above for the same reason (moved up from further down the file).
+  const staffQuery = useStaff(undefined, { enabled: isRecordSaleOpen || Boolean(receiptSale) })
   const branchesQuery = useBranches()
   const [branchId, setBranchId] = useState<string | null>(null)
 
@@ -317,9 +327,15 @@ export function PointOfSalePage() {
   // globalActiveBranch above) instead of always showing every branch's
   // sales together - see claude/pos-staff-permission-enforcement-2026-09-05.md.
   const salesQuery = useSales({ branchId: globalActiveBranch })
-  const salesSettingsQuery = useSalesSettings()
-  const receiptSettingsQuery = useReceiptSettings()
-  const businessProfileQuery = useBusinessProfile()
+  // Perf fix (2026-09-12): sales settings (max discount %) is only read
+  // while the Record Sale modal's discount field is in play - deferred
+  // until that modal is open instead of fetching on every page mount.
+  const salesSettingsQuery = useSalesSettings(undefined, { enabled: isRecordSaleOpen })
+  // Perf fix (2026-09-12): receipt settings/business profile are only
+  // rendered inside the Receipt modal - deferred until a receipt is
+  // actually being shown.
+  const receiptSettingsQuery = useReceiptSettings(undefined, { enabled: Boolean(receiptSale) })
+  const businessProfileQuery = useBusinessProfile(undefined, { enabled: Boolean(receiptSale) })
   const parkedSalesQuery = useParkedSales({ branchId: globalActiveBranch })
 
   const checkout = useCheckout(user.id)
@@ -342,7 +358,6 @@ export function PointOfSalePage() {
   const [amountTendered, setAmountTendered] = useState(0)
   const [paymentReference, setPaymentReference] = useState('')
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
-  const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
   // Completed sale awaiting a Delete confirmation. window.confirm()/
   // window.prompt() can't be relabeled with the business's own name (see
   // ConfirmDialog.tsx) - this branded dialog collects the required
@@ -561,32 +576,42 @@ export function PointOfSalePage() {
   }
 
   const handleResumeParked = async (sale: Sale) => {
-    const resumed = await resumeParked.mutateAsync(sale.id)
-    const items = mapRawSaleItems(resumed.items, productsQuery.data ?? [])
-    setCart(
-      items.map((i) => ({
-        productId: i.productId,
-        productName: i.productName,
-        sku: i.sku,
-        unitPrice: i.unitPrice,
-        // Same fix as addToCart - carry the cost forward when resuming a
-        // held sale instead of dropping it (i.unitCost is whatever was
-        // captured when the sale was parked, 0 for sales parked before
-        // this fix, real cost for anything parked after).
-        costPrice: i.unitCost,
-        quantity: i.quantity,
-        availableStock: productsQuery.data?.find((p) => p.id === i.productId)?.currentStock ?? i.quantity,
-      })),
-    )
-    setDiscountAmount(resumed.discountAmount)
-    setTaxRateId(resumed.taxRateId)
-    setPaymentMethod((resumed.paymentMethod ?? 'cash') as PaymentMethod)
-    if (resumed.customerId) {
-      const cust = customersQuery.data?.find((c) => c.id === resumed.customerId)
-      setSelectedCustomer(cust ?? null)
+    // Bug fix (2026-09-13): no try/catch meant a failed resume (e.g. the
+    // held sale's items reference a product that's since been archived,
+    // or the fetch simply fails) was a silent unhandled promise rejection
+    // - the "Edit" action on a parked sale would appear to do nothing at
+    // all. Same anti-pattern already found and fixed across the rest of
+    // the app - see loyalty-buttons-silent-failure-fix-2026-09-13.md.
+    try {
+      const resumed = await resumeParked.mutateAsync(sale.id)
+      const items = mapRawSaleItems(resumed.items, productsQuery.data ?? [])
+      setCart(
+        items.map((i) => ({
+          productId: i.productId,
+          productName: i.productName,
+          sku: i.sku,
+          unitPrice: i.unitPrice,
+          // Same fix as addToCart - carry the cost forward when resuming a
+          // held sale instead of dropping it (i.unitCost is whatever was
+          // captured when the sale was parked, 0 for sales parked before
+          // this fix, real cost for anything parked after).
+          costPrice: i.unitCost,
+          quantity: i.quantity,
+          availableStock: productsQuery.data?.find((p) => p.id === i.productId)?.currentStock ?? i.quantity,
+        })),
+      )
+      setDiscountAmount(resumed.discountAmount)
+      setTaxRateId(resumed.taxRateId)
+      setPaymentMethod((resumed.paymentMethod ?? 'cash') as PaymentMethod)
+      if (resumed.customerId) {
+        const cust = customersQuery.data?.find((c) => c.id === resumed.customerId)
+        setSelectedCustomer(cust ?? null)
+      }
+      setIsRecordSaleOpen(true)
+      showToast('Held sale resumed.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not resume this held sale.')
     }
-    setIsRecordSaleOpen(true)
-    showToast('Held sale resumed.', 'success')
   }
 
   // 2026-09-01: the main Sales table only ever showed a "View receipt"

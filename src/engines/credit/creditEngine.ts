@@ -155,11 +155,18 @@ export class CreditEngine {
     }
 
     // Post accounting: Dr Cash/Mobile Money/Bank, Cr Accounts Receivable
-    const receivableAcct = await accountingEngine.resolveAccountCode(ctx.business_id, '1200');
     let cashCode = '1100';
     if (cmd.payment_method === 'mobile_money') cashCode = '1120';
     else if (cmd.payment_method === 'bank_transfer' || cmd.payment_method === 'card') cashCode = '1130';
-    const cashAcct = await accountingEngine.resolveAccountCode(ctx.business_id, cashCode);
+    // Perf fix (2026-09-12): these two account-code lookups don't depend
+    // on each other - the same pattern postJournal() itself already
+    // parallelizes (see its own comment) was missed at this call site.
+    // Running them together saves a full network round trip on every
+    // credit payment.
+    const [receivableAcct, cashAcct] = await Promise.all([
+      accountingEngine.resolveAccountCode(ctx.business_id, '1200'),
+      accountingEngine.resolveAccountCode(ctx.business_id, cashCode),
+    ]);
 
     const jeResult = await accountingEngine.postJournal(ctx, {
       branch_id:      branchId,

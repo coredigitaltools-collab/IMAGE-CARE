@@ -57,9 +57,13 @@ export function RecurringExpensesPage() {
         <Button
           variant="secondary"
           onClick={async () => {
-            const result = await generateDue.mutateAsync()
-            if (result.generated === 0) showToast('No recurring expenses are due yet.')
-            else showToast(`Generated ${result.generated} expense(s) as drafts.`, 'success')
+            try {
+              const result = await generateDue.mutateAsync()
+              if (result.generated === 0) showToast('No recurring expenses are due yet.')
+              else showToast(`Generated ${result.generated} expense(s) as drafts.`, 'success')
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not generate due expenses.')
+            }
           }}
         >
           <RotateCcw size={14} /> Generate due expenses
@@ -94,8 +98,12 @@ export function RecurringExpensesPage() {
                   label="Archive"
                   tone="danger"
                   onClick={async () => {
-                    await archiveTemplate.mutateAsync(t.id)
-                    showToast('Template archived.', 'success')
+                    try {
+                      await archiveTemplate.mutateAsync(t.id)
+                      showToast('Template archived.', 'success')
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : 'Could not archive this recurring template.')
+                    }
                   }}
                 />
               </li>
@@ -109,9 +117,13 @@ export function RecurringExpensesPage() {
           categories={activeCategories}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createTemplate.mutateAsync(input)
-            showToast('Recurring expense template created.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createTemplate.mutateAsync(input)
+              showToast('Recurring expense template created.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not create this recurring template.')
+            }
           }}
         />
       )}

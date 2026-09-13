@@ -125,8 +125,12 @@ export function CustomerDetailPage() {
               <Button
                 variant="danger"
                 onClick={async () => {
-                  await archiveCustomer.mutateAsync(customer.id)
-                  showToast('Customer archived.', 'success')
+                  try {
+                    await archiveCustomer.mutateAsync(customer.id)
+                    showToast('Customer archived.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not archive this customer.')
+                  }
                 }}
               >
                 <Archive size={14} /> Archive
@@ -134,8 +138,12 @@ export function CustomerDetailPage() {
             ) : (
               <Button
                 onClick={async () => {
-                  await reactivateCustomer.mutateAsync(customer.id)
-                  showToast('Customer reactivated.', 'success')
+                  try {
+                    await reactivateCustomer.mutateAsync(customer.id)
+                    showToast('Customer reactivated.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not reactivate this customer.')
+                  }
                 }}
               >
                 <ArchiveRestore size={14} /> Reactivate
@@ -426,9 +434,13 @@ export function CustomerDetailPage() {
           currentBalance={customer.creditBalance}
           onClose={() => setCreditModal(null)}
           onSubmit={async ({ newLimit }) => {
-            await approveLimit.mutateAsync({ customerId: customer.id, newLimit })
-            showToast('Credit limit updated.', 'success')
-            setCreditModal(null)
+            try {
+              await approveLimit.mutateAsync({ customerId: customer.id, newLimit })
+              showToast('Credit limit updated.', 'success')
+              setCreditModal(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not approve this credit limit.')
+            }
           }}
         />
       )}
@@ -505,8 +517,12 @@ export function CustomerDetailPage() {
             <Button
               disabled={!noteText.trim() || addNote.isPending}
               onClick={async () => {
-                await addNote.mutateAsync({ customerId: customer.id, text: noteText })
-                setNoteText('')
+                try {
+                  await addNote.mutateAsync({ customerId: customer.id, text: noteText })
+                  setNoteText('')
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not add this note.')
+                }
               }}
             >
               Add
@@ -559,9 +575,13 @@ export function CustomerDetailPage() {
           initial={customer}
           onClose={() => setIsEditOpen(false)}
           onSubmit={async (input) => {
-            await updateCustomer.mutateAsync({ id: customer.id, input })
-            showToast('Customer updated.', 'success')
-            setIsEditOpen(false)
+            try {
+              await updateCustomer.mutateAsync({ id: customer.id, input })
+              showToast('Customer updated.', 'success')
+              setIsEditOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this customer.')
+            }
           }}
         />
       )}

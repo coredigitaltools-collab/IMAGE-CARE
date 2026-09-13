@@ -64,7 +64,6 @@ export function PurchaseOrderDetailPage() {
 
   const orderQuery = usePurchaseOrder(id)
   const suppliersQuery = useSuppliers()
-  const productsQuery = useProducts()
   const invoicesQuery = useSupplierInvoices()
 
   const cancelOrder = useCancelPurchaseOrder(user.id)
@@ -72,6 +71,13 @@ export function PurchaseOrderDetailPage() {
   const editConfirmedOrder = useEditConfirmedPurchaseOrder(user.id)
 
   const [isEditOpen, setIsEditOpen] = useState(false)
+  // Perf fix (2026-09-12): the product catalog (a fairly expensive fetch -
+  // full products list + a 500-row stock join, see useProducts()) is only
+  // ever used here to populate the Edit modal's product picker (line ~175
+  // below) - nothing on the always-visible part of this page reads it, so
+  // most visits to an order's detail page (which never open Edit) no
+  // longer need to load it at all.
+  const productsQuery = useProducts(undefined, { enabled: isEditOpen })
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
 
   const order = orderQuery.data
@@ -188,15 +194,19 @@ export function PurchaseOrderDetailPage() {
           }}
           onClose={() => setIsEditOpen(false)}
           onSubmit={async (input) => {
-            if (order.status === 'draft') {
-              await updateDraftOrder.mutateAsync({ id: order.id, input })
-              showToast('Draft order updated.', 'success')
-              setIsEditOpen(false)
-            } else {
-              const result = await editConfirmedOrder.mutateAsync({ id: order.id, input })
-              showToast('Original order voided; corrected order recorded and confirmed.', 'success')
-              setIsEditOpen(false)
-              navigate(`/purchasing/orders/${result.purchase_id}`)
+            try {
+              if (order.status === 'draft') {
+                await updateDraftOrder.mutateAsync({ id: order.id, input })
+                showToast('Draft order updated.', 'success')
+                setIsEditOpen(false)
+              } else {
+                const result = await editConfirmedOrder.mutateAsync({ id: order.id, input })
+                showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+                setIsEditOpen(false)
+                navigate(`/purchasing/orders/${result.purchase_id}`)
+              }
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this purchase order.')
             }
           }}
         />

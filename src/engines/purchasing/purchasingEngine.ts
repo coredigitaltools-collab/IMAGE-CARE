@@ -212,7 +212,9 @@ export class PurchasingEngine {
     }
 
     // Create inventory movements
-    const invResult = await inventoryEngine.receiveFromPurchase(ctx, cmd.purchase_id);
+    // Perf fix (2026-09-12): pass the branch_id already loaded above
+    // (line 195) instead of letting receiveFromPurchase() re-query it.
+    const invResult = await inventoryEngine.receiveFromPurchase(ctx, cmd.purchase_id, purchase.branch_id);
     if (!invResult.ok) return engineFail(invResult.error!);
 
     // Post accounting: Dr Inventory, Cr Payable (+ Dr Payable, Cr Cash if paid)

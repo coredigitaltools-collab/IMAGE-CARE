@@ -290,14 +290,18 @@ export function ExpenseRegisterPage() {
           categories={activeCategories}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input: ExpenseFormValues) => {
-            await createExpense.mutateAsync({
-              category: input.category,
-              description: input.description,
-              amount: input.amount,
-              expenseDate: input.expenseDate,
-            })
-            showToast('Expense recorded.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createExpense.mutateAsync({
+                category: input.category,
+                description: input.description,
+                amount: input.amount,
+                expenseDate: input.expenseDate,
+              })
+              showToast('Expense recorded.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not add this expense.')
+            }
           }}
         />
       )}
@@ -316,12 +320,16 @@ export function ExpenseRegisterPage() {
           }}
           onClose={() => setEditing(null)}
           onSubmit={async (input: ExpenseFormValues) => {
-            await updateExpense.mutateAsync({
-              id: editing.id,
-              patch: { category: input.category, description: input.description, expense_date: input.expenseDate },
-            })
-            showToast('Expense updated.', 'success')
-            setEditing(null)
+            try {
+              await updateExpense.mutateAsync({
+                id: editing.id,
+                patch: { category: input.category, description: input.description, expense_date: input.expenseDate },
+              })
+              showToast('Expense updated.', 'success')
+              setEditing(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this expense.')
+            }
           }}
         />
       )}
@@ -333,9 +341,13 @@ export function ExpenseRegisterPage() {
           confirmLabel="Delete"
           tone="danger"
           onConfirm={async () => {
-            await deleteExpense.mutateAsync(deletingExpense.id)
-            showToast('Expense deleted.', 'success')
-            setDeletingExpense(null)
+            try {
+              await deleteExpense.mutateAsync(deletingExpense.id)
+              showToast('Expense deleted.', 'success')
+              setDeletingExpense(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not delete this expense.')
+            }
           }}
           onCancel={() => setDeletingExpense(null)}
         />

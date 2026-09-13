@@ -17,12 +17,16 @@ export function PurchaseReturnsPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const returnsQuery = usePurchaseReturns()
-  const productsQuery = useProducts()
   const suppliersQuery = useSuppliers()
   const createReturn = useCreatePurchaseReturn(user.id)
 
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [addError, setAddError] = useState<string | undefined>()
+  // Perf fix (2026-09-12): the product catalog (full products list + a
+  // 500-row stock join, see useProducts()) is only used to populate the
+  // "Record return" modal's product picker - deferred until that modal
+  // is actually open instead of fetching on every page visit.
+  const productsQuery = useProducts(undefined, { enabled: isAddOpen })
 
   const activeProducts = (productsQuery.data ?? []).filter((p) => p.status === 'active')
   const activeSuppliers = (suppliersQuery.data ?? []).filter((s) => s.status === 'active')

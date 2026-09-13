@@ -74,8 +74,18 @@ export function LoyaltyRewardsPage() {
                     label="Archive"
                     tone="danger"
                     onClick={async () => {
-                      await archiveReward.mutateAsync(reward.id)
-                      showToast('Reward archived.', 'success')
+                      // Bug fix (2026-09-13): no try/catch meant any failure
+                      // here was a silent unhandled promise rejection - the
+                      // button looked like it did nothing. Same anti-pattern
+                      // as the Brand quick-add bug and Loyalty Settings' Save
+                      // button (see brand-add-button-silent-failure-fix-
+                      // 2026-09-12.md).
+                      try {
+                        await archiveReward.mutateAsync(reward.id)
+                        showToast('Reward archived.', 'success')
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : 'Could not archive this reward.')
+                      }
                     }}
                   />
                 </div>
@@ -89,9 +99,18 @@ export function LoyaltyRewardsPage() {
         <RewardFormModal
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createReward.mutateAsync(input)
-            showToast('Reward created.', 'success')
-            setIsAddOpen(false)
+            // Bug fix (2026-09-13): same missing-try/catch silent-failure
+            // anti-pattern as the Archive button above. react-hook-form's
+            // handleSubmit does not surface a rejection from this callback
+            // to the user on its own - it just quietly resets isSubmitting,
+            // so the modal looked stuck/unresponsive with no error shown.
+            try {
+              await createReward.mutateAsync(input)
+              showToast('Reward created.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not save this reward.')
+            }
           }}
         />
       )}
@@ -101,9 +120,13 @@ export function LoyaltyRewardsPage() {
           initial={editingReward}
           onClose={() => setEditingReward(null)}
           onSubmit={async (input) => {
-            await updateReward.mutateAsync({ id: editingReward.id, input })
-            showToast('Reward updated.', 'success')
-            setEditingReward(null)
+            try {
+              await updateReward.mutateAsync({ id: editingReward.id, input })
+              showToast('Reward updated.', 'success')
+              setEditingReward(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this reward.')
+            }
           }}
         />
       )}

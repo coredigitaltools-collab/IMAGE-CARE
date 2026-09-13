@@ -38,7 +38,6 @@ import { parseCsv } from '../../lib/csv'
 import type { SupportedCurrency } from '../../lib/currency'
 import type { TrendRange } from '../../services/inventoryReportsService'
 import {
-  useBrands,
   useCategories,
   useCreateCategory,
   useCreateProduct,
@@ -69,7 +68,6 @@ export function InventoryDashboardPage() {
   const kpisQuery = useInventoryKpis(currency)
   const productsQuery = useProducts()
   const categoriesQuery = useCategories()
-  const brandsQuery = useBrands()
   const suppliersQuery = useSuppliers()
   const movementsQuery = useStockMovements()
   const lowStockQuery = useLowStockReport()
@@ -88,10 +86,9 @@ export function InventoryDashboardPage() {
     return active.filter((b) => user.allowedBranchIds.includes(b.id))
   }, [branchesQuery.data, user.role, user.allowedBranchIds])
 
-  const passesFilters = (p: { categoryId: string; supplierId: string | null; brandId: string | null; status: string; branch_id: string | null }) => {
+  const passesFilters = (p: { categoryId: string; supplierId: string | null; status: string; branch_id: string | null }) => {
     if (filters.categoryId !== 'all' && p.categoryId !== filters.categoryId) return false
     if (filters.supplierId !== 'all' && p.supplierId !== filters.supplierId) return false
-    if (filters.brandId !== 'all' && p.brandId !== filters.brandId) return false
     if (filters.status !== 'all' && p.status !== filters.status) return false
     if (filters.branchId !== 'all' && p.branch_id !== filters.branchId) return false
     if (selectedBranchId !== 'all' && p.branch_id !== selectedBranchId) return false
@@ -314,7 +311,6 @@ export function InventoryDashboardPage() {
             <InventoryFilterBar
               categories={categoriesQuery.data ?? []}
               suppliers={suppliersQuery.data ?? []}
-              brands={brandsQuery.data ?? []}
               branches={visibleBranches}
               filters={filters}
               onChange={setFilters}

@@ -80,8 +80,20 @@ export function LoyaltySettingsPage() {
           <div className="flex justify-end pt-2">
             <Button
               onClick={async () => {
-                await saveSettings.mutateAsync({ ugxPerPoint, redemptionValuePerPointUgx, minPointsToRedeem, expiryDays })
-                showToast('Loyalty settings saved.', 'success')
+                // Bug fix (2026-09-13): this call had no try/catch, so any
+                // failure (e.g. the local-storage encryption layer's secure-
+                // context check in encryption.ts) became a silent unhandled
+                // promise rejection - the button appeared to do nothing at
+                // all, with no toast and no visible error. Same anti-pattern
+                // as the Brand quick-add bug (see
+                // brand-add-button-silent-failure-fix-2026-09-12.md), just
+                // never caught here since this page predates that fix.
+                try {
+                  await saveSettings.mutateAsync({ ugxPerPoint, redemptionValuePerPointUgx, minPointsToRedeem, expiryDays })
+                  showToast('Loyalty settings saved.', 'success')
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not save loyalty settings.')
+                }
               }}
             >
               Save settings
@@ -99,11 +111,17 @@ export function LoyaltySettingsPage() {
         <Button
           variant="secondary"
           onClick={async () => {
-            const result = await processExpirations.mutateAsync()
-            if (result.customersAffected === 0) {
-              showToast('No points were eligible to expire.')
-            } else {
-              showToast(`Expired ${result.pointsExpired} points across ${result.customersAffected} customer(s).`, 'success')
+            // Bug fix (2026-09-13): same missing-try/catch silent-failure
+            // anti-pattern as "Save settings" above.
+            try {
+              const result = await processExpirations.mutateAsync()
+              if (result.customersAffected === 0) {
+                showToast('No points were eligible to expire.')
+              } else {
+                showToast(`Expired ${result.pointsExpired} points across ${result.customersAffected} customer(s).`, 'success')
+              }
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not process point expirations.')
             }
           }}
         >

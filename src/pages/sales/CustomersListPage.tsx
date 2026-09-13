@@ -114,8 +114,12 @@ export function CustomersListPage() {
                         label="Archive"
                         tone="danger"
                         onClick={async () => {
-                          await archiveCustomer.mutateAsync(customer.id)
-                          showToast('Customer archived.', 'success')
+                          try {
+                            await archiveCustomer.mutateAsync(customer.id)
+                            showToast('Customer archived.', 'success')
+                          } catch (err) {
+                            showToast(err instanceof Error ? err.message : 'Could not archive this customer.')
+                          }
                         }}
                       />
                     ) : (
@@ -124,8 +128,12 @@ export function CustomersListPage() {
                         label="Reactivate"
                         tone="success"
                         onClick={async () => {
-                          await reactivateCustomer.mutateAsync(customer.id)
-                          showToast('Customer reactivated.', 'success')
+                          try {
+                            await reactivateCustomer.mutateAsync(customer.id)
+                            showToast('Customer reactivated.', 'success')
+                          } catch (err) {
+                            showToast(err instanceof Error ? err.message : 'Could not reactivate this customer.')
+                          }
                         }}
                       />
                     )}
@@ -141,9 +149,13 @@ export function CustomersListPage() {
         <CustomerFormModal
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createCustomer.mutateAsync(input)
-            showToast('Customer added.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createCustomer.mutateAsync(input)
+              showToast('Customer added.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not add this customer.')
+            }
           }}
         />
       )}
@@ -153,9 +165,13 @@ export function CustomersListPage() {
           initial={editingCustomer}
           onClose={() => setEditingCustomer(null)}
           onSubmit={async (input) => {
-            await updateCustomer.mutateAsync({ id: editingCustomer.id, input })
-            showToast('Customer updated.', 'success')
-            setEditingCustomer(null)
+            try {
+              await updateCustomer.mutateAsync({ id: editingCustomer.id, input })
+              showToast('Customer updated.', 'success')
+              setEditingCustomer(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this customer.')
+            }
           }}
         />
       )}
