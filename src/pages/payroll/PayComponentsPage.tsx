@@ -53,8 +53,12 @@ function ComponentList({ kind, title }: { kind: 'allowance' | 'deduction'; title
                 label="Archive"
                 tone="danger"
                 onClick={async () => {
-                  await archiveType.mutateAsync(t.id)
-                  showToast(`${kind === 'allowance' ? 'Allowance' : 'Deduction'} archived.`, 'success')
+                  try {
+                    await archiveType.mutateAsync(t.id)
+                    showToast(`${kind === 'allowance' ? 'Allowance' : 'Deduction'} archived.`, 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not archive this pay component.')
+                  }
                 }}
               />
             </li>
@@ -67,9 +71,13 @@ function ComponentList({ kind, title }: { kind: 'allowance' | 'deduction'; title
           kind={kind}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createType.mutateAsync({ kind, input })
-            showToast(`${kind === 'allowance' ? 'Allowance' : 'Deduction'} created.`, 'success')
-            setIsAddOpen(false)
+            try {
+              await createType.mutateAsync({ kind, input })
+              showToast(`${kind === 'allowance' ? 'Allowance' : 'Deduction'} created.`, 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not create this pay component.')
+            }
           }}
         />
       )}

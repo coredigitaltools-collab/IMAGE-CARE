@@ -28,8 +28,12 @@ export function InventorySettingsPage() {
   }, [query.data])
 
   const handleSave = async () => {
-    await save.mutateAsync({ defaultReorderLevel, skuPrefix, trackExpiryDates })
-    showToast('Inventory settings saved.', 'success')
+    try {
+      await save.mutateAsync({ defaultReorderLevel, skuPrefix, trackExpiryDates })
+      showToast('Inventory settings saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save inventory settings.')
+    }
   }
 
   return (

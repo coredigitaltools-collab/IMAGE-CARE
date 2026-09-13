@@ -198,13 +198,21 @@ export function ProductDetailPage() {
   })
 
   const savePricing = pricingForm.handleSubmit(async (values) => {
-    await updateProduct.mutateAsync({ id: product.id, input: buildInput(values) })
-    showToast('Pricing saved.', 'success')
+    try {
+      await updateProduct.mutateAsync({ id: product.id, input: buildInput(values) })
+      showToast('Pricing saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save pricing.')
+    }
   })
 
   const saveNotes = async () => {
-    await updateProduct.mutateAsync({ id: product.id, input: buildInput({ notes }) })
-    showToast('Notes saved.', 'success')
+    try {
+      await updateProduct.mutateAsync({ id: product.id, input: buildInput({ notes }) })
+      showToast('Notes saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save notes.')
+    }
   }
 
   const supplier = suppliersQuery.data?.find((s) => s.id === product.supplierId)
@@ -237,9 +245,13 @@ export function ProductDetailPage() {
             <Button
               variant="secondary"
               onClick={async () => {
-                const copy = await duplicateProduct.mutateAsync(product.id)
-                showToast('Product duplicated.', 'success')
-                navigate(`/inventory/products/${copy.id}`)
+                try {
+                  const copy = await duplicateProduct.mutateAsync(product.id)
+                  showToast('Product duplicated.', 'success')
+                  navigate(`/inventory/products/${copy.id}`)
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not duplicate this product.')
+                }
               }}
             >
               <Copy size={14} /> Duplicate
@@ -248,8 +260,12 @@ export function ProductDetailPage() {
               <Button
                 variant="danger"
                 onClick={async () => {
-                  await archiveProduct.mutateAsync(product.id)
-                  showToast('Product archived.', 'success')
+                  try {
+                    await archiveProduct.mutateAsync(product.id)
+                    showToast('Product archived.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not archive this product.')
+                  }
                 }}
               >
                 <Archive size={14} /> Archive
@@ -257,8 +273,12 @@ export function ProductDetailPage() {
             ) : (
               <Button
                 onClick={async () => {
-                  await reactivateProduct.mutateAsync(product.id)
-                  showToast('Product reactivated.', 'success')
+                  try {
+                    await reactivateProduct.mutateAsync(product.id)
+                    showToast('Product reactivated.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not reactivate this product.')
+                  }
                 }}
               >
                 <ArchiveRestore size={14} /> Reactivate

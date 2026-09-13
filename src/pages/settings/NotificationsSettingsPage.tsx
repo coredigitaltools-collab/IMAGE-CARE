@@ -27,8 +27,12 @@ export function NotificationsSettingsPage() {
   }, [query.data])
 
   const handleSave = async () => {
-    await save.mutateAsync({ lowStockAlerts, dailySummaryEmail, notificationEmail })
-    showToast('Notification settings saved.', 'success')
+    try {
+      await save.mutateAsync({ lowStockAlerts, dailySummaryEmail, notificationEmail })
+      showToast('Notification settings saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save notification settings.')
+    }
   }
 
   return (

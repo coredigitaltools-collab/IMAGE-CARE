@@ -100,10 +100,14 @@ export function ReconciliationPage() {
                 variant="secondary"
                 disabled={!lineDescription.trim() || lineAmount <= 0}
                 onClick={async () => {
-                  await addLine.mutateAsync({ bankAccountId: accountId, date: lineDate, description: lineDescription, amountUgx: lineAmount })
-                  showToast('Statement line added.', 'success')
-                  setLineDescription('')
-                  setLineAmount(0)
+                  try {
+                    await addLine.mutateAsync({ bankAccountId: accountId, date: lineDate, description: lineDescription, amountUgx: lineAmount })
+                    showToast('Statement line added.', 'success')
+                    setLineDescription('')
+                    setLineAmount(0)
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Could not add this reconciliation line.')
+                  }
                 }}
               >
                 <Plus size={14} /> Add line

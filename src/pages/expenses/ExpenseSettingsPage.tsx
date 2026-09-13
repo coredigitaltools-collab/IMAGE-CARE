@@ -43,8 +43,12 @@ export function ExpenseSettingsPage() {
           <div className="flex justify-end pt-3">
             <Button
               onClick={async () => {
-                await saveSettings.mutateAsync({ autoApproveThresholdUgx: threshold })
-                showToast('Expense settings saved.', 'success')
+                try {
+                  await saveSettings.mutateAsync({ autoApproveThresholdUgx: threshold })
+                  showToast('Expense settings saved.', 'success')
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not save expense settings.')
+                }
               }}
             >
               Save settings

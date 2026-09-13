@@ -97,9 +97,13 @@ export function BankAccountsPage() {
         <BankAccountFormModal
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createAccount.mutateAsync(input)
-            showToast('Bank account created.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createAccount.mutateAsync(input)
+              showToast('Bank account created.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not create this bank account.')
+            }
           }}
         />
       )}

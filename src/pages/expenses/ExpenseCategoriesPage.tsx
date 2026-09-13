@@ -69,8 +69,12 @@ export function ExpenseCategoriesPage() {
                   label="Archive"
                   tone="danger"
                   onClick={async () => {
-                    await archiveCategory.mutateAsync(c.id)
-                    showToast('Category archived.', 'success')
+                    try {
+                      await archiveCategory.mutateAsync(c.id)
+                      showToast('Category archived.', 'success')
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : 'Could not archive this category.')
+                    }
                   }}
                 />
               </li>
@@ -83,9 +87,13 @@ export function ExpenseCategoriesPage() {
         <CategoryFormModal
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (name) => {
-            await createCategory.mutateAsync({ name })
-            showToast('Category created.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createCategory.mutateAsync({ name })
+              showToast('Category created.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not create this category.')
+            }
           }}
         />
       )}

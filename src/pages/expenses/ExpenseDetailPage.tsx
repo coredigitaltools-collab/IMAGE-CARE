@@ -116,12 +116,16 @@ export function ExpenseDetailPage() {
           }}
           onClose={() => setIsEditOpen(false)}
           onSubmit={async (input: ExpenseFormValues) => {
-            await updateExpense.mutateAsync({
-              id: expense.id,
-              patch: { category: input.category, description: input.description, expense_date: input.expenseDate },
-            })
-            showToast('Expense updated.', 'success')
-            setIsEditOpen(false)
+            try {
+              await updateExpense.mutateAsync({
+                id: expense.id,
+                patch: { category: input.category, description: input.description, expense_date: input.expenseDate },
+              })
+              showToast('Expense updated.', 'success')
+              setIsEditOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this expense.')
+            }
           }}
         />
       )}
@@ -133,9 +137,13 @@ export function ExpenseDetailPage() {
           confirmLabel="Delete"
           tone="danger"
           onConfirm={async () => {
-            await deleteExpense.mutateAsync(expense.id)
-            showToast('Expense deleted.', 'success')
-            navigate('/expenses/register')
+            try {
+              await deleteExpense.mutateAsync(expense.id)
+              showToast('Expense deleted.', 'success')
+              navigate('/expenses/register')
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not delete this expense.')
+            }
           }}
           onCancel={() => setIsDeleteOpen(false)}
         />

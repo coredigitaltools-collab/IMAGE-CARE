@@ -20,11 +20,15 @@ export function SynchronizationPage() {
   const pendingItems = pendingQuery.data ?? []
 
   const handleSync = async () => {
-    const result = await runSync.mutateAsync()
-    showToast(
-      result.syncedCount > 0 ? `Synced ${result.syncedCount} change${result.syncedCount === 1 ? '' : 's'}.` : 'Nothing to sync.',
-      'success',
-    )
+    try {
+      const result = await runSync.mutateAsync()
+      showToast(
+        result.syncedCount > 0 ? `Synced ${result.syncedCount} change${result.syncedCount === 1 ? '' : 's'}.` : 'Nothing to sync.',
+        'success',
+      )
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not sync now.')
+    }
   }
 
   return (

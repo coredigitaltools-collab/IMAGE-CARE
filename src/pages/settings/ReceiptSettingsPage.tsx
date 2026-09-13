@@ -28,8 +28,12 @@ export function ReceiptSettingsPage() {
   }, [query.data])
 
   const handleSave = async () => {
-    await save.mutateAsync({ footerMessage, showLogo, showTaxBreakdown, showCashierName })
-    showToast('Receipt settings saved.', 'success')
+    try {
+      await save.mutateAsync({ footerMessage, showLogo, showTaxBreakdown, showCashierName })
+      showToast('Receipt settings saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save receipt settings.')
+    }
   }
 
   return (

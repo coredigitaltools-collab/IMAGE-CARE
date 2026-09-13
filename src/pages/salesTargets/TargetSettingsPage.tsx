@@ -45,8 +45,12 @@ export function TargetSettingsPage() {
           <div className="flex justify-end pt-3">
             <Button
               onClick={async () => {
-                await saveSettings.mutateAsync({ notifyAtPercent: threshold })
-                showToast('Sales Targets settings saved.', 'success')
+                try {
+                  await saveSettings.mutateAsync({ notifyAtPercent: threshold })
+                  showToast('Sales Targets settings saved.', 'success')
+                } catch (err) {
+                  showToast(err instanceof Error ? err.message : 'Could not save target settings.')
+                }
               }}
             >
               Save settings

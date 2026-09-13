@@ -219,9 +219,13 @@ export function CreditAccountsPage() {
           currentBalance={modalState.account.balance}
           onClose={() => setModalState(null)}
           onSubmit={async ({ newLimit }) => {
-            await approveLimit.mutateAsync({ customerId: modalState.account.customer.id, newLimit })
-            showToast('Credit limit updated.', 'success')
-            setModalState(null)
+            try {
+              await approveLimit.mutateAsync({ customerId: modalState.account.customer.id, newLimit })
+              showToast('Credit limit updated.', 'success')
+              setModalState(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not approve this credit limit.')
+            }
           }}
         />
       )}

@@ -84,8 +84,12 @@ export function InvoiceDetailPage() {
               <Button
                 variant="secondary"
                 onClick={async () => {
-                  await markSent.mutateAsync(invoice.id)
-                  showToast('Invoice marked as sent.', 'success')
+                  try {
+                    await markSent.mutateAsync(invoice.id)
+                    showToast('Invoice marked as sent.', 'success')
+                  } catch (err) {
+                    setActionError(err instanceof Error ? err.message : 'Could not mark this invoice as sent.')
+                  }
                 }}
               >
                 <Send size={14} /> Mark sent

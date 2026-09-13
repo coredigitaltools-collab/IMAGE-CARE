@@ -161,9 +161,13 @@ export function PurchaseDashboardPage() {
           products={activeProducts}
           onClose={() => setIsPoOpen(false)}
           onSubmit={async (input) => {
-            await createOrder.mutateAsync(input)
-            showToast('Purchase order recorded and confirmed.', 'success')
-            setIsPoOpen(false)
+            try {
+              await createOrder.mutateAsync(input)
+              showToast('Purchase order recorded and confirmed.', 'success')
+              setIsPoOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not record this purchase order.')
+            }
           }}
         />
       )}

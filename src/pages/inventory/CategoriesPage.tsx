@@ -29,14 +29,18 @@ export function CategoriesPage() {
   const [mergeSource, setMergeSource] = useState<Category | null>(null)
 
   const handleSubmit = async (input: CategoryInput) => {
-    if (modalState?.mode === 'edit') {
-      await updateCategory.mutateAsync({ id: modalState.category.id, input })
-      showToast('Category updated.', 'success')
-    } else {
-      await createCategory.mutateAsync(input)
-      showToast('Category added.', 'success')
+    try {
+      if (modalState?.mode === 'edit') {
+        await updateCategory.mutateAsync({ id: modalState.category.id, input })
+        showToast('Category updated.', 'success')
+      } else {
+        await createCategory.mutateAsync(input)
+        showToast('Category added.', 'success')
+      }
+      setModalState(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this category.')
     }
-    setModalState(null)
   }
 
   return (
@@ -77,8 +81,12 @@ export function CategoriesPage() {
                     </button>
                     <button
                       onClick={async () => {
-                        await archiveCategory.mutateAsync(category.id)
-                        showToast('Category archived.', 'success')
+                        try {
+                          await archiveCategory.mutateAsync(category.id)
+                          showToast('Category archived.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not archive this category.')
+                        }
                       }}
                       className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-red-700 hover:bg-brand-red-50"
                     >
@@ -105,9 +113,13 @@ export function CategoriesPage() {
           source={mergeSource}
           onClose={() => setMergeSource(null)}
           onMerge={async (targetId) => {
-            await mergeCategories.mutateAsync({ sourceId: mergeSource.id, targetId })
-            showToast(`Merged into ${(categoriesQuery.data ?? []).find((c) => c.id === targetId)?.name}.`, 'success')
-            setMergeSource(null)
+            try {
+              await mergeCategories.mutateAsync({ sourceId: mergeSource.id, targetId })
+              showToast(`Merged into ${(categoriesQuery.data ?? []).find((c) => c.id === targetId)?.name}.`, 'success')
+              setMergeSource(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not merge these categories.')
+            }
           }}
         />
       )}

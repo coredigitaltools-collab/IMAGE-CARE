@@ -576,32 +576,42 @@ export function PointOfSalePage() {
   }
 
   const handleResumeParked = async (sale: Sale) => {
-    const resumed = await resumeParked.mutateAsync(sale.id)
-    const items = mapRawSaleItems(resumed.items, productsQuery.data ?? [])
-    setCart(
-      items.map((i) => ({
-        productId: i.productId,
-        productName: i.productName,
-        sku: i.sku,
-        unitPrice: i.unitPrice,
-        // Same fix as addToCart - carry the cost forward when resuming a
-        // held sale instead of dropping it (i.unitCost is whatever was
-        // captured when the sale was parked, 0 for sales parked before
-        // this fix, real cost for anything parked after).
-        costPrice: i.unitCost,
-        quantity: i.quantity,
-        availableStock: productsQuery.data?.find((p) => p.id === i.productId)?.currentStock ?? i.quantity,
-      })),
-    )
-    setDiscountAmount(resumed.discountAmount)
-    setTaxRateId(resumed.taxRateId)
-    setPaymentMethod((resumed.paymentMethod ?? 'cash') as PaymentMethod)
-    if (resumed.customerId) {
-      const cust = customersQuery.data?.find((c) => c.id === resumed.customerId)
-      setSelectedCustomer(cust ?? null)
+    // Bug fix (2026-09-13): no try/catch meant a failed resume (e.g. the
+    // held sale's items reference a product that's since been archived,
+    // or the fetch simply fails) was a silent unhandled promise rejection
+    // - the "Edit" action on a parked sale would appear to do nothing at
+    // all. Same anti-pattern already found and fixed across the rest of
+    // the app - see loyalty-buttons-silent-failure-fix-2026-09-13.md.
+    try {
+      const resumed = await resumeParked.mutateAsync(sale.id)
+      const items = mapRawSaleItems(resumed.items, productsQuery.data ?? [])
+      setCart(
+        items.map((i) => ({
+          productId: i.productId,
+          productName: i.productName,
+          sku: i.sku,
+          unitPrice: i.unitPrice,
+          // Same fix as addToCart - carry the cost forward when resuming a
+          // held sale instead of dropping it (i.unitCost is whatever was
+          // captured when the sale was parked, 0 for sales parked before
+          // this fix, real cost for anything parked after).
+          costPrice: i.unitCost,
+          quantity: i.quantity,
+          availableStock: productsQuery.data?.find((p) => p.id === i.productId)?.currentStock ?? i.quantity,
+        })),
+      )
+      setDiscountAmount(resumed.discountAmount)
+      setTaxRateId(resumed.taxRateId)
+      setPaymentMethod((resumed.paymentMethod ?? 'cash') as PaymentMethod)
+      if (resumed.customerId) {
+        const cust = customersQuery.data?.find((c) => c.id === resumed.customerId)
+        setSelectedCustomer(cust ?? null)
+      }
+      setIsRecordSaleOpen(true)
+      showToast('Held sale resumed.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not resume this held sale.')
     }
-    setIsRecordSaleOpen(true)
-    showToast('Held sale resumed.', 'success')
   }
 
   // 2026-09-01: the main Sales table only ever showed a "View receipt"

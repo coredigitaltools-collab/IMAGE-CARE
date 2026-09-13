@@ -123,8 +123,12 @@ export function ProductsListPage() {
   }
 
   const handleDuplicate = async (id: string) => {
-    await duplicateProduct.mutateAsync(id)
-    showToast('Product duplicated, update its SKU and details.', 'success')
+    try {
+      await duplicateProduct.mutateAsync(id)
+      showToast('Product duplicated, update its SKU and details.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not duplicate this product.')
+    }
   }
 
   return (
@@ -238,8 +242,12 @@ export function ProductsListPage() {
                       label="Archive"
                       tone="danger"
                       onClick={async () => {
-                        await archiveProduct.mutateAsync(product.id)
-                        showToast('Product archived.', 'success')
+                        try {
+                          await archiveProduct.mutateAsync(product.id)
+                          showToast('Product archived.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not archive this product.')
+                        }
                       }}
                     />
                   ) : (
@@ -248,8 +256,12 @@ export function ProductsListPage() {
                       label="Reactivate"
                       tone="success"
                       onClick={async () => {
-                        await reactivateProduct.mutateAsync(product.id)
-                        showToast('Product reactivated.', 'success')
+                        try {
+                          await reactivateProduct.mutateAsync(product.id)
+                          showToast('Product reactivated.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not reactivate this product.')
+                        }
                       }}
                     />
                   )}

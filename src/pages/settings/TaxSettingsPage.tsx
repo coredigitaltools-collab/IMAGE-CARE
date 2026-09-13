@@ -21,14 +21,18 @@ export function TaxSettingsPage() {
   const [modalState, setModalState] = useState<{ mode: 'create' } | { mode: 'edit'; rate: TaxRate } | null>(null)
 
   const handleSubmit = async (input: TaxRateInput) => {
-    if (modalState?.mode === 'edit') {
-      await updateTaxRate.mutateAsync({ id: modalState.rate.id, input })
-      showToast('Tax rate updated.', 'success')
-    } else {
-      await createTaxRate.mutateAsync(input)
-      showToast('Tax rate added.', 'success')
+    try {
+      if (modalState?.mode === 'edit') {
+        await updateTaxRate.mutateAsync({ id: modalState.rate.id, input })
+        showToast('Tax rate updated.', 'success')
+      } else {
+        await createTaxRate.mutateAsync(input)
+        showToast('Tax rate added.', 'success')
+      }
+      setModalState(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save the tax rate.')
     }
-    setModalState(null)
   }
 
   return (

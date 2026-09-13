@@ -194,15 +194,19 @@ export function PurchaseOrderDetailPage() {
           }}
           onClose={() => setIsEditOpen(false)}
           onSubmit={async (input) => {
-            if (order.status === 'draft') {
-              await updateDraftOrder.mutateAsync({ id: order.id, input })
-              showToast('Draft order updated.', 'success')
-              setIsEditOpen(false)
-            } else {
-              const result = await editConfirmedOrder.mutateAsync({ id: order.id, input })
-              showToast('Original order voided; corrected order recorded and confirmed.', 'success')
-              setIsEditOpen(false)
-              navigate(`/purchasing/orders/${result.purchase_id}`)
+            try {
+              if (order.status === 'draft') {
+                await updateDraftOrder.mutateAsync({ id: order.id, input })
+                showToast('Draft order updated.', 'success')
+                setIsEditOpen(false)
+              } else {
+                const result = await editConfirmedOrder.mutateAsync({ id: order.id, input })
+                showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+                setIsEditOpen(false)
+                navigate(`/purchasing/orders/${result.purchase_id}`)
+              }
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this purchase order.')
             }
           }}
         />

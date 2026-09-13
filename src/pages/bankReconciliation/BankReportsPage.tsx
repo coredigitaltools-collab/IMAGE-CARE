@@ -55,8 +55,12 @@ export function BankReportsPage() {
                       label="Unmatch"
                       tone="danger"
                       onClick={async () => {
-                        await unmatchTransaction.mutateAsync(line.id)
-                        showToast('Unmatched.', 'success')
+                        try {
+                          await unmatchTransaction.mutateAsync(line.id)
+                          showToast('Unmatched.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not unmatch this transaction.')
+                        }
                       }}
                     />
                   </div>

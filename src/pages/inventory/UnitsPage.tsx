@@ -21,14 +21,18 @@ export function UnitsPage() {
   const [modalState, setModalState] = useState<{ mode: 'create' } | { mode: 'edit'; unit: UnitOfMeasure } | null>(null)
 
   const handleSubmit = async (input: UnitInput) => {
-    if (modalState?.mode === 'edit') {
-      await updateUnit.mutateAsync({ id: modalState.unit.id, input })
-      showToast('Unit updated.', 'success')
-    } else {
-      await createUnit.mutateAsync(input)
-      showToast('Unit added.', 'success')
+    try {
+      if (modalState?.mode === 'edit') {
+        await updateUnit.mutateAsync({ id: modalState.unit.id, input })
+        showToast('Unit updated.', 'success')
+      } else {
+        await createUnit.mutateAsync(input)
+        showToast('Unit added.', 'success')
+      }
+      setModalState(null)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this unit.')
     }
-    setModalState(null)
   }
 
   return (
@@ -65,8 +69,12 @@ export function UnitsPage() {
                     </button>
                     <button
                       onClick={async () => {
-                        await archiveUnit.mutateAsync(unit.id)
-                        showToast('Unit archived.', 'success')
+                        try {
+                          await archiveUnit.mutateAsync(unit.id)
+                          showToast('Unit archived.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not archive this unit.')
+                        }
                       }}
                       className="rounded-md px-2.5 py-1.5 text-xs font-medium text-brand-red-700 hover:bg-brand-red-50"
                     >

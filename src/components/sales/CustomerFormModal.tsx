@@ -44,6 +44,7 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
   const branchesQuery = useBranches()
   const [duplicates, setDuplicates] = useState<Customer[]>([])
   const [confirmedDespiteDuplicates, setConfirmedDespiteDuplicates] = useState(false)
+  const [duplicateCheckError, setDuplicateCheckError] = useState<string | undefined>()
   const [tagsText, setTagsText] = useState(initial?.tags.join(', ') ?? '')
   const [showMoreDetails, setShowMoreDetails] = useState(Boolean(initial))
 
@@ -86,10 +87,16 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
   })
 
   const submit = handleSubmit(async (values) => {
+    setDuplicateCheckError(undefined)
     if (!initial && !confirmedDespiteDuplicates) {
-      const found = await findDuplicates.mutateAsync({ name: values.name, phone: values.phone, email: values.email })
-      if (found.length > 0) {
-        setDuplicates(found)
+      try {
+        const found = await findDuplicates.mutateAsync({ name: values.name, phone: values.phone, email: values.email })
+        if (found.length > 0) {
+          setDuplicates(found)
+          return
+        }
+      } catch (err) {
+        setDuplicateCheckError(err instanceof Error ? err.message : 'Could not check for duplicate customers.')
         return
       }
     }
@@ -212,6 +219,8 @@ export function CustomerFormModal({ initial, title, submitLabel, onClose, onSubm
             </div>
           </>
         )}
+
+        {duplicateCheckError && <p className="text-sm text-brand-red-700">{duplicateCheckError}</p>}
 
         {duplicates.length > 0 && (
           <div className="rounded-md border border-warning-100 bg-warning-100/40 p-3">

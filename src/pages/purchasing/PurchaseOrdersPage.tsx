@@ -216,9 +216,13 @@ export function PurchaseOrdersPage() {
           products={activeProducts}
           onClose={() => setIsAddOpen(false)}
           onSubmit={async (input) => {
-            await createOrder.mutateAsync(input)
-            showToast('Purchase order recorded and confirmed.', 'success')
-            setIsAddOpen(false)
+            try {
+              await createOrder.mutateAsync(input)
+              showToast('Purchase order recorded and confirmed.', 'success')
+              setIsAddOpen(false)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not record this purchase order.')
+            }
           }}
         />
       )}
@@ -242,14 +246,18 @@ export function PurchaseOrdersPage() {
           }}
           onClose={() => setEditingOrder(null)}
           onSubmit={async (input) => {
-            if (editingOrder.status === 'draft') {
-              await updateDraftOrder.mutateAsync({ id: editingOrder.id, input })
-              showToast('Draft order updated.', 'success')
-            } else {
-              await editConfirmedOrder.mutateAsync({ id: editingOrder.id, input })
-              showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+            try {
+              if (editingOrder.status === 'draft') {
+                await updateDraftOrder.mutateAsync({ id: editingOrder.id, input })
+                showToast('Draft order updated.', 'success')
+              } else {
+                await editConfirmedOrder.mutateAsync({ id: editingOrder.id, input })
+                showToast('Original order voided; corrected order recorded and confirmed.', 'success')
+              }
+              setEditingOrder(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not update this purchase order.')
             }
-            setEditingOrder(null)
           }}
         />
       )}

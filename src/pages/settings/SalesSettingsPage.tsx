@@ -27,8 +27,12 @@ export function SalesSettingsPage() {
   }, [query.data])
 
   const handleSave = async () => {
-    await save.mutateAsync({ allowDiscounts, maxDiscountPercent, requireCustomerForCredit })
-    showToast('Sales settings saved.', 'success')
+    try {
+      await save.mutateAsync({ allowDiscounts, maxDiscountPercent, requireCustomerForCredit })
+      showToast('Sales settings saved.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save sales settings.')
+    }
   }
 
   return (

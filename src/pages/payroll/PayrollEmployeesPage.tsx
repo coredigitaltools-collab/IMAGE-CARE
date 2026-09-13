@@ -103,8 +103,12 @@ export function PayrollEmployeesPage() {
                       label="Remove from payroll"
                       tone="danger"
                       onClick={async () => {
-                        await removeEmployee.mutateAsync(emp.id)
-                        showToast('Removed from payroll.', 'success')
+                        try {
+                          await removeEmployee.mutateAsync(emp.id)
+                          showToast('Removed from payroll.', 'success')
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : 'Could not remove this employee.')
+                        }
                       }}
                     />
                   </div>
@@ -115,7 +119,11 @@ export function PayrollEmployeesPage() {
                         <Badge key={a.id} tone={a.kind === 'allowance' ? 'success' : 'danger'}>
                           <button
                             onClick={async () => {
-                              await removeAssignment.mutateAsync(a.id)
+                              try {
+                                await removeAssignment.mutateAsync(a.id)
+                              } catch (err) {
+                                showToast(err instanceof Error ? err.message : 'Could not remove this assignment.')
+                              }
                             }}
                             className="flex items-center gap-1"
                             title="Click to remove"
@@ -170,9 +178,13 @@ export function PayrollEmployeesPage() {
           userId={user.id}
           onClose={() => setAssigningFor(null)}
           onSubmit={async (componentTypeId, amountOverride) => {
-            await assignComponent.mutateAsync({ employeeRecordId: assigningFor.employee.id, componentTypeId, kind: assigningFor.kind, amountOverride })
-            showToast(`${assigningFor.kind === 'allowance' ? 'Allowance' : 'Deduction'} assigned.`, 'success')
-            setAssigningFor(null)
+            try {
+              await assignComponent.mutateAsync({ employeeRecordId: assigningFor.employee.id, componentTypeId, kind: assigningFor.kind, amountOverride })
+              showToast(`${assigningFor.kind === 'allowance' ? 'Allowance' : 'Deduction'} assigned.`, 'success')
+              setAssigningFor(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not assign this component.')
+            }
           }}
         />
       )}

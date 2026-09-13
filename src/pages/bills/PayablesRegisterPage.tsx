@@ -190,9 +190,16 @@ export function PayablesRegisterPage() {
           tone="danger"
           reasonLabel="Reason for cancelling this bill"
           onConfirm={async (reason) => {
-            await cancelBill.mutateAsync({ id: cancellingBill.id, reason: reason ?? '' })
-            showToast('Bill cancelled.', 'success')
-            setCancellingBill(null)
+            // Bug fix (2026-09-13): no try/catch meant a failed cancel was a
+            // silent unhandled promise rejection - see
+            // loyalty-buttons-silent-failure-fix-2026-09-13.md.
+            try {
+              await cancelBill.mutateAsync({ id: cancellingBill.id, reason: reason ?? '' })
+              showToast('Bill cancelled.', 'success')
+              setCancellingBill(null)
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Could not cancel this bill.')
+            }
           }}
           onCancel={() => setCancellingBill(null)}
         />

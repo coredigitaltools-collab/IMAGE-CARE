@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCreateExpenseCategory } from '../../features/expenses/hooks/useExpensesData'
+import { useToast } from '../ui/toastContext'
 import type { ExpenseCategory } from '../../types/expenses'
 
 const CREATE_NEW_VALUE = '__create_new__'
@@ -27,6 +28,7 @@ interface ExpenseCategorySelectProps {
  *  EXPENSES, not from the categories a user actually created). */
 export function ExpenseCategorySelect({ id, categories, value, onChange, error }: ExpenseCategorySelectProps) {
   const createCategory = useCreateExpenseCategory()
+  const { showToast } = useToast()
   const [isCreating, setIsCreating] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -39,12 +41,22 @@ export function ExpenseCategorySelect({ id, categories, value, onChange, error }
     }
   }
 
+  // Bug fix (2026-09-13): this had no try/catch, so a failed create was a
+  // silent unhandled promise rejection - the "Add" button appeared to do
+  // nothing at all. Same class of bug as BrandQuickSelect.tsx/
+  // CategoryQuickSelect.tsx (Inventory) - this component was missed in
+  // that earlier pass since it lives under Expenses, not Inventory. See
+  // brand-add-button-silent-failure-fix-2026-09-12.md.
   const confirmCreate = async () => {
     const name = newName.trim()
     if (!name) return
-    const category = await createCategory.mutateAsync({ name })
-    setIsCreating(false)
-    onChange(category.name)
+    try {
+      const category = await createCategory.mutateAsync({ name })
+      setIsCreating(false)
+      onChange(category.name)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save this category.')
+    }
   }
 
   if (isCreating) {
