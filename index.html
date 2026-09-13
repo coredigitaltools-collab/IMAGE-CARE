@@ -7,14 +7,13 @@
       hardcoded root-absolute paths (e.g. "/favicon.svg"). Vite does NOT
       rewrite plain "/..." paths in index.html to include the deploy base
       path - only the script/stylesheet tags it manages itself get that
-      treatment (see vite.config.mts's `base: '/IMAGE-CARE/'`, needed
-      because this app is served from a GitHub Pages project subpath, not
-      the domain root). A hardcoded "/favicon.svg" therefore silently
-      404s in production (it would only be found at the domain root, a
-      different, unrelated site) while still looking correct locally,
-      where the app happens to be served from "/" anyway. "%BASE_URL%" is
-      Vite's own placeholder for exactly this - it always resolves to the
-      real base path in both dev and production.
+      treatment. "%BASE_URL%" is Vite's own placeholder for exactly this -
+      it always resolves to whatever `base` is set to in vite.config.mts,
+      in both dev and production, so these links stay correct no matter
+      where the app is deployed. (2026-09-13: `base` moved from
+      '/IMAGE-CARE/', the old GitHub Pages project-site subpath, to '/',
+      since the app is now served from the root of its own custom domain
+      - that old github.io link is retired.)
     -->
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <link rel="apple-touch-icon" href="%BASE_URL%icons/icon-192.png" />
