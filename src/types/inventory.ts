@@ -8,7 +8,6 @@ export interface Product extends AuditFields {
   barcode: string
   imageDataUrl: string | null
   categoryId: string
-  brandId: string | null
   unitId: string
   supplierId: string | null
   description: string
@@ -29,7 +28,6 @@ export type ProductInput = Pick<
   | 'barcode'
   | 'imageDataUrl'
   | 'categoryId'
-  | 'brandId'
   | 'unitId'
   | 'supplierId'
   | 'description'
@@ -46,11 +44,6 @@ export interface Category extends AuditFields {
   name: string
 }
 export type CategoryInput = { name: string }
-
-export interface Brand extends AuditFields {
-  name: string
-}
-export type BrandInput = { name: string }
 
 export interface UnitOfMeasure extends AuditFields {
   name: string

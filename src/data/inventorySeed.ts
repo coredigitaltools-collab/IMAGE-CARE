@@ -1,20 +1,16 @@
 import { stampNew } from '../lib/audit'
-import type { Brand, Category, Product, Supplier, UnitOfMeasure } from '../types/inventory'
+import type { Category, Product, Supplier, UnitOfMeasure } from '../types/inventory'
 
 const SEED_USER = 'system-seed'
 
 // This app is a template, it must not assume what kind of business is
-// using it. Categories, brands, suppliers, and products are therefore
-// NOT pre-populated with any industry's data; every business starts
-// with an empty catalogue and builds their own from Inventory → Add
-// Product (which includes an inline "+ Add new category" shortcut so
-// nobody is ever blocked by an empty list). See README "Rebranding this
-// app for a different business" for the full picture.
+// using it. Categories, suppliers, and products are therefore NOT
+// pre-populated with any industry's data; every business starts with an
+// empty catalogue and builds their own from Inventory → Add Product
+// (which includes an inline "+ Add new category" shortcut so nobody is
+// ever blocked by an empty list). See README "Rebranding this app for a
+// different business" for the full picture.
 export function seedCategories(): Category[] {
-  return []
-}
-
-export function seedBrands(): Brand[] {
   return []
 }
 
@@ -38,7 +34,6 @@ export function seedSuppliers(): Supplier[] {
 
 export function seedProducts(
   _categories: Category[],
-  _brands: Brand[],
   _units: UnitOfMeasure[],
   _suppliers: Supplier[],
 ): Product[] {

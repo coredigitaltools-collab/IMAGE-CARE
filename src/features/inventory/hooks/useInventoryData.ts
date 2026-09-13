@@ -10,7 +10,6 @@ import {
   listProductBranchIds, listBranchProductIds, setProductBranches,
 } from '../../../services/masterData/masterDataService';
 import { listInventory, getStock, getInventoryMovements, createStockAdjustment, createStockTransfer, recordOpeningStock } from '../../../services/inventory/inventoryService';
-import { listBrands, createBrand, updateBrand, archiveBrand } from '../../../services/brandService';
 import type { UUID } from '../../../types/database';
 import type { Product as InventoryProduct, Supplier as InventorySupplier, StockMovementType } from '../../../types/inventory';
 import { convertFromUgx } from '../../../lib/currency';
@@ -36,7 +35,6 @@ function mapProduct(p: any): InventoryProduct {
     name: p.name ?? '', sku: p.sku ?? '', barcode: p.barcode ?? '',
     imageDataUrl: p.image_url ?? p.imageDataUrl ?? null,
     categoryId: p.category_id ?? p.categoryId ?? '',
-    brandId: p.metadata?.brand_id ?? p.brandId ?? null,
     unitId: p.unit_id ?? p.unitId ?? '',
     supplierId: p.metadata?.supplier_id ?? p.supplierId ?? null,
     description: p.description ?? '', notes: p.metadata?.notes ?? p.notes ?? '',
@@ -53,21 +51,6 @@ function mapProduct(p: any): InventoryProduct {
 export function useCategories() {
   const ctx = useUserContext();
   return useQuery({ queryKey: ['inventory', 'categories', ctx.business_id], queryFn: () => listCategories(ctx).then(unwrap) });
-}
-
-// 2026-09-02: this used to always return [] (staleTime: Infinity, so it
-// never even refetched), while useCreateBrand/useUpdateBrand/useArchiveBrand
-// fabricated in-memory-only objects that touched no storage at all - not
-// even IndexedDB - so a saved brand vanished on refresh, on top of never
-// showing up in this list. There is no imagecare.brands table (Stage 4
-// note in masterDataService.ts), so this can't go through Supabase without
-// a schema change, which is out of scope here. brandService.ts already has
-// a genuine IndexedDB-backed CRUD implementation (same getCollection/
-// setCollection pattern as expenseService.ts) that nothing was calling -
-// wiring these hooks to it is an honest local persistence fix: it won't
-// sync across devices, but it survives a browser refresh, unlike before.
-export function useBrands() {
-  return useQuery({ queryKey: ['inventory', 'brands'], queryFn: () => listBrands() });
 }
 
 // 2026-09-01: listProducts() only ever selected from the products table
@@ -205,7 +188,7 @@ export function useCreateProduct(_userId?: string) {
         reorder_level: input.reorderLevel ?? input.reorder_level ?? 0,
         is_stockable: true, is_sellable: true, is_purchasable: true,
         is_active: true, track_expiry: false, tax_rate: 0,
-        metadata: { brand_id: input.brandId ?? null, supplier_id: input.supplierId ?? null },
+        metadata: { supplier_id: input.supplierId ?? null },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).then(unwrap);
 
@@ -822,7 +805,7 @@ export function useDuplicateProduct(_userId?: string) {
         is_active: true,
         track_expiry: source.track_expiry ?? false,
         tax_rate: source.tax_rate ?? 0,
-        metadata: { brand_id: source.metadata?.brand_id ?? null, supplier_id: source.metadata?.supplier_id ?? null },
+        metadata: { supplier_id: source.metadata?.supplier_id ?? null },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).then(unwrap);
 
@@ -934,27 +917,6 @@ export function useStockAdjustments() {
   });
 }
 export function useGeneratedSku() { return useQuery({ queryKey: ['inventory', 'sku-generator'], queryFn: async () => `SKU-${Date.now().toString(36).toUpperCase()}`, staleTime: 0 }); }
-export function useCreateBrand(userId?: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { name: string }) => createBrand(input, userId ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
-  });
-}
-export function useUpdateBrand(userId?: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: { name: string } }) => updateBrand(id, input, userId ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
-  });
-}
-export function useArchiveBrand(userId?: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => archiveBrand(id, userId ?? ''),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inventory', 'brands'] }),
-  });
-}
 export function useArchiveCategory(_userId?: string) {
   const ctx = useUserContext();
   const qc = useQueryClient();

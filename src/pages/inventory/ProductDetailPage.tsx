@@ -13,13 +13,11 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { BarcodeDisplay } from '../../components/inventory/BarcodeDisplay'
 import { CategoryQuickSelect } from '../../components/inventory/CategoryQuickSelect'
-import { BrandQuickSelect } from '../../components/inventory/BrandQuickSelect'
 import { useToast } from '../../components/ui/toastContext'
 import { useAuth } from '../../hooks/useAuth'
 import { formatRelativeTime } from '../../lib/format'
 import {
   useArchiveProduct,
-  useBrands,
   useCategories,
   useDuplicateProduct,
   useProduct,
@@ -42,7 +40,6 @@ const generalSchema = z.object({
   sku: z.string().trim().min(1, 'SKU is required.'),
   barcode: z.string().trim(),
   categoryId: z.string().min(1),
-  brandId: z.string(),
   unitId: z.string().min(1),
   description: z.string(),
 })
@@ -62,7 +59,6 @@ export function ProductDetailPage() {
 
   const productQuery = useProduct(id)
   const categoriesQuery = useCategories()
-  const brandsQuery = useBrands()
   const suppliersQuery = useSuppliers()
   const movementsQuery = useStockMovements(id)
   const updateProduct = useUpdateProduct(user.id)
@@ -122,7 +118,6 @@ export function ProductDetailPage() {
           sku: product.sku,
           barcode: product.barcode,
           categoryId: product.categoryId,
-          brandId: product.brandId ?? '',
           unitId: product.unitId,
           description: product.description,
         }
@@ -180,7 +175,6 @@ export function ProductDetailPage() {
     barcode: product.barcode,
     imageDataUrl: product.imageDataUrl,
     categoryId: product.categoryId,
-    brandId: product.brandId,
     unitId: product.unitId,
     supplierId: product.supplierId,
     description: product.description,
@@ -329,23 +323,14 @@ export function ProductDetailPage() {
               />
               <p className="mt-1 text-xs text-ink-500">For scanning at checkout and printing barcode labels.</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <CategoryQuickSelect
-                id="pd-category"
-                categories={categoriesQuery.data ?? []}
-                value={generalForm.watch('categoryId')}
-                onChange={(id) => generalForm.setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
-                userId={user.id}
-                error={generalForm.formState.errors.categoryId?.message}
-              />
-              <BrandQuickSelect
-                id="pd-brand"
-                brands={brandsQuery.data ?? []}
-                value={generalForm.watch('brandId')}
-                onChange={(id) => generalForm.setValue('brandId', id, { shouldValidate: true, shouldDirty: true })}
-                userId={user.id}
-              />
-            </div>
+            <CategoryQuickSelect
+              id="pd-category"
+              categories={categoriesQuery.data ?? []}
+              value={generalForm.watch('categoryId')}
+              onChange={(id) => generalForm.setValue('categoryId', id, { shouldValidate: true, shouldDirty: true })}
+              userId={user.id}
+              error={generalForm.formState.errors.categoryId?.message}
+            />
             <div>
               <label htmlFor="pd-description" className="mb-1.5 block text-sm font-medium text-ink-700">Description</label>
               <textarea

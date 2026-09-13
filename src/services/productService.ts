@@ -1,8 +1,7 @@
 import { getCollection, setCollection, enqueueSync, withSingleFlight } from '../lib/localStore'
 import { stampNew, stampUpdated } from '../lib/audit'
-import { seedCategories, seedBrands, seedUnits, seedSuppliers, seedProducts } from '../data/inventorySeed'
+import { seedCategories, seedUnits, seedSuppliers, seedProducts } from '../data/inventorySeed'
 import { listCategories } from './categoryService'
-import { listBrands } from './brandService'
 import { listUnits } from './unitService'
 import { listSuppliers } from './supplierService'
 import { recordMovement } from './stockService'
@@ -38,14 +37,13 @@ export async function listProducts(): Promise<Product[]> {
     // Re-check, another concurrent caller may have just finished seeding.
     const recheck = await getCollection<Product>(KEY, () => [])
     if (recheck.length > 0) return recheck
-    // Products depend on categories/brands/units/suppliers existing first.
-    const [categories, brands, units, suppliers] = await Promise.all([
+    // Products depend on categories/units/suppliers existing first.
+    const [categories, units, suppliers] = await Promise.all([
       listCategories(),
-      listBrands(),
       listUnits(),
       listSuppliers(),
     ])
-    const seeded = seedProducts(categories, brands, units, suppliers)
+    const seeded = seedProducts(categories, units, suppliers)
     await setCollection(KEY, seeded)
     return seeded
   })
@@ -160,7 +158,6 @@ export async function duplicateProduct(id: string, userId: string): Promise<Prod
     barcode: generateBarcode(),
     imageDataUrl: source.imageDataUrl,
     categoryId: source.categoryId,
-    brandId: source.brandId,
     unitId: source.unitId,
     supplierId: source.supplierId,
     description: source.description,
@@ -207,6 +204,6 @@ export function assertSellable(product: Product): void {
   if (product.status === 'archived') throw new ArchivedProductError()
 }
 
-// Re-exported so a fresh install's seed order (categories/brands/units/
-// suppliers before products) is explicit and discoverable from this file too.
-export { seedCategories, seedBrands, seedUnits, seedSuppliers }
+// Re-exported so a fresh install's seed order (categories/units/suppliers
+// before products) is explicit and discoverable from this file too.
+export { seedCategories, seedUnits, seedSuppliers }

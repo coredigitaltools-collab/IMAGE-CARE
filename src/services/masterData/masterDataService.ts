@@ -123,10 +123,10 @@ export async function createProduct(
 // used to spread the caller's `updates` object straight into `.update()`
 // ({ ...updates }). Every caller (ProductDetailPage.tsx's General/Pricing/
 // Notes tabs) builds that object in the app's camelCase shape - categoryId,
-// unitId, buyingPrice, sellingPrice, reorderLevel, brandId, supplierId - none
-// of which are real columns on imagecare.products (see toProductRow() below
-// for the real ones); brandId/supplierId/notes have no columns of their own
-// at all and only ever lived inside the jsonb `metadata` column. PostgREST
+// unitId, buyingPrice, sellingPrice, reorderLevel, supplierId - none of
+// which are real columns on imagecare.products (see toProductRow() below
+// for the real ones); supplierId/notes have no columns of their own at
+// all and only ever lived inside the jsonb `metadata` column. PostgREST
 // rejects an update containing unknown columns outright, so ANY save from
 // the product edit page failed 100% of the time - it just went unnoticed
 // until the barcode field was added and someone actually tried to save a
@@ -514,10 +514,10 @@ function toSupplierRow(input: WriteInput | undefined): WriteInput {
 // selling_price, cost_price, reorder_level, is_stockable/is_sellable/
 // is_purchasable, track_expiry, tax_rate, metadata (jsonb), is_active.
 // categoryId/unitId/buyingPrice/sellingPrice/reorderLevel are just the
-// camelCase forms of real columns. brandId/supplierId/notes have no columns
-// of their own - useCreateProduct already stores them inside `metadata`
-// ({ brand_id, supplier_id }) at creation time, so updates keep writing them
-// there too, now including notes (the product detail page's Notes tab saves
+// camelCase forms of real columns. supplierId/notes have no columns of
+// their own - useCreateProduct already stores them inside `metadata`
+// ({ supplier_id }) at creation time, so updates keep writing them there
+// too, now including notes (the product detail page's Notes tab saves
 // through this same path). openingStock/imageDataUrl are deliberately
 // dropped here: stock is never a column on products (it's derived from
 // inventory_movements - see the inventory engine's own rule) and image
@@ -544,12 +544,10 @@ function toProductRow(input: WriteInput | undefined): WriteInput {
   set('reorder_level', firstDefined(src.reorder_level, src.reorderLevel));
   set('is_active', firstDefined(src.is_active, src.isActive));
 
-  const brandId = firstDefined(src.brand_id, src.brandId);
   const supplierId = firstDefined(src.supplier_id, src.supplierId);
   const notes = src.notes;
-  if (brandId !== undefined || supplierId !== undefined || notes !== undefined) {
+  if (supplierId !== undefined || notes !== undefined) {
     row.metadata = {
-      ...(brandId !== undefined ? { brand_id: brandId || null } : {}),
       ...(supplierId !== undefined ? { supplier_id: supplierId || null } : {}),
       ...(notes !== undefined ? { notes } : {}),
     };
@@ -849,7 +847,7 @@ export async function updateBranch(
 }
 
 // ============================================================
-// Stage 5 Final Pass: Category and Brand CRUD
+// Stage 5 Final Pass: Category CRUD
 // ============================================================
 
 export async function createCategory(
@@ -915,8 +913,3 @@ export async function mergeCategories(
     return archiveCategory(ctx, sourceId);
   } catch (err) { return fail(parseError(err)); }
 }
-
-// Brands - stored as product metadata since no dedicated brands table in Stage 4
-// Use a lightweight approach: categories with a 'brand' marker or simple in-memory
-// Since no brands table exists in Stage 4, brand operations are advisory-only.
-// The UI shows brands from products' metadata. Real brand persistence requires Stage 6.

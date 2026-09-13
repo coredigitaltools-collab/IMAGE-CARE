@@ -14,7 +14,6 @@ import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/format'
 import {
   useArchiveProduct,
-  useBrands,
   useCategories,
   useCreateProduct,
   useDuplicateProduct,
@@ -33,7 +32,6 @@ export function ProductsListPage() {
 
   const productsQuery = useProducts()
   const categoriesQuery = useCategories()
-  const brandsQuery = useBrands()
   // Units has no UI of its own here by design (the user's explicit,
   // repeated direction: the system just runs on pieces, no unit picker) -
   // this silently ensures one real "Piece" unit row exists the first time
@@ -265,7 +263,6 @@ export function ProductsListPage() {
       {isAddOpen && (
         <AddProductWizard
           categories={categoriesQuery.data ?? []}
-          brands={brandsQuery.data ?? []}
           units={unitsQuery.data ?? []}
           suppliers={suppliersQuery.data ?? []}
           userId={user.id}
