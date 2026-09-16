@@ -11,6 +11,7 @@ import { formatFullName, formatInitials } from '../../utils/formatters';
 import { StaffSwitcherModal } from './StaffSwitcherModal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToast } from '../ui/toastContext';
+import { useRoles } from '../../features/settings/hooks/useSettingsData';
 
 export function UserMenu() {
   const { userContext, signOut, lock, activeStaff, switchBackToOwner } = useApp();
@@ -21,6 +22,18 @@ export function UserMenu() {
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
   const [isSwitchBackOpen, setIsSwitchBackOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Bug fix (2026-09-16): "i want the staff name area to show role not that
+  // weird number" - activeStaff.role is the raw imagecare.users.role
+  // column, which for anyone but the owner stores the assigned permission
+  // group's UUID, not a readable name (StaffSwitcherModal.tsx hit and fixed
+  // this same thing in its own staff list on 2026-09-07; this "Acting as X"
+  // header panel is a separate component that never got the same lookup).
+  // useRoles() resolves that id against imagecare.permission_groups, same
+  // as PeopleAccessPage/StaffSwitcherModal already do.
+  const rolesQuery = useRoles();
+  const roles = rolesQuery.data ?? [];
+  const roleName = (roleId: string) => roles.find((r) => r.id === roleId)?.name ?? 'Staff';
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -105,7 +118,7 @@ export function UserMenu() {
                 {activeStaff.fullName}
               </p>
               <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 2 }}>
-                {activeStaff.role} · restricted view
+                {roleName(activeStaff.role)} · restricted view
               </p>
             </div>
             <div style={{ padding: '6px 0' }}>
